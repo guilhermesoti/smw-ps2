@@ -1,4 +1,7 @@
 #include "files.h"
+#ifdef _EE
+#include "smw_icon.h"
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -225,8 +228,6 @@ static int card_read(int port, const char *name, uint8_t *buf, int cap) {
 }
 
 static bool card_write(int port, const char *name, const uint8_t *buf, int size) {
-  if (size > (int)sizeof(card_buf)) return false;
-  memcpy(card_buf, buf, size);
   int submitted = mcOpen(port, 0, name, CARD_O_RDWR | CARD_O_CREAT);
   if (submitted != 0) { card_fail(2, submitted); return false; }
   int fd = card_wait();
@@ -240,9 +241,16 @@ static bool card_write(int port, const char *name, const uint8_t *buf, int size)
     fd = card_wait();
   }
   if (fd < 0) { card_fail(2, fd); return false; }
-  int put = -1, closed = -1;
-  if (mcWrite(fd, card_buf, size) == 0) put = card_wait();
-  if (put != size) card_fail(3, put);
+  /* Written in card_buf-sized pieces: the icon is larger than one buffer. */
+  int put = 0, closed = -1;
+  while (put < size) {
+    int piece = size - put < (int)sizeof(card_buf) ? size - put : (int)sizeof(card_buf);
+    memcpy(card_buf, buf + put, piece);
+    int wrote = -1;
+    if (mcWrite(fd, card_buf, piece) == 0) wrote = card_wait();
+    if (wrote != piece) { card_fail(3, wrote); put = -1; break; }
+    put += wrote;
+  }
   if (mcClose(fd) == 0) closed = card_wait();
   if (closed != 0) card_fail(4, closed);
   return put == size && closed == 0;
@@ -418,6 +426,27 @@ void smw_storage_report(char *out, size_t size) {
 
 const char *smw_save_error_text(void) { return error_text; }
 
+/* icon.sys + 3D icon, so the PS2 browser shows "Super Mario World" instead
+   of "corrupted data". Written once per card; a failure here never blocks
+   the save itself. */
+static void write_card_icon(const char *dir) {
+#ifdef _EE
+  char path[SMW_PATH];
+  uint8_t probe[sizeof(kSmwIconSys) + 1];
+  bool recording = card_recording;
+  card_recording = false;
+  if (join_path(path, dir, "icon.sys") &&
+      file_read(path, probe, sizeof(probe)) != (int)sizeof(kSmwIconSys)) {
+    char icon[SMW_PATH];
+    if (join_path(icon, dir, SMW_ICON_NAME) && file_write(icon, kSmwIcon, sizeof(kSmwIcon)))
+      file_write(path, kSmwIconSys, sizeof(kSmwIconSys));
+  }
+  card_recording = recording;
+#else
+  (void)dir;
+#endif
+}
+
 /* 0 on success, otherwise the step that failed. */
 static int save_to(int store, const uint8_t *save) {
   const char *dir = store_dir(store);
@@ -425,7 +454,10 @@ static int save_to(int store, const uint8_t *save) {
   if (!join_path(primary, dir, "SMW.SRM") ||
       !join_path(backup, dir, "SMW.BAK") ||
       !join_path(pending, dir, "SMW.TMP")) return ERR_PATH;
-  if (store != STORE_FOLDER) make_folder(dir);
+  if (store != STORE_FOLDER) {
+    make_folder(dir);
+    write_card_icon(dir);
+  }
   uint8_t previous[SMW_SRAM_BYTES], staged[SMW_SRAM_BYTES];
   bool has_primary = read_save(primary, previous, false);
   if (read_save(pending, staged, true) &&
