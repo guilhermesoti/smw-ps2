@@ -2,7 +2,7 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.7.3 · NTSC 240p/480p · português.** Projeto gratuito, feito por fãs.
+**Versão 0.8 · NTSC 240p/480p · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
 - Vídeo 240p progressivo (cabo AV e a maioria dos adaptadores HDMI) ou 480p com scanlines (componente/HDMI).
@@ -28,7 +28,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O SHA-256 do ELF da v0.7.3 obtido com o ps2dev v2.0.0 foi `e3220eb6ca5573b0c3d7bb3975bff0791a29f7a34e1de9a4b54e1b129a00fb8a`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O SHA-256 do ELF da v0.8 obtido com o ps2dev v2.0.0 foi `16751e2077b942a2da0e13b1e1c8ba435d97e71d7bc7ac982de552c7d225a8c0`.
 
 ## Jogar por USB
 
@@ -72,18 +72,28 @@ python3 testes/testar_percurso.py --sanitizar "/caminho/Super Mario World (USA).
 
 O teste compila o motor para o PC, joga o mesmo percurso duas vezes em pastas temporárias e verifica a fase, o salto, o áudio e o CRC da imagem final.
 
-Para testar a gravação no Memory Card com chamadas MCSERV simuladas:
+Testes do salvamento (Memory Card simulado em `testes/mocks/mc_mock.h`, pendrive numa pasta temporária). Rode a partir da pasta `testes/`:
 
 ```sh
-cc -std=gnu11 -D_EE -ffunction-sections -fdata-sections -Itestes/mocks $(pkg-config --cflags minizip zlib) testes/memory_card.c -Wl,--gc-sections $(pkg-config --libs minizip zlib) -o /tmp/smw-memory-card-test
-/tmp/smw-memory-card-test
+cd testes
+P="$(pkg-config --cflags minizip zlib)"; L="$(pkg-config --libs minizip zlib)"
+# fallback entre mídias + reinício, saves antigos, corrompidos, falha de leitura, cartão cheio
+cc -std=gnu11 -D_EE -Imocks -I../Fonte/ps2 $P save_midias.c -Wl,--wrap=fopen $L -o /tmp/smw-save-midias && /tmp/smw-save-midias
+# ícone do save e arquivos antigos com permissões erradas
+cc -std=gnu11 -D_EE -Imocks -I../Fonte/ps2 $P memory_card_icon.c $L -o /tmp/smw-icone && /tmp/smw-icone
+# abertura/gravação de um arquivo no MCSERV (sequência de chamadas)
+cc -std=gnu11 -D_EE -ffunction-sections -fdata-sections -Imocks $P memory_card.c -Wl,--gc-sections $L -o /tmp/smw-mc && /tmp/smw-mc
 ```
 
-Para testar o ícone do save (criação, gravação em blocos de 4096 bytes e troca do ícone de versões anteriores):
+Regressão do Palácio Amarelo com o motor do jogo (precisa da sua cópia: crie uma pasta com `SMW.SFC` ou o ZIP):
 
 ```sh
-cc -std=gnu11 -D_EE -Itestes/mocks -IFonte/ps2 $(pkg-config --cflags minizip zlib) testes/memory_card_icon.c $(pkg-config --libs minizip zlib) -o /tmp/smw-memory-card-icon-test
-/tmp/smw-memory-card-icon-test
+cd ..
+cc -O1 -std=gnu11 -D_EE -fno-strict-aliasing -fwrapv -ffunction-sections -fdata-sections -Wl,--gc-sections \
+   -Itestes/mocks -IFonte/engine -IFonte/engine/src -IFonte/ps2 $(pkg-config --cflags minizip zlib) \
+   $(find Fonte/engine/src -name '*.c') Fonte/ps2/game.c testes/palacio_amarelo.c \
+   -Wl,--wrap=fopen $(pkg-config --libs minizip zlib) -o /tmp/smw-palacio
+/tmp/smw-palacio /caminho/da/pasta/com/o/jogo/
 ```
 
 O ícone é gerado por `python3 Fonte/gerar_icone.py`, que reescreve `Fonte/ps2/smw_icon.h`.

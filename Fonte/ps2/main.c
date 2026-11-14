@@ -207,21 +207,24 @@ static void start_video(void) {
   }
 }
 
-/* Small on-screen message with a code if a save fails (see LEIA-ME). */
-static void draw_text(unsigned x, unsigned y, const char *msg) {
-  static const char letters[] = "AELORSV0123456789-MTBUI";
+/* Small on-screen messages: save errors (codes in the LEIA-ME), where the
+   progress was loaded from and save confirmations. 3x5 capitals. */
+static void draw_text(unsigned x, unsigned y, const char *msg, uint32_t bg) {
+  static const char letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:.";
   static const unsigned char glyph[][5] = {
-    {2,5,7,5,5},{7,4,6,4,7},{4,4,4,4,7},{7,5,5,5,7},{6,5,6,5,5},{7,4,7,1,7},{5,5,5,5,2},
+    {2,5,7,5,5},{6,5,6,5,6},{3,4,4,4,3},{6,5,5,5,6},{7,4,6,4,7},{7,4,6,4,4},{3,4,5,5,3},
+    {5,5,7,5,5},{7,2,2,2,7},{1,1,1,5,2},{5,5,6,5,5},{4,4,4,4,7},{5,7,7,5,5},{6,5,5,5,5},
+    {7,5,5,5,7},{6,5,6,4,4},{2,5,5,6,3},{6,5,6,5,5},{3,4,2,1,6},{7,2,2,2,2},{5,5,5,5,7},
+    {5,5,5,5,2},{5,5,7,7,5},{5,5,2,5,5},{5,5,2,2,2},{7,1,2,4,7},
     {7,5,5,5,7},{2,6,2,2,7},{7,1,7,4,7},{7,1,3,1,7},{5,5,7,1,1},
     {7,4,7,1,7},{7,4,7,5,7},{7,1,1,1,1},{7,5,7,5,7},{7,5,7,1,7},
-    {0,0,7,0,0},{5,7,7,5,5},
-    {7,2,2,2,2},{6,5,6,5,6},{5,5,5,5,7},{7,2,2,2,7}
+    {0,0,7,0,0},{0,2,0,2,0},{0,0,0,0,2}
   };
   unsigned width = (unsigned)strlen(msg) * 4 + 2;
   if (x + width > SMW_WIDTH) width = SMW_WIDTH - x;
   for (unsigned row = 0; row < 7; ++row)
     for (unsigned col = 0; col < width; ++col)
-      pixels[(y + row) * SMW_WIDTH + x + col] = 0x00000070;
+      pixels[(y + row) * SMW_WIDTH + x + col] = bg;
   for (unsigned i = 0; msg[i] && x + 1 + i*4 + 3 <= SMW_WIDTH; ++i) {
     const char *at = msg[i] == ' ' ? NULL : strchr(letters, msg[i]);
     if (!at) continue;  /* unknown characters are left blank */
@@ -232,12 +235,25 @@ static void draw_text(unsigned x, unsigned y, const char *msg) {
   }
 }
 
+/* "CARREGADO: ...", "SALVO: ..." and similar, for 4 seconds. */
+static void draw_notice(void) {
+  static unsigned shown_serial = ~0u, frames;
+  unsigned serial;
+  const char *text = smw_notice(&serial);
+  if (serial != shown_serial) shown_serial = serial, frames = 240;
+  if (!frames || !text[0]) return;
+  --frames;
+  bool bad = strncmp(text, "SAVE ILEGIVEL", 13) == 0;
+  draw_text(8, SMW_HEIGHT - 16, text, bad ? 0x00000070 : 0x00104010);
+}
+
 static void present(void) {
   if (smw_save_error) {
     char msg[64];
     snprintf(msg, sizeof(msg), "ERRO AO SALVAR %s", smw_save_error_text());
-    draw_text(8, 8, msg);
+    draw_text(8, 8, msg, 0x00000070);
   }
+  draw_notice();
   SyncDCache(pixels, pixels + SMW_WIDTH * SMW_HEIGHT);
   gs->PrimAlphaEnable = GS_SETTING_OFF;
   gsKit_clear(gs, GS_SETREG_RGBAQ(0, 0, 0, 0, 0));
@@ -314,11 +330,11 @@ static uint32_t measure_field(void) {
 }
 
 int main(int argc, char **argv) {
-  char folder[SMW_PATH] = "", actual[SMW_PATH] = "", report[256];
+  char folder[SMW_PATH] = "", actual[SMW_PATH] = "", report[1024];
   if (argc && argv && argv[0]) smw_boot_folder(argv[0], folder);
   bool from_disc = smw_path_is_disc(folder);
   init_scr();
-  scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v0.7.3\n\n");
+  scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v0.8\n\n");
   scr_printf(from_disc ? "Iniciando controles e Memory Card...\n"
                        : "Iniciando USB, controles e Memory Card...\n");
   start_drivers(from_disc);
@@ -347,8 +363,9 @@ int main(int argc, char **argv) {
   smw_start(rom, pixels);
   free(rom);
   smw_storage_report(report, sizeof(report));
-  scr_printf("Drivers de controle e Memory Card: %s\n%sProgresso: %s\n",
-             card_drivers, report, smw_save_location());
+  scr_printf("Drivers de controle e Memory Card: %s\n%s", card_drivers, report);
+  smw_load_report(report, sizeof(report));
+  scr_printf("%sNovos saves vao para: %s\n", report, smw_save_location());
   /* Three seconds to read the above and pick the video mode. */
   scr_printf("\nVIDEO: aperte TRIANGULO para 480p (adaptador HDMI ou componente)\n"
              "       ou CIRCULO para 240p (cabo AV). Sem apertar: 240p.\n"
@@ -366,7 +383,7 @@ int main(int argc, char **argv) {
   sleep(1);
 
   start_video();
-  smw_intro(gs, video.p480, sound, "0.7.3");
+  smw_intro(gs, video.p480, sound, "0.8");
   const uint32_t field = measure_field();
   uint32_t last = cpu_ticks();
   int pending = 0, debt = 0;

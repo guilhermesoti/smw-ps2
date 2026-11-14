@@ -30,12 +30,17 @@ typedef enum { CARD_READY, CARD_ABSENT, CARD_UNFORMATTED, CARD_WRONG_TYPE,
 /* Save error codes, shown as "<place><code>": place 1 = USB/folder,
    2 = memory card 1, 3 = memory card 2. */
 enum { ERR_NOT_READY = 1, ERR_UNFORMATTED = 2, ERR_WRONG_TYPE = 3,
-       ERR_TEMP = 4, ERR_BACKUP = 5, ERR_MAIN = 6, ERR_RECOVER = 7,
+       ERR_TEMP = 4, ERR_BACKUP = 5, ERR_MAIN = 6, ERR_PRESERVE = 7,
        ERR_NO_DRIVER = 8, ERR_PATH = 9 };
+/* Room left on a memory card besides the icon (KB), so the icon never takes
+   the space a save needs. */
+enum { ICON_SPARE_KB = 16 };
 
 static char folder_dir[SMW_PATH];
 static bool memory_card_ok;
 static int active_store = -1;
+static uint32_t max_generation;    /* newest save generation seen */
+static int card_free_kb[2];
 static char error_text[48];
 static const char *const kCardDirs[2] = {"mc0:/SMWPS2/", "mc1:/SMWPS2/"};
 
@@ -190,6 +195,9 @@ RomResult smw_find_rom(const char *boot, uint8_t **rom, char path[SMW_PATH], uin
 
 /* ------------------------------------------------------- file access --- */
 
+/* file_read() results besides the byte count. */
+enum { FILE_ABSENT = -1, FILE_ERROR = -2 };
+
 /* Detail of the last failed operation during a save, shown after the codes
    as "M<step><result><file>" for the memory card (e.g. "M2-4T") and
    "U<step><errno><file>" for the USB drive. Steps: 1 create the folder,
@@ -202,6 +210,7 @@ static char card_file, usb_file;
 static char file_letter(const char *name) {
   const char *dot = strrchr(name, '.');
   if (!dot) return 0;
+  if (!strcmp(dot, ".BAD")) return 'X';
   if (!strcmp(dot, ".TMP")) return 'T';
   if (!strcmp(dot, ".SRM")) return 'S';
   if (!strcmp(dot, ".BAK")) return 'B';
@@ -261,15 +270,14 @@ static int card_delete(int port, const char *name) {
 /* Reads at most cap bytes, never past the end of the file: some BIOS
    memory card drivers refuse a read that asks for more than the file has. */
 static int card_read(int port, const char *name, uint8_t *buf, int cap) {
-  if (cap > (int)sizeof(card_buf)) return -1;
+  if (cap > (int)sizeof(card_buf)) return FILE_ERROR;
   for (int attempt = 0; attempt < 2; ++attempt) {
-    if (mcOpen(port, 0, name, CARD_O_RDONLY) != 0) return -1;
+    int submitted = mcOpen(port, 0, name, CARD_O_RDONLY);
+    if (submitted != 0) { card_fail_on(name, 5, submitted); return FILE_ERROR; }
     int fd = card_wait();
+    if (fd == -4) return FILE_ABSENT;
     if (fd == -5 && attempt == 0 && card_set_access(port, name)) continue;
-    if (fd < 0) {
-      if (fd != -4) card_fail_on(name, 5, fd);  /* -4: no such file, normal */
-      return -1;
-    }
+    if (fd < 0) { card_fail_on(name, 5, fd); return FILE_ERROR; }
     int size = -1, got = -1;
     if (mcSeek(fd, 0, 2) == 0) size = card_wait();         /* SEEK_END */
     if (size >= 0 && mcSeek(fd, 0, 0) == 0 && card_wait() == 0) {
@@ -282,11 +290,11 @@ static int card_read(int port, const char *name, uint8_t *buf, int cap) {
     }
     if (mcClose(fd) == 0) card_wait();
     if (got == -5 && attempt == 0 && card_set_access(port, name)) continue;
-    if (got < 0) { card_fail_on(name, 6, got); return -1; }
+    if (got < 0) { card_fail_on(name, 6, got); return FILE_ERROR; }
     if (got > 0) memcpy(buf, card_buf, got);
     return got;
   }
-  return -1;
+  return FILE_ERROR;
 }
 
 /* Always writes a new file: an old one may refuse writing (see
@@ -330,6 +338,7 @@ static bool card_write(int port, const char *name, const uint8_t *buf, int size)
 }
 #endif
 
+
 static int file_read(const char *path, uint8_t *buf, int cap) {
 #ifdef _EE
   int port;
@@ -339,14 +348,15 @@ static int file_read(const char *path, uint8_t *buf, int cap) {
   errno = 0;
   FILE *f = fopen(path, "rb");
   if (!f) {
-    if (errno != ENOENT) usb_fail(path, 5, errno);
-    return -1;
+    if (errno == ENOENT || errno == 0) return FILE_ABSENT;
+    usb_fail(path, 5, errno);
+    return FILE_ERROR;
   }
   int n = (int)fread(buf, 1, cap, f);
   bool failed = ferror(f) != 0;
   if (failed) usb_fail(path, 6, errno);
   fclose(f);
-  return failed ? -1 : n;
+  return failed ? FILE_ERROR : n;
 }
 
 static bool file_write(const char *path, const uint8_t *buf, int size) {
@@ -371,11 +381,26 @@ static void file_remove(const char *path) {
   int port;
   const char *name;
   if (card_path(path, &port, &name)) {
-    if (mcDelete(port, 0, name) == 0) card_wait();
+    card_delete(port, name);
     return;
   }
 #endif
   remove(path);
+}
+
+/* Renames dir/from to dir/to (same folder). */
+static bool file_rename(const char *dir, const char *from, const char *to) {
+  char a[SMW_PATH], b[SMW_PATH];
+  if (!join_path(a, dir, from) || !join_path(b, dir, to)) return false;
+#ifdef _EE
+  int port;
+  const char *name;
+  if (card_path(a, &port, &name)) {
+    if (mcRename(port, 0, name, to) != 0) return false;
+    return card_wait() == 0;
+  }
+#endif
+  return rename(a, b) == 0;
 }
 
 static void make_folder(const char *dir) {
@@ -399,47 +424,160 @@ static void make_folder(const char *dir) {
 
 /* --------------------------------------------------------- save data --- */
 
-/* The raw .SRM is compatible with the SNES version. Only the temporary
-   journal carries a header so we can identify incomplete writes without
-   depending on rename support. */
-static void journal_header(const uint8_t *save, uint8_t header[8]) {
-  uint32_t crc = (uint32_t)crc32(0, save, SMW_SRAM_BYTES);
-  memcpy(header, "SMWJ", 4);
-  for (unsigned i = 0; i < 4; ++i) header[4 + i] = (uint8_t)(crc >> (8 * i));
+/* Save file formats.
+   Current (v0.8): the 2048 bytes of SNES SRAM followed by a 16-byte trailer:
+     "SMW2", generation (u32 LE), CRC32 of the SRAM + generation (u32 LE),
+     CRC32 of the 12 trailer bytes before it (u32 LE).
+   The generation grows by one on every save, on whatever medium it lands,
+   so the most recent copy can be found among USB, memory card 1 and 2.
+   Older versions wrote, and are still read:
+     raw SRAM, 2048 bytes (SMW.SRM / SMW.BAK), with no checksum of its own;
+     journal "SMWJ" + CRC32 (u32 LE) + SRAM (SMW.TMP).
+   An old file has generation 0: any file of this version is newer. Among old
+   files, the one with more game progress wins (see srm_score). */
+enum { SAVE_TRAILER = 16, SAVE_BYTES = SMW_SRAM_BYTES + SAVE_TRAILER,
+       JOURNAL_BYTES = SMW_SRAM_BYTES + 8 };
+
+typedef enum { COPY_ABSENT, COPY_UNREADABLE, COPY_CORRUPT, COPY_VALID } CopyState;
+typedef struct {
+  CopyState state;
+  bool legacy;            /* written by an older version (no generation) */
+  uint32_t generation;
+  int score;
+  uint8_t sram[SMW_SRAM_BYTES];
+} SaveCopy;
+
+/* The three files kept in each place, in the order they are tried when two
+   copies are equally recent. */
+enum { FILE_SRM, FILE_TMP, FILE_BAK, FILE_COUNT };
+static const char *const kSaveNames[FILE_COUNT] = {"SMW.SRM", "SMW.TMP", "SMW.BAK"};
+
+static uint32_t le32(const uint8_t *p) {
+  return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
+}
+static void put_le32(uint8_t *p, uint32_t v) {
+  for (int i = 0; i < 4; ++i) p[i] = (uint8_t)(v >> (8 * i));
 }
 
-static bool read_save(const char *path, uint8_t *save, bool journal) {
-  uint8_t data[8 + SMW_SRAM_BYTES + 1];
-  int want = SMW_SRAM_BYTES + (journal ? 8 : 0);
-  if (file_read(path, data, want + 1) != want) return false;  /* exact size */
-  const uint8_t *body = data + (journal ? 8 : 0);
-  if (journal) {
-    uint8_t expected[8];
-    journal_header(body, expected);
-    if (memcmp(data, expected, sizeof(expected)) != 0) return false;
+static uint32_t save_crc(const uint8_t *sram, uint32_t generation) {
+  uint8_t g[4];
+  put_le32(g, generation);
+  uLong crc = crc32(0, sram, SMW_SRAM_BYTES);
+  return (uint32_t)crc32(crc, g, 4);
+}
+
+static void encode_save(const uint8_t *sram, uint32_t generation, uint8_t out[SAVE_BYTES]) {
+  memcpy(out, sram, SMW_SRAM_BYTES);
+  uint8_t *t = out + SMW_SRAM_BYTES;
+  memcpy(t, "SMW2", 4);
+  put_le32(t + 4, generation);
+  put_le32(t + 8, save_crc(sram, generation));
+  put_le32(t + 12, (uint32_t)crc32(0, t, 12));
+}
+
+/* The game keeps 3 save files, each twice (at +0 and +429), as 141 bytes
+   plus a 16-bit checksum that makes the sum 0x5A5A (SaveGame, 009bc9).
+   Returns the copy the game would use (the same test as 009db5) or NULL. */
+static const uint8_t *srm_slot(const uint8_t *sram, int slot) {
+  static const uint16_t kSlot[3] = {0x000, 0x08f, 0x11e};
+  for (int copy = 0; copy < 2; ++copy) {
+    const uint8_t *p = sram + kSlot[slot] + copy * 429;
+    uint16_t sum = (uint16_t)(p[141] | p[142] << 8);
+    for (int i = 0; i < 141; ++i) sum += p[i];
+    if (sum == 0x5A5A) return p;
   }
-  memcpy(save, body, SMW_SRAM_BYTES);
+  return NULL;
+}
+
+/* Game progress, to compare copies without a generation: exits completed
+   (byte 140 of a file, the number on the file select screen) and switch
+   palaces pressed (bytes 133-136), over the 3 files. */
+static int srm_score(const uint8_t *sram, int *files) {
+  int score = 0, n = 0;
+  for (int slot = 0; slot < 3; ++slot) {
+    const uint8_t *p = srm_slot(sram, slot);
+    if (!p) continue;
+    ++n;
+    score += 1 + 8 * (p[140] < 0x60 ? p[140] : 0);
+    for (int i = 133; i <= 136; ++i) score += p[i] ? 2 : 0;
+  }
+  if (files) *files = n;
+  return score;
+}
+
+static bool all_same(const uint8_t *p, int n) {
+  for (int i = 1; i < n; ++i)
+    if (p[i] != p[0]) return false;
   return true;
 }
 
-static bool write_save(const char *path, const uint8_t *save, bool journal) {
-  uint8_t data[8 + SMW_SRAM_BYTES], verify[SMW_SRAM_BYTES];
-  int n = 0;
-  if (journal) { journal_header(save, data); n = 8; }
-  memcpy(data + n, save, SMW_SRAM_BYTES);
-  n += SMW_SRAM_BYTES;
-  if (!file_write(path, data, n)) return false;
+/* Reads and classifies one file. */
+static void read_copy(const char *path, SaveCopy *c) {
+  uint8_t data[SAVE_BYTES + 1];
+  memset(c, 0, sizeof(*c));
+  int n = file_read(path, data, sizeof(data));
+  if (n == FILE_ABSENT) { c->state = COPY_ABSENT; return; }
+  if (n < 0) { c->state = COPY_UNREADABLE; return; }
+  c->state = COPY_CORRUPT;
+  if (n == SAVE_BYTES) {
+    const uint8_t *t = data + SMW_SRAM_BYTES;
+    if (memcmp(t, "SMW2", 4) != 0 || le32(t + 12) != (uint32_t)crc32(0, t, 12)) return;
+    c->generation = le32(t + 4);
+    if (le32(t + 8) != save_crc(data, c->generation)) return;
+    memcpy(c->sram, data, SMW_SRAM_BYTES);
+  } else if (n == JOURNAL_BYTES) {
+    if (memcmp(data, "SMWJ", 4) != 0 ||
+        le32(data + 4) != (uint32_t)crc32(0, data + 8, SMW_SRAM_BYTES)) return;
+    memcpy(c->sram, data + 8, SMW_SRAM_BYTES);
+    c->legacy = true;
+  } else if (n == SMW_SRAM_BYTES) {
+    /* No checksum of its own: accept it if the game would find a save file
+       in it, or if it is still blank (a game started but never saved). */
+    int files = 0;
+    srm_score(data, &files);
+    if (!files && !all_same(data, SMW_SRAM_BYTES)) return;
+    memcpy(c->sram, data, SMW_SRAM_BYTES);
+    c->legacy = true;
+  } else {
+    return;
+  }
+  c->state = COPY_VALID;
+  c->score = srm_score(c->sram, NULL);
+}
+
+/* > 0 if a is more recent than b. Valid copies only. */
+static int copy_cmp(const SaveCopy *a, const SaveCopy *b) {
+  if (a->generation != b->generation) return a->generation > b->generation ? 1 : -1;
+  if (a->score != b->score) return a->score > b->score ? 1 : -1;
+  return 0;
+}
+
+static bool write_copy(const char *path, const uint8_t *sram, uint32_t generation) {
+  static SaveCopy check;
+  uint8_t data[SAVE_BYTES];
+  encode_save(sram, generation, data);
+  if (!file_write(path, data, SAVE_BYTES)) {
+    /* A write that stopped half way (e.g. card full) leaves a file that is
+       not a valid save: remove it so it is not reported as corrupt later.
+       A file that is still valid (the write never started) stays. */
+    bool recording = card_recording;
+    card_recording = false;
+    read_copy(path, &check);
+    if (check.state == COPY_CORRUPT) file_remove(path);
+    card_recording = recording;
+    return false;
+  }
   int fails = fail_count;
+  read_copy(path, &check);
   bool card = strncmp(path, "mc", 2) == 0;
-  if (!read_save(path, verify, journal)) {
-    /* Read fine but with the wrong size or header. */
-    if (fail_count == fails) {
+  if (check.state != COPY_VALID || check.generation != generation) {
+    if (fail_count == fails) {  /* read fine, but wrong size or checksum */
       if (card) card_fail_on(path, 6, 0);
       else usb_fail(path, 6, 0);
     }
     return false;
   }
-  if (memcmp(save, verify, sizeof(verify)) != 0) {
+  if (memcmp(check.sram, sram, SMW_SRAM_BYTES) != 0) {
     if (card) card_fail_on(path, 7, 0);
     else usb_fail(path, 7, 0);
     return false;
@@ -459,6 +597,7 @@ static CardState card_state(int port) {
   if (result < -2 || type == MC_TYPE_NONE) return CARD_ABSENT;
   if (type != MC_TYPE_PS2) return CARD_WRONG_TYPE;
   if (result == -2) return CARD_UNFORMATTED;
+  card_free_kb[port] = free_clusters;
   return CARD_READY;
 #else
   (void)port;
@@ -482,22 +621,66 @@ static int store_check(int store) {
   }
 }
 
-static bool load_from(const char *dir, uint8_t *save) {
-  char path[SMW_PATH];
-  if (join_path(path, dir, "SMW.TMP") && read_save(path, save, true)) return true;
-  if (join_path(path, dir, "SMW.SRM") && read_save(path, save, false)) return true;
-  return join_path(path, dir, "SMW.BAK") && read_save(path, save, false);
+static const char *const kStoreNames[STORE_COUNT] = {"PENDRIVE", "MEMORY CARD 1", "MEMORY CARD 2"};
+
+/* What was found at start-up, for the boot screen and the in-game notice. */
+static struct {
+  int store, file;         /* copy loaded, or -1 */
+  bool legacy;
+  uint32_t generation;
+  int bad;                 /* files found but unreadable or corrupt */
+  int bad_store[STORE_COUNT * FILE_COUNT], bad_file[STORE_COUNT * FILE_COUNT];
+  CopyState bad_state[STORE_COUNT * FILE_COUNT];
+} load_info = {-1, -1, false, 0, 0, {0}, {0}, {0}};
+
+static char notice[48];
+static unsigned notice_serial;
+static void set_notice(const char *text) {
+  snprintf(notice, sizeof(notice), "%s", text);
+  ++notice_serial;
 }
 
 void smw_load_progress(uint8_t *save) {
+  static SaveCopy copy;  /* large: kept off the stack */
+  static uint8_t best[SMW_SRAM_BYTES];
+  SaveCopy best_info;
+  bool found = false;
+  memset(&best_info, 0, sizeof(best_info));
+  load_info.store = load_info.file = -1;
+  load_info.bad = 0;
+  max_generation = 0;
   active_store = -1;
   for (int store = 0; store < STORE_COUNT; ++store) {
     if (store_check(store) != 0) continue;
     if (active_store < 0) active_store = store;  /* preferred place for new saves */
-    if (load_from(store_dir(store), save)) {
-      active_store = store;
-      return;
+    for (int file = 0; file < FILE_COUNT; ++file) {
+      char path[SMW_PATH];
+      if (!join_path(path, store_dir(store), kSaveNames[file])) continue;
+      read_copy(path, &copy);
+      if (copy.state == COPY_ABSENT) continue;
+      if (copy.state != COPY_VALID) {
+        int i = load_info.bad++;
+        load_info.bad_store[i] = store, load_info.bad_file[i] = file, load_info.bad_state[i] = copy.state;
+        continue;
+      }
+      if (copy.generation > max_generation) max_generation = copy.generation;
+      if (!found || copy_cmp(&copy, &best_info) > 0) {
+        found = true;
+        memcpy(best, copy.sram, SMW_SRAM_BYTES);
+        best_info = copy;
+        load_info.store = store, load_info.file = file;
+        load_info.legacy = copy.legacy, load_info.generation = copy.generation;
+      }
     }
+  }
+  if (found) {
+    memcpy(save, best, SMW_SRAM_BYTES);
+    active_store = load_info.store;
+    char text[48];
+    snprintf(text, sizeof(text), "CARREGADO: %s", kStoreNames[load_info.store]);
+    set_notice(text);
+  } else {
+    set_notice(load_info.bad ? "SAVE ILEGIVEL: VEJA LEIA-ME" : "NENHUM SAVE: JOGO NOVO");
   }
 }
 
@@ -508,6 +691,24 @@ const char *smw_save_location(void) {
   case STORE_MC1: return "Memory Card 2 (pasta SMWPS2)";
   default: return "NENHUM - insira um Memory Card formatado";
   }
+}
+
+void smw_load_report(char *out, size_t size) {
+  static const char *const kPlace[STORE_COUNT] = {"pendrive", "Memory Card 1", "Memory Card 2"};
+  int used;
+  if (load_info.store >= 0)
+    used = snprintf(out, size, "Progresso carregado de: %s, %s%s\n", kPlace[load_info.store],
+                    kSaveNames[load_info.file],
+                    load_info.legacy ? " (formato antigo)" : "");
+  else if (load_info.bad)
+    used = snprintf(out, size, "Progresso: SAVE ENCONTRADO, MAS NENHUMA COPIA PODE SER LIDA.\n"
+                               "O jogo comeca vazio e os arquivos sao preservados (.BAD).\n");
+  else
+    used = snprintf(out, size, "Progresso: nenhum save encontrado (jogo novo).\n");
+  for (int i = 0; i < load_info.bad && used >= 0 && (size_t)used < size; ++i)
+    used += snprintf(out + used, size - used, "  ATENCAO: %s %s %s\n", kPlace[load_info.bad_store[i]],
+                     kSaveNames[load_info.bad_file[i]],
+                     load_info.bad_state[i] == COPY_UNREADABLE ? "nao pode ser lido" : "corrompido");
 }
 
 void smw_storage_report(char *out, size_t size) {
@@ -522,10 +723,15 @@ void smw_storage_report(char *out, size_t size) {
 
 const char *smw_save_error_text(void) { return error_text; }
 
+const char *smw_notice(unsigned *serial) {
+  if (serial) *serial = notice_serial;
+  return notice;
+}
+
 /* icon.sys + 3D icon, so the PS2 browser shows "Super Mario World" instead
-   of "corrupted data". Written once per card; a failure here never blocks
-   the save itself. */
-static void write_card_icon(const char *dir) {
+   of "corrupted data". Written after the progress, only when the card has
+   room for it, and never blocks or undoes a save. */
+static void write_card_icon(const char *dir, int port) {
 #ifdef _EE
   char path[SMW_PATH];
   uint8_t probe[sizeof(kSmwIconSys) + 1];
@@ -536,45 +742,78 @@ static void write_card_icon(const char *dir) {
       (file_read(path, probe, sizeof(probe)) != (int)sizeof(kSmwIconSys) ||
        memcmp(probe, kSmwIconSys, sizeof(kSmwIconSys)) != 0)) {
     char icon[SMW_PATH];
-    int port;
+    int iport;
     const char *name;
+    int need_kb = (int)((sizeof(kSmwIcon) + 1023) / 1024 + 2);
     bool named = join_path(icon, dir, SMW_ICON_NAME);
-    /* Apaga o icone antigo antes: a gravacao nao trunca arquivos maiores. */
-    if (named && card_path(icon, &port, &name) && mcDelete(port, 0, name) == 0)
-      card_wait();
-    if (named && file_write(icon, kSmwIcon, sizeof(kSmwIcon)))
-      file_write(path, kSmwIconSys, sizeof(kSmwIconSys));
+    card_state(port);  /* refresh the free space */
+    if (named && card_free_kb[port] >= need_kb + ICON_SPARE_KB) {
+      /* Apaga o icone antigo antes: a gravacao nao trunca arquivos maiores. */
+      if (card_path(icon, &iport, &name)) card_delete(iport, name);
+      if (file_write(icon, kSmwIcon, sizeof(kSmwIcon)))
+        file_write(path, kSmwIconSys, sizeof(kSmwIconSys));
+    }
   }
   card_recording = recording;
 #else
   (void)dir;
+  (void)port;
 #endif
 }
 
-/* 0 on success, otherwise the step that failed. */
-static int save_to(int store, const uint8_t *save) {
+/* A file that exists but cannot be read, or fails its checks, is renamed
+   SMW_<S|T|B><1-9>.BAD instead of being overwritten. */
+static bool preserve_bad(const char *dir, int file) {
+  static const char kLetter[FILE_COUNT] = {'S', 'T', 'B'};
+  for (int i = 1; i <= 9; ++i) {
+    char name[16], path[SMW_PATH];
+    snprintf(name, sizeof(name), "SMW_%c%d.BAD", kLetter[file], i);
+    uint8_t probe[1];
+    if (!join_path(path, dir, name) || file_read(path, probe, sizeof(probe)) != FILE_ABSENT) continue;
+    return file_rename(dir, kSaveNames[file], name);
+  }
+  return false;
+}
+
+/* 0 on success, otherwise the step that failed. Order of writes, so that the
+   newest copy that existed before always survives on this medium:
+     1. SMW.BAK <- the most recent valid copy already here, if newer than BAK
+     2. SMW.TMP <- the new save   (checked)
+     3. SMW.SRM <- the new save   (checked)
+     4. delete SMW.TMP (same as SMW.SRM)
+   Unreadable or corrupt files are renamed .BAD before anything replaces
+   them. */
+static int save_to(int store, const uint8_t *save, uint32_t generation) {
+  static SaveCopy have[FILE_COUNT];
   const char *dir = store_dir(store);
-  char primary[SMW_PATH], backup[SMW_PATH], pending[SMW_PATH];
-  if (!join_path(primary, dir, "SMW.SRM") ||
-      !join_path(backup, dir, "SMW.BAK") ||
-      !join_path(pending, dir, "SMW.TMP")) return ERR_PATH;
-  if (store != STORE_FOLDER) {
-    make_folder(dir);
-    write_card_icon(dir);
+  char path[FILE_COUNT][SMW_PATH];
+  for (int f = 0; f < FILE_COUNT; ++f)
+    if (!join_path(path[f], dir, kSaveNames[f])) return ERR_PATH;
+  if (store != STORE_FOLDER) make_folder(dir);
+
+  int newest = -1;
+  for (int f = 0; f < FILE_COUNT; ++f) {
+    read_copy(path[f], &have[f]);
+    if (have[f].state == COPY_VALID && (newest < 0 || copy_cmp(&have[f], &have[newest]) > 0))
+      newest = f;
   }
-  uint8_t previous[SMW_SRAM_BYTES], staged[SMW_SRAM_BYTES];
-  bool has_primary = read_save(primary, previous, false);
-  if (read_save(pending, staged, true) &&
-      (!has_primary || memcmp(staged, previous, sizeof(staged)))) {
-    if (!write_save(primary, staged, false)) return ERR_RECOVER;
-    memcpy(previous, staged, sizeof(previous));
-    has_primary = true;
+  /* 1. backup of the previous state */
+  if (newest >= 0 && newest != FILE_BAK &&
+      (have[FILE_BAK].state != COPY_VALID ||
+       memcmp(have[FILE_BAK].sram, have[newest].sram, SMW_SRAM_BYTES) != 0)) {
+    if ((have[FILE_BAK].state == COPY_UNREADABLE || have[FILE_BAK].state == COPY_CORRUPT) &&
+        !preserve_bad(dir, FILE_BAK)) return ERR_PRESERVE;
+    if (!write_copy(path[FILE_BAK], have[newest].sram, have[newest].generation)) return ERR_BACKUP;
   }
-  if (!write_save(pending, save, true)) return ERR_TEMP;
-  if (has_primary && memcmp(previous, save, sizeof(previous)) &&
-      !write_save(backup, previous, false)) return ERR_BACKUP;
-  if (!write_save(primary, save, false)) return ERR_MAIN;
-  file_remove(pending);  /* If removal fails, both copies contain the same save. */
+  /* 2-3. the new save */
+  for (int f = FILE_TMP; ; f = FILE_SRM) {
+    if ((have[f].state == COPY_UNREADABLE || have[f].state == COPY_CORRUPT) && !preserve_bad(dir, f))
+      return ERR_PRESERVE;
+    if (!write_copy(path[f], save, generation)) return f == FILE_TMP ? ERR_TEMP : ERR_MAIN;
+    if (f == FILE_SRM) break;
+  }
+  file_remove(path[FILE_TMP]);  /* If removal fails, it holds the same save as SMW.SRM. */
+  if (store != STORE_FOLDER) write_card_icon(dir, store - STORE_MC0);
   return 0;
 }
 
@@ -589,16 +828,21 @@ bool smw_save_progress(const uint8_t *save) {
   card_recording = true;
   card_step = card_result = usb_step = usb_result = 0;
   card_file = usb_file = 0;
+  uint32_t generation = max_generation + 1;
   for (int i = 0; i < count; ++i) {
     int store = order[i];
     int code = store_check(store);
     /* The USB slot is simply unused when the game came from a disc. */
     if (code == ERR_NOT_READY && store == STORE_FOLDER) continue;
-    if (code == 0) code = save_to(store, save);
+    if (code == 0) code = save_to(store, save, generation);
     if (code == 0) {
       active_store = store;
+      max_generation = generation;
       error_text[0] = '\0';
       card_recording = false;
+      char text[48];
+      snprintf(text, sizeof(text), "SALVO: %s", kStoreNames[store]);
+      set_notice(text);
       return true;
     }
     if (used + 4 < sizeof(error_text))
@@ -610,7 +854,9 @@ bool smw_save_progress(const uint8_t *save) {
     used += snprintf(error_text + used, sizeof(error_text) - used, " U%d%d%s", usb_step, usb_result,
                      usb_file ? (char[]){usb_file, 0} : "");
   if (card_step && used + 12 < sizeof(error_text))
-    snprintf(error_text + used, sizeof(error_text) - used, " M%d%d%s", card_step, card_result,
-             card_file ? (char[]){card_file, 0} : "");
+    used += snprintf(error_text + used, sizeof(error_text) - used, " M%d%d%s", card_step, card_result,
+                     card_file ? (char[]){card_file, 0} : "");
+  if (card_step && card_result == -3 && used + 8 < sizeof(error_text))
+    snprintf(error_text + used, sizeof(error_text) - used, " CHEIO");
   return false;
 }

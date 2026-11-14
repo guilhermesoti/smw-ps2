@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.7.3 | NTSC 240p/480p | Português
+Retrogames Patos de Minas | v0.8 | NTSC 240p/480p | Português
 
 O QUE VOCÊ PRECISA
 
@@ -37,36 +37,58 @@ L1 e R1          deslocar a câmera nas fases que permitem
 
 GRAVAR O PROGRESSO
 
-Salve nos pontos oferecidos pelo próprio jogo.
+Salve nos pontos oferecidos pelo próprio jogo. Ao gravar, aparece por 4
+segundos no canto da tela onde ficou o save, por exemplo
+"SALVO: MEMORY CARD 1".
 
 - Pela ISO: no Memory Card, pasta SMWPS2 (cartão 1; sem ele, cartão 2).
   O pendrive fica só com o OPL, que o usa para ler a ISO.
-- Pelo ELF: em APPS/SMW no pendrive. Se o pendrive falhar, o jogo usa
-  o Memory Card. Se o progresso já estiver no Memory Card e não no
-  pendrive, o jogo continua usando o cartão.
+- Pelo ELF: em APPS/SMW no pendrive. Se o pendrive recusar a gravação,
+  o jogo grava no Memory Card e continua gravando lá.
+
+Ao ligar, o jogo procura o save no pendrive e nos dois Memory Cards e
+carrega a cópia mais recente, onde quer que ela esteja. A tela de
+informações e o canto da tela no início do jogo mostram de onde veio:
+- "CARREGADO: MEMORY CARD 1" (ou PENDRIVE / MEMORY CARD 2);
+- "NENHUM SAVE: JOGO NOVO" quando não há save em lugar nenhum;
+- "SAVE ILEGIVEL: VEJA LEIA-ME" quando existe save, mas nenhuma cópia
+  pode ser lida ou todas estão corrompidas. A tela de informações diz
+  qual arquivo falhou. Nesse caso o jogo começa vazio, mas NÃO apaga
+  nada: antes de gravar por cima, o arquivo ruim é renomeado para
+  SMW_S1.BAD (S = SMW.SRM, T = SMW.TMP, B = SMW.BAK).
+
+Arquivos em cada lugar:
+- SMW.SRM: o save atual (2.064 bytes: os 2.048 da SRAM do SNES, mais
+  número da gravação e verificação CRC32).
+- SMW.BAK: o save anterior. Só é substituído por um mais recente.
+- SMW.TMP: cópia de segurança durante a gravação. Se o PS2 desligar no
+  meio, deixe-o na pasta: o jogo recupera os dados ao abrir.
+- SMW_*.BAD: arquivos ilegíveis ou corrompidos, guardados para análise.
+
+Saves de versões anteriores (SMW.SRM e SMW.BAK de 2.048 bytes) continuam
+sendo lidos. Entre eles, o jogo escolhe o que tem mais progresso (fases
+concluídas e palácios). Na primeira gravação com esta versão, eles passam
+para o formato novo, e o SMW.BAK fica com o melhor save antigo.
 
 No navegador do PS2, a pasta SMWPS2 aparece como "Super Mario World /
-PS2 Retrogames", com um ícone 3D de cartucho cinza escrito "SMW PS2".
-Saves feitos antes da v0.6.4 ganham o ícone novo na próxima vez que
-você salvar; o progresso não é alterado.
-
-SMW.SRM tem 2.048 bytes. SMW.BAK guarda o progresso anterior. SMW.TMP
-pode ficar após um desligamento durante a gravação; deixe-o na pasta
-para o jogo recuperar os dados ao abrir.
+PS2 Retrogames", com um ícone 3D de cartucho cinza escrito "SMW PS2". O
+ícone é gravado depois do progresso, e só se sobrar espaço no cartão
+(cerca de 60 KB): o save sempre tem prioridade.
 
 CÓDIGOS DE "ERRO AO SALVAR"
 
 A mensagem mostra um código de dois dígitos para cada local tentado,
-por exemplo "ERRO AO SALVAR 21 31".
+por exemplo "ERRO AO SALVAR 14 24 31".
 
 1º dígito: 1 = pendrive, 2 = Memory Card 1, 3 = Memory Card 2
 2º dígito: 1 = sem cartão / local indisponível
            2 = cartão não formatado (formate no navegador do PS2)
            3 = cartão de PS1 (não serve)
-           4 = falha ao gravar o arquivo temporário (SMW.TMP)
+           4 = falha ao gravar a cópia de segurança (SMW.TMP)
            5 = falha ao gravar o backup (SMW.BAK)
            6 = falha ao gravar o principal (SMW.SRM)
-           7 = falha ao concluir uma gravação interrompida anterior
+           7 = um arquivo ilegível não pôde ser preservado (.BAD); para
+               não apagá-lo, esse lugar não foi usado
            8 = o driver do Memory Card não carregou
            9 = caminho de pasta inválido
 
@@ -75,7 +97,8 @@ Memory Card (ex.: "M2-4T") e "U" para o pendrive (ex.: "U25T"). O
 primeiro número é a etapa (1 criar a pasta, 2 abrir para gravar,
 3 gravar, 4 fechar, 5 abrir para ler, 6 ler, 7 conteúdo diferente), o
 resto é o código devolvido pelo cartão ou pelo pendrive e a letra final
-é o arquivo (T = SMW.TMP, S = SMW.SRM, B = SMW.BAK).
+é o arquivo (T = SMW.TMP, S = SMW.SRM, B = SMW.BAK). "CHEIO" no fim =
+o Memory Card está sem espaço (código -3).
 
 "U27" = o pendrive recusou criar o arquivo. Causas comuns: pendrive
 cheio, arquivo do save marcado como "somente leitura" no PC ou pendrive
@@ -113,6 +136,26 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.8:
+- Corrige o progresso perdido ao reiniciar (ex.: Palácio Amarelo salvo
+  e "progresso 0" ao ligar de novo). Com o pendrive recusando gravar, o
+  save ia para o Memory Card sem erro, mas ao ligar o jogo carregava
+  primeiro o save antigo do pendrive. Ao escolher o arquivo na tela
+  inicial, esse save antigo era gravado por cima do bom no cartão (que
+  ficava só no SMW.BAK).
+- Ao ligar, carrega a cópia mais recente entre pendrive, Memory Card 1
+  e Memory Card 2. Cada save leva um número de gravação e CRC32.
+- Saves antigos continuam sendo lidos; entre eles, vale o que tem mais
+  progresso. Quem foi afetado pelo problema acima recupera o save do
+  SMW.BAK automaticamente.
+- Mostra na tela de onde o progresso foi carregado e onde foi salvo, e
+  diferencia "nenhum save" de "save ilegível/corrompido".
+- Arquivos ilegíveis ou corrompidos são renomeados .BAD, nunca
+  sobrescritos. O SMW.BAK só é trocado por um save mais recente.
+- O ícone do Memory Card é gravado depois do progresso e só se houver
+  espaço. Gravação interrompida por cartão cheio não deixa arquivo pela
+  metade; o erro mostra "CHEIO".
 
 Mudanças da v0.7.3:
 - Memory Card: cada arquivo do save é gravado como arquivo novo (o

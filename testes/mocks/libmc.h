@@ -12,6 +12,7 @@ int mcWrite(int fd, const void *buffer, int size);
 int mcClose(int fd);
 int mcSync(int mode, int *command, int *result);
 int mcMkDir(int port, int slot, const char *name);
+int mcRename(int port, int slot, const char *name, const char *newname);
 int mcGetInfo(int port, int slot, int *type, int *free_clusters, int *format);
 typedef struct { unsigned char _Create[8], _Modify[8]; unsigned FileSizeByte;
                  unsigned short AttrFile, Reserve1; unsigned Reserve2, PdaAplNo;

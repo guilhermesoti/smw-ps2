@@ -14,6 +14,11 @@ void smw_enable_memory_card(bool available);
 const char *smw_save_location(void);
 /* One line per save location, for the boot screen. */
 void smw_storage_report(char *out, size_t size);
+/* Where the progress was loaded from, or why nothing was loaded (boot screen). */
+void smw_load_report(char *out, size_t size);
+/* Short message for the game screen ("CARREGADO: ...", "SALVO: ...");
+   serial changes whenever there is a new one. */
+const char *smw_notice(unsigned *serial);
 /* Short codes of the last failed save, e.g. "24 31" (see LEIA-ME). */
 const char *smw_save_error_text(void);
 #endif
