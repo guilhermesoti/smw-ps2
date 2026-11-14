@@ -1,0 +1,98 @@
+# Gera o pacote de cada versão sozinho.
+#
+# Ao publicar uma tag "v..." (ex.: git tag v0.8 && git push origin v0.8) ou uma
+# release pela página Releases, esta Action compila o SMW.ELF com o ps2dev
+# v2.0.0, monta o zip para jogar (ELF, title.cfg, LEIA-ME, créditos e
+# licenças, sem o jogo) e cria ou atualiza a release com ele. As notas vêm da
+# seção "Mudanças da vX" do LEIA-ME.txt.
+# Também dá para rodar à mão: Actions > Release > Run workflow, com a tag.
+name: Release
+on:
+  push:
+    tags: ["v*"]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag da versão (ex.: v0.8)"
+        required: true
+permissions:
+  contents: write
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+jobs:
+  pacote:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Instalar o ps2dev v2.0.0
+        run: |
+          curl -fsSL -o ps2dev.tar.gz \
+            https://github.com/ps2dev/ps2dev/releases/download/v2.0.0/ps2dev-ubuntu-latest.tar.gz
+          mkdir -p "$RUNNER_TEMP/ps2dev"
+          tar -xzf ps2dev.tar.gz --strip-components 1 -C "$RUNNER_TEMP/ps2dev"
+          rm ps2dev.tar.gz
+          echo "PS2DEV=$RUNNER_TEMP/ps2dev" >> "$GITHUB_ENV"
+          echo "PS2SDK=$RUNNER_TEMP/ps2dev/ps2sdk" >> "$GITHUB_ENV"
+          echo "GSKIT=$RUNNER_TEMP/ps2dev/gsKit" >> "$GITHUB_ENV"
+          for d in bin ee/bin iop/bin ps2sdk/bin; do echo "$RUNNER_TEMP/ps2dev/$d" >> "$GITHUB_PATH"; done
+
+      - name: Compilar o SMW.ELF
+        run: |
+          make -C Fonte -j"$(nproc)"
+          sha256sum APPS/SMW/SMW.ELF | tee sha.txt
+
+      - name: Montar o zip
+        run: |
+          ZIP="RetroGames_Super_Mario_World_PS2_${TAG}.zip"
+          zip -9 -r "$ZIP" LEIA-ME.txt CREDITOS.md APPS/SMW/SMW.ELF APPS/SMW/title.cfg Licencas
+          # O pacote nunca leva o jogo nem a ISO.
+          if unzip -Z1 "$ZIP" | grep -iE '\.(sfc|smc|zip|iso|ips)$'; then echo "arquivo proibido no pacote"; exit 1; fi
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+
+      - name: Notas da versão
+        run: |
+          V="${TAG#v}"
+          {
+            echo "Port de **Super Mario World para PlayStation 2**, da Retrogames Patos de Minas. Gratuito, feito por fãs."
+            echo
+            echo "## Novidades"
+            echo
+            awk -v h="Mudanças da v$V:" '
+              $0 == h {on=1; next}
+              on && /^Mudanças da v/ {exit}
+              on && /^[A-ZÁÉÍÓÚÇÃÕ ]+$/ && length($0) > 5 {exit}
+              on {print}' LEIA-ME.txt
+            echo
+            echo "## Como jogar"
+            echo
+            echo "1. Baixe \`$ZIP\` e extraia no pendrive (FAT32)."
+            echo "2. Coloque a **sua própria cópia** de *Super Mario World (USA)* em \`APPS/SMW/\` (ZIP com o .sfc dentro, \`.SFC\` ou \`.SMC\`)."
+            echo "3. No OPL, abra **Aplicativos → Super Mario World**. O passo a passo completo, inclusive a ISO, está no \`LEIA-ME.txt\`."
+            echo
+            echo "**O pacote não inclui o jogo.** *Super Mario World* © Nintendo; projeto sem ligação com a Nintendo."
+            echo
+            echo "Apoie o projeto (Pix e Ko-fi): [README](https://github.com/${GITHUB_REPOSITORY}#apoie-o-projeto) · Créditos: [CREDITOS.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CREDITOS.md)"
+            echo
+            echo "SHA-256 do \`SMW.ELF\`: \`$(cut -d' ' -f1 sha.txt)\`"
+          } > notas.md
+          cat notas.md
+
+      - name: Criar ou atualizar a release
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ZIP" --clobber
+            # Notas escritas à mão na página Releases são mantidas.
+            if [ -z "$(gh release view "$TAG" --json body --jq .body)" ]; then
+              gh release edit "$TAG" --notes-file notas.md
+            fi
+          else
+            gh release create "$TAG" "$ZIP" --title "Super Mario World PS2 $TAG" --notes-file notas.md --verify-tag
+          fi
