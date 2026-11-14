@@ -1,38 +1,56 @@
 # Gera o pacote de cada versão sozinho.
 #
-# Ao publicar uma tag "v..." (ex.: git tag v0.8 && git push origin v0.8) ou uma
-# release pela página Releases, esta Action compila o SMW.ELF com o ps2dev
+# Roda quando a versão na linha 2 do LEIA-ME.txt muda na branch main (ex.:
+# "| v0.8 |" ainda sem release), quando uma tag "v..." é enviada ou quando uma
+# release é publicada pela página Releases. Compila o SMW.ELF com o ps2dev
 # v2.0.0, monta o zip para jogar (ELF, title.cfg, LEIA-ME, créditos e
 # licenças, sem o jogo) e cria ou atualiza a release com ele. As notas vêm da
 # seção "Mudanças da vX" do LEIA-ME.txt.
-# Também dá para rodar à mão: Actions > Release > Run workflow, com a tag.
+# Também dá para rodar à mão: Actions > Release > Run workflow (sem tag, usa a
+# versão do LEIA-ME; com a tag de uma release existente, refaz o zip dela).
 name: Release
 on:
   push:
+    branches: [main]
+    paths: [LEIA-ME.txt]
     tags: ["v*"]
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag da versão (ex.: v0.8)"
-        required: true
+        description: "Tag de uma release existente (vazio: versão do LEIA-ME)"
+        required: false
 permissions:
   contents: write
 concurrency:
-  group: release-${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+  group: release
 jobs:
   pacote:
     runs-on: ubuntu-latest
     env:
-      TAG: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+      TAG: ${{ github.event.release.tag_name || inputs.tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ github.event.release.tag_name || inputs.tag || github.sha }}
+          fetch-depth: 0
+
+      - name: Versão
+        run: |
+          if [ -z "$TAG" ]; then
+            # Push na main: a versão vem do LEIA-ME. Se já tem release, não faz nada.
+            TAG="v$(sed -n '2s/.*| v\([0-9][0-9.]*\) |.*/\1/p' LEIA-ME.txt)"
+            [ "$TAG" != "v" ] || { echo "versão não encontrada no LEIA-ME"; exit 1; }
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "$TAG já publicada."; echo "SKIP=1" >> "$GITHUB_ENV"
+            fi
+          fi
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
 
       - name: Instalar o ps2dev v2.0.0
+        if: env.SKIP != '1'
         run: |
           curl -fsSL -o ps2dev.tar.gz \
             https://github.com/ps2dev/ps2dev/releases/download/v2.0.0/ps2dev-ubuntu-latest.tar.gz
@@ -45,11 +63,13 @@ jobs:
           for d in bin ee/bin iop/bin ps2sdk/bin; do echo "$RUNNER_TEMP/ps2dev/$d" >> "$GITHUB_PATH"; done
 
       - name: Compilar o SMW.ELF
+        if: env.SKIP != '1'
         run: |
           make -C Fonte -j"$(nproc)"
           sha256sum APPS/SMW/SMW.ELF | tee sha.txt
 
       - name: Montar o zip
+        if: env.SKIP != '1'
         run: |
           ZIP="RetroGames_Super_Mario_World_PS2_${TAG}.zip"
           zip -9 -r "$ZIP" LEIA-ME.txt CREDITOS.md APPS/SMW/SMW.ELF APPS/SMW/title.cfg Licencas
@@ -58,6 +78,7 @@ jobs:
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
 
       - name: Notas da versão
+        if: env.SKIP != '1'
         run: |
           V="${TAG#v}"
           {
@@ -86,6 +107,7 @@ jobs:
           cat notas.md
 
       - name: Criar ou atualizar a release
+        if: env.SKIP != '1'
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$ZIP" --clobber
@@ -94,5 +116,5 @@ jobs:
               gh release edit "$TAG" --notes-file notas.md
             fi
           else
-            gh release create "$TAG" "$ZIP" --title "Super Mario World PS2 $TAG" --notes-file notas.md --verify-tag
+            gh release create "$TAG" "$ZIP" --title "Super Mario World PS2 $TAG" --notes-file notas.md --target "$(git rev-parse HEAD)"
           fi
