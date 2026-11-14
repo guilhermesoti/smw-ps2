@@ -1,0 +1,161 @@
+SUPER MARIO WORLD PARA PLAYSTATION 2
+Retrogames Patos de Minas | v0.6.1 | NTSC 240p/480p | Português
+
+O QUE VOCÊ PRECISA
+
+Um pendrive FAT32 e a sua própria cópia de Super Mario World (USA) de
+SNES, em ZIP (com o .sfc/.smc dentro), .SFC ou .SMC. O pacote não inclui
+o jogo. Um Memory Card formatado é necessário para gravar pela ISO.
+
+JOGAR PELO PENDRIVE
+
+1. Pela lista de aplicativos (ELF)
+   Copie a pasta APPS/SMW para dentro de APPS na raiz do pendrive e
+   coloque nela a sua cópia com o nome "Super Mario World (USA).zip",
+   SMW.ZIP, SMW.SFC ou SMW.SMC. Abra Aplicativos no OPL e selecione
+   Super Mario World. Se o OPL não listar o aplicativo, execute
+   mass:/APPS/SMW/SMW.ELF pelo wLaunchELF.
+
+2. Pela lista de jogos do OPL (ISO)
+   Gere a ISO com a sua cópia (veja RECOMPILAR abaixo) e copie
+   SMWG_000.01.Super Mario World.iso para a pasta CD do pendrive.
+   No PS2, atualize a lista de jogos USB/BDM do OPL e abra o jogo.
+
+Ao abrir, a tela mostra por 3 segundos onde o progresso será gravado
+(pendrive, Memory Card 1 ou 2) e o estado de cada cartão.
+
+CONTROLE
+
+Direcional       mover e navegar
+Cruz (X)         pular e confirmar
+Quadrado         correr e carregar objetos
+Círculo          salto giratório
+Triângulo        segundo botão de corrida e de ação do SNES
+Start            abrir o menu inicial ou pausar
+Select           usar o item de reserva quando disponível
+L1 e R1          deslocar a câmera nas fases que permitem
+
+GRAVAR O PROGRESSO
+
+Salve nos pontos oferecidos pelo próprio jogo.
+
+- Pela ISO: no Memory Card, pasta SMWPS2 (cartão 1; sem ele, cartão 2).
+  O pendrive fica só com o OPL, que o usa para ler a ISO.
+- Pelo ELF: em APPS/SMW no pendrive. Se o pendrive falhar, o jogo usa
+  o Memory Card. Se o progresso já estiver no Memory Card e não no
+  pendrive, o jogo continua usando o cartão.
+
+No navegador do PS2, a pasta SMWPS2 pode aparecer sem ícone ou como dado
+corrompido, porque ainda não tem ícone próprio. É normal; não apague.
+
+SMW.SRM tem 2.048 bytes. SMW.BAK guarda o progresso anterior. SMW.TMP
+pode ficar após um desligamento durante a gravação; deixe-o na pasta
+para o jogo recuperar os dados ao abrir.
+
+CÓDIGOS DE "ERRO AO SALVAR"
+
+A mensagem mostra um código de dois dígitos para cada local tentado,
+por exemplo "ERRO AO SALVAR 21 31".
+
+1º dígito: 1 = pendrive, 2 = Memory Card 1, 3 = Memory Card 2
+2º dígito: 1 = sem cartão / local indisponível
+           2 = cartão não formatado (formate no navegador do PS2)
+           3 = cartão de PS1 (não serve)
+           4 = falha ao gravar o arquivo temporário (SMW.TMP)
+           5 = falha ao gravar o backup (SMW.BAK)
+           6 = falha ao gravar o principal (SMW.SRM)
+           7 = falha ao concluir uma gravação interrompida anterior
+           8 = o driver do Memory Card não carregou
+           9 = caminho de pasta inválido
+
+Depois dos códigos pode vir um detalhe do Memory Card, como "M2-4":
+o número após o M é a etapa (1 criar a pasta, 2 abrir para gravar,
+3 gravar, 4 fechar, 5 abrir para conferir, 6 ler para conferir,
+7 conteúdo diferente) e o resto é o código devolvido pelo cartão.
+
+Se aparecer, anote a linha inteira. Ela diz exatamente o que corrigir.
+
+VÍDEO E DESEMPENHO
+
+Na tela de abertura, durante os 3 segundos com as informações:
+- TRIÂNGULO: 480p, para adaptador HDMI ou cabo componente. Cada linha do
+  SNES vira duas, com scanlines (visual de monitor de tubo/RGB).
+- CÍRCULO, ou não apertar nada: 240p, para cabo AV (amarelo) e para
+  adaptadores HDMI que não aceitarem 480p.
+IDIOMA: o jogo abre em português do Brasil. Para jogar em inglês, segure
+SELECT nessa mesma tela de abertura.
+
+Se escolher 480p e a TV ficar sem imagem, desligue e abra o jogo de
+novo sem apertar nada. No 480p, o PS2 deve estar com "Saída de vídeo
+componente" em "Y Cb/Pb Cr" na Configuração do Sistema.
+
+Durante o jogo (segurando L2 + R2):
+- L2 + R2 + QUADRADO: liga/desliga as scanlines (no 480p).
+- L2 + R2 + CÍRCULO: liga/desliga a suavização da imagem.
+
+O ritmo do jogo segue a atualização da TV, e o som se ajusta a ela sem
+travar a imagem. Se um quadro demorar mais que o tempo de uma
+atualização, o jogo avança até 2 quadros sem desenhar, para manter a
+velocidade e a música corretas.
+
+SOBRE ESTA VERSÃO
+
+A lógica do jogo foi compilada em C para o Emotion Engine do PS2. Os
+gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
+você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
+copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
+continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.6.1:
+- Arquivos do Memory Card são criados com leitura e escrita. Se a
+  abertura para gravar retornar -5, o arquivo é apagado e recriado.
+
+Mudanças da v0.6:
+- Tradução para português do Brasil: mensagens dos blocos, nomes das
+  fases no mapa e textos dos castelos, com acentos. As dicas citam os
+  botões do controle de PS2. Menus e palavras grandes (MARIO START,
+  GAME OVER etc.) continuam em inglês nesta versão.
+- SELECT na abertura: jogar em inglês.
+
+Mudanças da v0.5:
+- Modo 480p opcional (HDMI/componente) com scanlines e suavização.
+
+Mudanças da v0.4:
+- Controle e Memory Card usam os drivers da própria BIOS do PS2
+  (XSIO2MAN, XPADMAN, XMCMAN, XMCSERV), como os jogos comerciais, que é
+  o que o OPL espera no modo ISO. Os drivers embutidos ficam de reserva.
+  A tela inicial mostra qual conjunto foi usado.
+- Detalhe "M" no ERRO AO SALVAR.
+
+Mudanças da v0.3:
+- Vídeo 240p progressivo (antes 480i, que "cortava" a imagem em TVs LCD).
+- Ritmo do jogo pela TV e áudio adaptativo (corrige engasgos periódicos).
+- Memory Card acessado direto pelo MCSERV e códigos de erro de gravação.
+- Controle: troca de jogador só após meio segundo de estado estável.
+- Busca da ROM não para no primeiro arquivo inválido.
+
+RECOMPILAR
+
+Use o pacote ps2dev v2.0.0 para Linux ou WSL. Substitua /opt/ps2dev
+pelo seu caminho e execute em um terminal Bash, na pasta extraída:
+
+  export PS2DEV=/opt/ps2dev
+  export PS2SDK="$PS2DEV/ps2sdk"
+  export GSKIT="$PS2DEV/gsKit"
+  export PATH="$PS2DEV/bin:$PS2DEV/ee/bin:$PS2DEV/iop/bin:$PS2SDK/bin:$PATH"
+  make -C Fonte -j4
+
+O resultado fica em APPS/SMW/SMW.ELF. Para gerar a ISO, coloque a sua
+cópia em APPS/SMW/Super Mario World (USA).zip e use Python 3.8 ou
+superior com pycdlib instalado:
+
+  python3 Fonte/gerar_iso.py
+
+O motor parte de snesrev/smw, revisão bd80629bc968267239c4a2fb77fa96d0ed62da7b.
+Os avisos dos projetos estão na pasta Licencas.
+
+https://github.com/snesrev/smw
+https://github.com/ps2dev/ps2dev/releases/tag/v2.0.0
+https://github.com/ps2dev/ps2sdk
+https://github.com/ps2dev/gsKit
+https://github.com/ps2homebrew/Open-PS2-Loader
