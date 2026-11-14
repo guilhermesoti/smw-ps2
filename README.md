@@ -2,7 +2,16 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.7 · NTSC 240p/480p · português.** A v0.7 traz a abertura da Retrogames e a tela "Apoie o projeto", iguais às do port de Yu-Gi-Oh!. A v0.6.4 troca o ícone do save por um cartucho cinza em 3D escrito só "SMW PS2". A v0.6.3 troca o ícone do save por um cartucho cinza em 3D com rótulo original e atualiza o ícone dos saves já existentes. A v0.6.2 grava icon.sys e um ícone 3D na pasta do save no Memory Card, para o navegador do PS2 mostrar o nome do jogo. A v0.6.1 corrige as permissões dos arquivos criados no Memory Card e recria arquivos antigos quando a abertura para gravação retorna -5. A v0.6 traz a tradução para português do Brasil das mensagens, dos nomes das fases e dos textos dos castelos (SELECT na abertura volta ao inglês). A v0.5 acrescenta o modo 480p opcional (Triângulo na abertura) com scanlines. A v0.4 usa os drivers de controle e Memory Card da BIOS do PS2, como os jogos comerciais. Desde a v0.3, o port troca o vídeo para 240p progressivo, sincroniza o jogo e o áudio com a TV, grava no Memory Card direto pelo MCSERV e mostra códigos em “ERRO AO SALVAR” (tabela no LEIA-ME). O jogo já rodou em PS2 físico pelo OPL; a v0.3 corrige os problemas observados nesse teste (gravação, cortes na imagem e engasgos). [Relatório técnico da v0.1](RELATORIO_TECNICO_SMW_PS2_v0.1.md)
+**Versão 0.7 · NTSC 240p/480p · português.** Projeto gratuito, feito por fãs.
+
+- Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
+- Vídeo 240p progressivo (cabo AV e a maioria dos adaptadores HDMI) ou 480p com scanlines (componente/HDMI).
+- Em português do Brasil: mensagens, nomes das fases e textos dos castelos. Segure SELECT na abertura para jogar em inglês.
+- Grava no pendrive ou no Memory Card (pasta `SMWPS2`, com ícone 3D no navegador do PS2).
+- Abre pelo OPL como aplicativo (ELF) ou como ISO na lista de jogos.
+- Testado num PS2 de verdade pelo OPL.
+
+**Para jogar, baixe o pacote na página de [Releases](https://github.com/guilhermesoti/smw-ps2/releases)** e siga o `LEIA-ME.txt`. O pacote não traz o jogo: é preciso ter a sua própria cópia americana do cartucho. As novidades de cada versão estão no `LEIA-ME.txt`.
 
 ## Compilar o executável
 
@@ -61,7 +70,7 @@ Em Linux x86-64, instale um compilador C, Python 3, `pkg-config` e os pacotes de
 python3 testes/testar_percurso.py --sanitizar "/caminho/Super Mario World (USA).zip"
 ```
 
-O teste compila o motor para o PC, joga o mesmo percurso duas vezes em pastas temporárias e verifica a fase, o salto, o áudio e o CRC da imagem final. O relatório descreve o teste separado do executável de PS2.
+O teste compila o motor para o PC, joga o mesmo percurso duas vezes em pastas temporárias e verifica a fase, o salto, o áudio e o CRC da imagem final.
 
 Para testar a gravação no Memory Card com chamadas MCSERV simuladas:
 
