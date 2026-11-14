@@ -54,11 +54,16 @@ int mcWrite(int fd, const void *buf, int size) {
 int mcClose(int fd) { fds[fd].open = 0; pending = 0; return 0; }
 int mcDelete(int port, int slot, const char *name) { (void)port; (void)slot;
   int f = find(name); if (f < 0) { pending = -4; return 0; } fs[f].used = 0; pending = 0; return 0; }
+int mcGetDir(int port, int slot, const char *name, unsigned mode, int maxent, sceMcTblGetDir *table) {
+  (void)port; (void)slot; (void)mode; int f = find(name);
+  assert(maxent == 1);
+  if (f < 0) { pending = 0; return 0; }
+  table->AttrFile = (unsigned short)(0x8410 | fs[f].perm); pending = 1; return 0; }
 int mcSetFileInfo(int port, int slot, const char *name, const sceMcTblGetDir *info, unsigned flags) {
   (void)port; (void)slot; int f = find(name);
   assert(flags == 0x0004);
   if (f < 0) { pending = -4; return 0; }
-  fs[f].perm = info->AttrFile & 3; chmods++; pending = 0; return 0; }
+  assert((info->AttrFile & 0x8410) == 0x8410); fs[f].perm = info->AttrFile & 3; chmods++; pending = 0; return 0; }
 int mcSync(int mode, int *cmd, int *result) { (void)mode; (void)cmd; *result = pending; return 1; }
 
 int main(void) {
@@ -109,6 +114,22 @@ int main(void) {
   memset(save, 0x55, sizeof(save));
   for (int k = 0; k < MAXF; k++)
     if (fs[k].used && strstr(fs[k].name, "/SMWPS2/SMW.")) fs[k].perm = 2;
+  assert(smw_save_progress(save) && !smw_save_error_text()[0]);
+  memset(back, 0, sizeof(back));
+  smw_load_progress(back);
+  assert(!memcmp(back, save, sizeof(save)));
+  /* Cartao do teste no PS2 ("M3-5T"): SMW.TMP antigo abre, mas recusa
+     gravar. O jogo grava um arquivo novo no lugar. */
+  for (int k = 0; k < MAXF; k++)
+    if (fs[k].used && strstr(fs[k].name, "/SMWPS2/SMW.")) fs[k].perm = 1;
+  {
+    int t = -1;
+    for (int k = 0; k < MAXF; k++) if (!fs[k].used) { t = k; break; }
+    if (find("/SMWPS2/SMW.TMP") < 0) {
+      fs[t].used = 1; strcpy(fs[t].name, "/SMWPS2/SMW.TMP"); fs[t].size = 3; fs[t].perm = 1;
+    }
+  }
+  memset(save, 0x66, sizeof(save));
   assert(smw_save_progress(save) && !smw_save_error_text()[0]);
   memset(back, 0, sizeof(back));
   smw_load_progress(back);

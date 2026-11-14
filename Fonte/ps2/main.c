@@ -318,7 +318,7 @@ int main(int argc, char **argv) {
   if (argc && argv && argv[0]) smw_boot_folder(argv[0], folder);
   bool from_disc = smw_path_is_disc(folder);
   init_scr();
-  scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v0.7.2\n\n");
+  scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v0.7.3\n\n");
   scr_printf(from_disc ? "Iniciando controles e Memory Card...\n"
                        : "Iniciando USB, controles e Memory Card...\n");
   start_drivers(from_disc);
@@ -366,7 +366,7 @@ int main(int argc, char **argv) {
   sleep(1);
 
   start_video();
-  smw_intro(gs, video.p480, sound, "0.7.2");
+  smw_intro(gs, video.p480, sound, "0.7.3");
   const uint32_t field = measure_field();
   uint32_t last = cpu_ticks();
   int pending = 0, debt = 0;

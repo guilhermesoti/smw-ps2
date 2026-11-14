@@ -237,15 +237,25 @@ static bool card_path(const char *path, int *port, const char **name) {
   return true;
 }
 
-/* Saves from older versions of this port can be write-only on the card: the
-   BIOS memory card driver opens them, then refuses to read them (-5). Give
-   such a file read and write permission again; the progress is kept. */
-static bool card_make_readable(int port, const char *name) {
+/* Some save files end up on the card without read or write permission
+   (saves from older versions of this port, or the way some BIOS memory
+   card drivers create files): the driver opens them, then refuses to read
+   or write them with -5. This gives such a file read, write and execute
+   permission again, keeping its other attributes and its contents. */
+static bool card_set_access(int port, const char *name) {
   static sceMcTblGetDir info __attribute__((aligned(64)));
   memset(&info, 0, sizeof(info));
-  info.AttrFile = CARD_ATTR_RWX;
+  unsigned attr = 0;
+  if (mcGetDir(port, 0, name, 0, 1, &info) == 0 && card_wait() == 1) attr = info.AttrFile;
+  memset(&info, 0, sizeof(info));
+  info.AttrFile = (unsigned short)(attr | CARD_ATTR_RWX);
   if (mcSetFileInfo(port, 0, name, &info, CARD_INFO_ATTR) != 0) return false;
   return card_wait() == 0;
+}
+
+static int card_delete(int port, const char *name) {
+  int submitted = mcDelete(port, 0, name);
+  return submitted != 0 ? submitted : card_wait();
 }
 
 /* Reads at most cap bytes, never past the end of the file: some BIOS
@@ -255,7 +265,7 @@ static int card_read(int port, const char *name, uint8_t *buf, int cap) {
   for (int attempt = 0; attempt < 2; ++attempt) {
     if (mcOpen(port, 0, name, CARD_O_RDONLY) != 0) return -1;
     int fd = card_wait();
-    if (fd == -5 && attempt == 0 && card_make_readable(port, name)) continue;
+    if (fd == -5 && attempt == 0 && card_set_access(port, name)) continue;
     if (fd < 0) {
       if (fd != -4) card_fail_on(name, 5, fd);  /* -4: no such file, normal */
       return -1;
@@ -271,7 +281,7 @@ static int card_read(int port, const char *name, uint8_t *buf, int cap) {
       got = size;
     }
     if (mcClose(fd) == 0) card_wait();
-    if (got == -5 && attempt == 0 && card_make_readable(port, name)) continue;
+    if (got == -5 && attempt == 0 && card_set_access(port, name)) continue;
     if (got < 0) { card_fail_on(name, 6, got); return -1; }
     if (got > 0) memcpy(buf, card_buf, got);
     return got;
@@ -279,33 +289,44 @@ static int card_read(int port, const char *name, uint8_t *buf, int cap) {
   return -1;
 }
 
+/* Always writes a new file: an old one may refuse writing (see
+   card_set_access). The data is safe meanwhile: SMW.TMP is written and
+   checked before SMW.SRM and SMW.BAK are replaced. */
 static bool card_write(int port, const char *name, const uint8_t *buf, int size) {
-  int submitted = mcOpen(port, 0, name, CARD_O_RDWR | CARD_O_CREAT);
-  if (submitted != 0) { card_fail_on(name, 2, submitted); return false; }
-  int fd = card_wait();
-  if (fd == -5) {
-    submitted = mcDelete(port, 0, name);
+  int removed = card_delete(port, name);
+  if (removed == -5 && card_set_access(port, name)) removed = card_delete(port, name);
+  if (removed != 0 && removed != -4) { card_fail_on(name, 2, removed); return false; }  /* -4: none */
+  for (int attempt = 0; ; ++attempt) {
+    int submitted = mcOpen(port, 0, name, CARD_O_RDWR | CARD_O_CREAT);
     if (submitted != 0) { card_fail_on(name, 2, submitted); return false; }
-    int deleted = card_wait();
-    if (deleted != 0) { card_fail_on(name, 2, deleted); return false; }
-    submitted = mcOpen(port, 0, name, CARD_O_RDWR | CARD_O_CREAT);
-    if (submitted != 0) { card_fail_on(name, 2, submitted); return false; }
-    fd = card_wait();
+    int fd = card_wait();
+    if (fd == -5 && attempt == 0 && card_set_access(port, name)) continue;
+    if (fd < 0) { card_fail_on(name, 2, fd); return false; }
+    /* Written in card_buf-sized pieces: the icon is larger than one buffer. */
+    int put = 0, closed = -1;
+    bool denied = false;
+    while (put < size) {
+      int piece = size - put < (int)sizeof(card_buf) ? size - put : (int)sizeof(card_buf);
+      memcpy(card_buf, buf + put, piece);
+      int wrote = -1;
+      if (mcWrite(fd, card_buf, piece) == 0) wrote = card_wait();
+      if (wrote != piece) {
+        denied = wrote == -5 && put == 0 && attempt == 0;
+        if (!denied) card_fail_on(name, 3, wrote);
+        put = -1;
+        break;
+      }
+      put += wrote;
+    }
+    if (mcClose(fd) == 0) closed = card_wait();
+    if (denied) {
+      if (card_set_access(port, name)) continue;
+      card_fail_on(name, 3, -5);
+      return false;
+    }
+    if (closed != 0) card_fail_on(name, 4, closed);
+    return put == size && closed == 0;
   }
-  if (fd < 0) { card_fail_on(name, 2, fd); return false; }
-  /* Written in card_buf-sized pieces: the icon is larger than one buffer. */
-  int put = 0, closed = -1;
-  while (put < size) {
-    int piece = size - put < (int)sizeof(card_buf) ? size - put : (int)sizeof(card_buf);
-    memcpy(card_buf, buf + put, piece);
-    int wrote = -1;
-    if (mcWrite(fd, card_buf, piece) == 0) wrote = card_wait();
-    if (wrote != piece) { card_fail_on(name, 3, wrote); put = -1; break; }
-    put += wrote;
-  }
-  if (mcClose(fd) == 0) closed = card_wait();
-  if (closed != 0) card_fail_on(name, 4, closed);
-  return put == size && closed == 0;
 }
 #endif
 

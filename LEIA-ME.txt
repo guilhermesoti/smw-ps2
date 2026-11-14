@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.7.2 | NTSC 240p/480p | Português
+Retrogames Patos de Minas | v0.7.3 | NTSC 240p/480p | Português
 
 O QUE VOCÊ PRECISA
 
@@ -77,6 +77,10 @@ primeiro número é a etapa (1 criar a pasta, 2 abrir para gravar,
 resto é o código devolvido pelo cartão ou pelo pendrive e a letra final
 é o arquivo (T = SMW.TMP, S = SMW.SRM, B = SMW.BAK).
 
+"U27" = o pendrive recusou criar o arquivo. Causas comuns: pendrive
+cheio, arquivo do save marcado como "somente leitura" no PC ou pendrive
+em exFAT. Use um pendrive em FAT32 com espaço livre.
+
 Se aparecer, anote a linha inteira. Ela diz exatamente o que corrigir.
 
 VÍDEO E DESEMPENHO
@@ -109,6 +113,13 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.7.3:
+- Memory Card: cada arquivo do save é gravado como arquivo novo (o
+  antigo é apagado antes). Arquivos antigos que o cartão abria mas
+  recusava gravar davam "M3-5". Se o cartão recusar apagar ou gravar, o
+  jogo devolve a permissão ao arquivo, sem mexer nos outros atributos, e
+  tenta de novo.
 
 Mudanças da v0.7.2:
 - Memory Card: o jogo lê cada arquivo do save só até o fim dele. Alguns

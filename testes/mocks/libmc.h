@@ -16,6 +16,7 @@ int mcGetInfo(int port, int slot, int *type, int *free_clusters, int *format);
 typedef struct { unsigned char _Create[8], _Modify[8]; unsigned FileSizeByte;
                  unsigned short AttrFile, Reserve1; unsigned Reserve2, PdaAplNo;
                  unsigned char EntryName[32]; } sceMcTblGetDir;
+int mcGetDir(int port, int slot, const char *name, unsigned mode, int maxent, sceMcTblGetDir *table);
 int mcSetFileInfo(int port, int slot, const char *name, const sceMcTblGetDir *info, unsigned flags);
 
 #endif
