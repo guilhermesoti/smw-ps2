@@ -2,7 +2,7 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.6.2 · NTSC 240p/480p · português.** A v0.6.2 grava icon.sys e um ícone 3D na pasta do save no Memory Card, para o navegador do PS2 mostrar o nome do jogo. A v0.6.1 corrige as permissões dos arquivos criados no Memory Card e recria arquivos antigos quando a abertura para gravação retorna -5. A v0.6 traz a tradução para português do Brasil das mensagens, dos nomes das fases e dos textos dos castelos (SELECT na abertura volta ao inglês). A v0.5 acrescenta o modo 480p opcional (Triângulo na abertura) com scanlines. A v0.4 usa os drivers de controle e Memory Card da BIOS do PS2, como os jogos comerciais. Desde a v0.3, o port troca o vídeo para 240p progressivo, sincroniza o jogo e o áudio com a TV, grava no Memory Card direto pelo MCSERV e mostra códigos em “ERRO AO SALVAR” (tabela no LEIA-ME). O jogo já rodou em PS2 físico pelo OPL; a v0.3 corrige os problemas observados nesse teste (gravação, cortes na imagem e engasgos). [Relatório técnico da v0.1](RELATORIO_TECNICO_SMW_PS2_v0.1.md)
+**Versão 0.6.3 · NTSC 240p/480p · português.** A v0.6.3 troca o ícone do save por um cartucho cinza em 3D com rótulo original e atualiza o ícone dos saves já existentes. A v0.6.2 grava icon.sys e um ícone 3D na pasta do save no Memory Card, para o navegador do PS2 mostrar o nome do jogo. A v0.6.1 corrige as permissões dos arquivos criados no Memory Card e recria arquivos antigos quando a abertura para gravação retorna -5. A v0.6 traz a tradução para português do Brasil das mensagens, dos nomes das fases e dos textos dos castelos (SELECT na abertura volta ao inglês). A v0.5 acrescenta o modo 480p opcional (Triângulo na abertura) com scanlines. A v0.4 usa os drivers de controle e Memory Card da BIOS do PS2, como os jogos comerciais. Desde a v0.3, o port troca o vídeo para 240p progressivo, sincroniza o jogo e o áudio com a TV, grava no Memory Card direto pelo MCSERV e mostra códigos em “ERRO AO SALVAR” (tabela no LEIA-ME). O jogo já rodou em PS2 físico pelo OPL; a v0.3 corrige os problemas observados nesse teste (gravação, cortes na imagem e engasgos). [Relatório técnico da v0.1](RELATORIO_TECNICO_SMW_PS2_v0.1.md)
 
 ## Compilar o executável
 
@@ -19,7 +19,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O SHA-256 do ELF da v0.6.2 obtido com o ps2dev v2.0.0 foi `f624b70cf45e137c0d3ad754d8da9197b7ad3d51bf38cfe153e8b98ce4f23d93`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O SHA-256 do ELF da v0.6.3 obtido com o ps2dev v2.0.0 foi `ebfb1ba68c1cd3dce43c2566b09057ea3ec9d87ffc35559f10e13bd3a3001f7c`.
 
 ## Jogar por USB
 
@@ -69,6 +69,15 @@ Para testar a gravação no Memory Card com chamadas MCSERV simuladas:
 cc -std=gnu11 -D_EE -ffunction-sections -fdata-sections -Itestes/mocks $(pkg-config --cflags minizip zlib) testes/memory_card.c -Wl,--gc-sections $(pkg-config --libs minizip zlib) -o /tmp/smw-memory-card-test
 /tmp/smw-memory-card-test
 ```
+
+Para testar o ícone do save (criação, gravação em blocos de 4096 bytes e troca do ícone de versões anteriores):
+
+```sh
+cc -std=gnu11 -D_EE -Itestes/mocks -IFonte/ps2 $(pkg-config --cflags minizip zlib) testes/memory_card_icon.c $(pkg-config --libs minizip zlib) -o /tmp/smw-memory-card-icon-test
+/tmp/smw-memory-card-icon-test
+```
+
+O ícone é gerado por `python3 Fonte/gerar_icone.py`, que reescreve `Fonte/ps2/smw_icon.h`.
 
 ## Créditos
 

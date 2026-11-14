@@ -435,10 +435,18 @@ static void write_card_icon(const char *dir) {
   uint8_t probe[sizeof(kSmwIconSys) + 1];
   bool recording = card_recording;
   card_recording = false;
+  /* Regrava se faltar ou se for de uma versao anterior (desenho antigo). */
   if (join_path(path, dir, "icon.sys") &&
-      file_read(path, probe, sizeof(probe)) != (int)sizeof(kSmwIconSys)) {
+      (file_read(path, probe, sizeof(probe)) != (int)sizeof(kSmwIconSys) ||
+       memcmp(probe, kSmwIconSys, sizeof(kSmwIconSys)) != 0)) {
     char icon[SMW_PATH];
-    if (join_path(icon, dir, SMW_ICON_NAME) && file_write(icon, kSmwIcon, sizeof(kSmwIcon)))
+    int port;
+    const char *name;
+    bool named = join_path(icon, dir, SMW_ICON_NAME);
+    /* Apaga o icone antigo antes: a gravacao nao trunca arquivos maiores. */
+    if (named && card_path(icon, &port, &name) && mcDelete(port, 0, name) == 0)
+      card_wait();
+    if (named && file_write(icon, kSmwIcon, sizeof(kSmwIcon)))
       file_write(path, kSmwIconSys, sizeof(kSmwIconSys));
   }
   card_recording = recording;

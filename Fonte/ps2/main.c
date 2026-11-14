@@ -316,7 +316,7 @@ int main(int argc, char **argv) {
   if (argc && argv && argv[0]) smw_boot_folder(argv[0], folder);
   bool from_disc = smw_path_is_disc(folder);
   init_scr();
-  scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v0.6.2\n\n");
+  scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v0.6.3\n\n");
   scr_printf(from_disc ? "Iniciando controles e Memory Card...\n"
                        : "Iniciando USB, controles e Memory Card...\n");
   start_drivers(from_disc);

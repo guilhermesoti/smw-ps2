@@ -1,5 +1,6 @@
 /* Simula um Memory Card (arquivos, pastas e permissoes R/W como no MCMAN)
-   e confere que salvar cria icon.sys + icone uma vez, em blocos de ate
+   e confere que salvar cria icon.sys + icone uma vez (e troca
+   o de versoes anteriores), em blocos de ate
    4096 bytes, e que o progresso volta igual. */
 #include <assert.h>
 #include <stdio.h>
@@ -7,7 +8,7 @@
 #include "../Fonte/ps2/files.c"
 
 #define MAXF 16
-static struct { char name[64]; uint8_t data[40000]; int size, perm, used; } fs[MAXF];
+static struct { char name[64]; uint8_t data[65536]; int size, perm, used; } fs[MAXF];
 static struct { int file, pos, open; } fds[8];
 static int pending, writes_icon, max_piece;
 
@@ -40,6 +41,7 @@ int mcWrite(int fd, const void *buf, int size) {
   if (!(fs[f].perm & 2)) { pending = -5; return 0; }
   assert(size <= 4096);
   if (size > max_piece) max_piece = size;
+  assert(fds[fd].pos + size <= (int)sizeof(fs[f].data));
   if (strstr(fs[f].name, ".icn")) writes_icon++;
   memcpy(fs[f].data + fds[fd].pos, buf, size); fds[fd].pos += size;
   if (fds[fd].pos > fs[f].size) fs[f].size = fds[fd].pos;
@@ -65,6 +67,24 @@ int main(void) {
   memset(save, 0x33, sizeof(save));
   assert(smw_save_progress(save));               /* segunda gravacao: icone ja existe */
   assert(writes_icon == icon_writes);
+  memset(back, 0, sizeof(back));
+  smw_load_progress(back);
+  assert(!memcmp(back, save, sizeof(save)));
+  /* Cartao com icone da versao anterior (maior, icon.sys sem a marca nova,
+     gravado so-escrita): o jogo deve trocar os dois e manter o progresso. */
+  memset(fs[s].data + 452, 0, 8);
+  memset(fs[i].data, 0xEE, 50000); fs[i].size = 50000; fs[i].perm = 2;
+  int before = writes_icon;
+  memset(save, 0x44, sizeof(save));
+  assert(smw_save_progress(save));
+  s = find("/SMWPS2/icon.sys"); i = find("/SMWPS2/" SMW_ICON_NAME);
+  assert(s >= 0 && i >= 0 && writes_icon == before + icon_writes);
+  assert(fs[s].size == (int)sizeof(kSmwIconSys) && !memcmp(fs[s].data, kSmwIconSys, sizeof(kSmwIconSys)));
+  assert(fs[i].size == (int)sizeof(kSmwIcon) && !memcmp(fs[i].data, kSmwIcon, sizeof(kSmwIcon)));
+  assert(fs[i].perm == 3);
+  before = writes_icon;
+  assert(smw_save_progress(save));               /* ja atualizado: nao regrava */
+  assert(writes_icon == before);
   memset(back, 0, sizeof(back));
   smw_load_progress(back);
   assert(!memcmp(back, save, sizeof(save)));
