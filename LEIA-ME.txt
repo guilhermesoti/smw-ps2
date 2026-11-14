@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.7.1 | NTSC 240p/480p | Português
+Retrogames Patos de Minas | v0.7.2 | NTSC 240p/480p | Português
 
 O QUE VOCÊ PRECISA
 
@@ -70,10 +70,12 @@ por exemplo "ERRO AO SALVAR 21 31".
            8 = o driver do Memory Card não carregou
            9 = caminho de pasta inválido
 
-Depois dos códigos pode vir um detalhe do Memory Card, como "M2-4":
-o número após o M é a etapa (1 criar a pasta, 2 abrir para gravar,
-3 gravar, 4 fechar, 5 abrir para conferir, 6 ler para conferir,
-7 conteúdo diferente) e o resto é o código devolvido pelo cartão.
+Depois dos códigos pode vir o detalhe da última falha: "M" para o
+Memory Card (ex.: "M2-4T") e "U" para o pendrive (ex.: "U25T"). O
+primeiro número é a etapa (1 criar a pasta, 2 abrir para gravar,
+3 gravar, 4 fechar, 5 abrir para ler, 6 ler, 7 conteúdo diferente), o
+resto é o código devolvido pelo cartão ou pelo pendrive e a letra final
+é o arquivo (T = SMW.TMP, S = SMW.SRM, B = SMW.BAK).
 
 Se aparecer, anote a linha inteira. Ela diz exatamente o que corrigir.
 
@@ -107,6 +109,13 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.7.2:
+- Memory Card: o jogo lê cada arquivo do save só até o fim dele. Alguns
+  drivers de Memory Card da BIOS recusam (-5) uma leitura que pede mais
+  do que o arquivo tem, e era isso que dava "M6-5" ao conferir o save.
+- ERRO AO SALVAR mostra também o detalhe do pendrive ("U...") e qual
+  arquivo falhou, para achar a causa na primeira tentativa.
 
 Mudanças da v0.7.1:
 - Corrige "ERRO AO SALVAR ... M6-5" em Memory Cards com saves de

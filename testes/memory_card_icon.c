@@ -34,8 +34,13 @@ int mcOpen(int port, int slot, const char *name, int flags) { (void)port; (void)
 int mcRead(int fd, void *buf, int size) {
   int f = fds[fd].file;
   if (!(fs[f].perm & 1)) { pending = -5; return 0; }
-  int n = fs[f].size - fds[fd].pos; if (n > size) n = size;
+  int n = fs[f].size - fds[fd].pos;
+  if (size > n) { pending = -5; return 0; }  /* como o driver da BIOS: nao le alem do fim */
   memcpy(buf, fs[f].data + fds[fd].pos, n); fds[fd].pos += n; pending = n; return 0; }
+int mcSeek(int fd, int offset, int origin) {
+  int f = fds[fd].file;
+  fds[fd].pos = (origin == 2 ? fs[f].size : origin == 1 ? fds[fd].pos : 0) + offset;
+  pending = fds[fd].pos; return 0; }
 int mcWrite(int fd, const void *buf, int size) {
   int f = fds[fd].file;
   if (!(fs[f].perm & 2)) { pending = -5; return 0; }

@@ -2,6 +2,7 @@
 #ifdef _EE
 #include "smw_icon.h"
 #endif
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,7 +36,7 @@ enum { ERR_NOT_READY = 1, ERR_UNFORMATTED = 2, ERR_WRONG_TYPE = 3,
 static char folder_dir[SMW_PATH];
 static bool memory_card_ok;
 static int active_store = -1;
-static char error_text[32];
+static char error_text[48];
 static const char *const kCardDirs[2] = {"mc0:/SMWPS2/", "mc1:/SMWPS2/"};
 
 void smw_enable_memory_card(bool available) { memory_card_ok = available; }
@@ -189,14 +190,33 @@ RomResult smw_find_rom(const char *boot, uint8_t **rom, char path[SMW_PATH], uin
 
 /* ------------------------------------------------------- file access --- */
 
-/* Detail of the last failed memory card operation during a save, shown
-   after the codes as "M<step><result>", e.g. "M2-4". Steps: 1 create the
-   folder, 2 open for writing, 3 write, 4 close, 5 open to check, 6 read to
-   check, 7 contents differ. The result is the raw MCSERV value. */
+/* Detail of the last failed operation during a save, shown after the codes
+   as "M<step><result><file>" for the memory card (e.g. "M2-4T") and
+   "U<step><errno><file>" for the USB drive. Steps: 1 create the folder,
+   2 open for writing, 3 write, 4 close, 5 open to read, 6 read, 7 contents
+   differ. The result is the raw MCSERV value (memory card) or errno (USB).
+   File: T = SMW.TMP, S = SMW.SRM, B = SMW.BAK. */
 static bool card_recording;
-static int card_step, card_result;
-static void card_fail(int step, int result) {
-  if (card_recording && !card_step) { card_step = step; card_result = result; }
+static int card_step, card_result, usb_step, usb_result, fail_count;
+static char card_file, usb_file;
+static char file_letter(const char *name) {
+  const char *dot = strrchr(name, '.');
+  if (!dot) return 0;
+  if (!strcmp(dot, ".TMP")) return 'T';
+  if (!strcmp(dot, ".SRM")) return 'S';
+  if (!strcmp(dot, ".BAK")) return 'B';
+  return 0;
+}
+static void card_fail_on(const char *name, int step, int result) {
+  if (!card_recording) return;
+  card_step = step, card_result = result, card_file = name ? file_letter(name) : 0;
+  ++fail_count;
+}
+static void card_fail(int step, int result) { card_fail_on(NULL, step, result); }
+static void usb_fail(const char *path, int step, int result) {
+  if (!card_recording) return;
+  usb_step = step, usb_result = result, usb_file = file_letter(path);
+  ++fail_count;
 }
 
 #ifdef _EE
@@ -228,18 +248,31 @@ static bool card_make_readable(int port, const char *name) {
   return card_wait() == 0;
 }
 
+/* Reads at most cap bytes, never past the end of the file: some BIOS
+   memory card drivers refuse a read that asks for more than the file has. */
 static int card_read(int port, const char *name, uint8_t *buf, int cap) {
   if (cap > (int)sizeof(card_buf)) return -1;
   for (int attempt = 0; attempt < 2; ++attempt) {
     if (mcOpen(port, 0, name, CARD_O_RDONLY) != 0) return -1;
     int fd = card_wait();
     if (fd == -5 && attempt == 0 && card_make_readable(port, name)) continue;
-    if (fd < 0) { card_fail(5, fd); return -1; }
-    int got = -1;
-    if (mcRead(fd, card_buf, cap) == 0) got = card_wait();
+    if (fd < 0) {
+      if (fd != -4) card_fail_on(name, 5, fd);  /* -4: no such file, normal */
+      return -1;
+    }
+    int size = -1, got = -1;
+    if (mcSeek(fd, 0, 2) == 0) size = card_wait();         /* SEEK_END */
+    if (size >= 0 && mcSeek(fd, 0, 0) == 0 && card_wait() == 0) {
+      int want = size < cap ? size : cap;
+      got = 0;
+      if (want > 0 && mcRead(fd, card_buf, want) == 0) got = card_wait();
+      else if (want > 0) got = -1;
+    } else if (size < 0) {
+      got = size;
+    }
     if (mcClose(fd) == 0) card_wait();
     if (got == -5 && attempt == 0 && card_make_readable(port, name)) continue;
-    if (got < 0) { card_fail(6, got); return -1; }
+    if (got < 0) { card_fail_on(name, 6, got); return -1; }
     if (got > 0) memcpy(buf, card_buf, got);
     return got;
   }
@@ -248,18 +281,18 @@ static int card_read(int port, const char *name, uint8_t *buf, int cap) {
 
 static bool card_write(int port, const char *name, const uint8_t *buf, int size) {
   int submitted = mcOpen(port, 0, name, CARD_O_RDWR | CARD_O_CREAT);
-  if (submitted != 0) { card_fail(2, submitted); return false; }
+  if (submitted != 0) { card_fail_on(name, 2, submitted); return false; }
   int fd = card_wait();
   if (fd == -5) {
     submitted = mcDelete(port, 0, name);
-    if (submitted != 0) { card_fail(2, submitted); return false; }
+    if (submitted != 0) { card_fail_on(name, 2, submitted); return false; }
     int deleted = card_wait();
-    if (deleted != 0) { card_fail(2, deleted); return false; }
+    if (deleted != 0) { card_fail_on(name, 2, deleted); return false; }
     submitted = mcOpen(port, 0, name, CARD_O_RDWR | CARD_O_CREAT);
-    if (submitted != 0) { card_fail(2, submitted); return false; }
+    if (submitted != 0) { card_fail_on(name, 2, submitted); return false; }
     fd = card_wait();
   }
-  if (fd < 0) { card_fail(2, fd); return false; }
+  if (fd < 0) { card_fail_on(name, 2, fd); return false; }
   /* Written in card_buf-sized pieces: the icon is larger than one buffer. */
   int put = 0, closed = -1;
   while (put < size) {
@@ -267,11 +300,11 @@ static bool card_write(int port, const char *name, const uint8_t *buf, int size)
     memcpy(card_buf, buf + put, piece);
     int wrote = -1;
     if (mcWrite(fd, card_buf, piece) == 0) wrote = card_wait();
-    if (wrote != piece) { card_fail(3, wrote); put = -1; break; }
+    if (wrote != piece) { card_fail_on(name, 3, wrote); put = -1; break; }
     put += wrote;
   }
   if (mcClose(fd) == 0) closed = card_wait();
-  if (closed != 0) card_fail(4, closed);
+  if (closed != 0) card_fail_on(name, 4, closed);
   return put == size && closed == 0;
 }
 #endif
@@ -282,10 +315,15 @@ static int file_read(const char *path, uint8_t *buf, int cap) {
   const char *name;
   if (card_path(path, &port, &name)) return card_read(port, name, buf, cap);
 #endif
+  errno = 0;
   FILE *f = fopen(path, "rb");
-  if (!f) return -1;
+  if (!f) {
+    if (errno != ENOENT) usb_fail(path, 5, errno);
+    return -1;
+  }
   int n = (int)fread(buf, 1, cap, f);
   bool failed = ferror(f) != 0;
+  if (failed) usb_fail(path, 6, errno);
   fclose(f);
   return failed ? -1 : n;
 }
@@ -296,10 +334,15 @@ static bool file_write(const char *path, const uint8_t *buf, int size) {
   const char *name;
   if (card_path(path, &port, &name)) return card_write(port, name, buf, size);
 #endif
+  errno = 0;
   FILE *f = fopen(path, "wb");
-  if (!f) return false;
+  if (!f) { usb_fail(path, 2, errno); return false; }
   bool ok = fwrite(buf, 1, size, f) == (size_t)size;
-  return fclose(f) == 0 && ok;
+  if (!ok) usb_fail(path, 3, errno);
+  errno = 0;
+  bool closed = fclose(f) == 0;
+  if (!closed) usb_fail(path, 4, errno);
+  return closed && ok;
 }
 
 static void file_remove(const char *path) {
@@ -365,8 +408,21 @@ static bool write_save(const char *path, const uint8_t *save, bool journal) {
   memcpy(data + n, save, SMW_SRAM_BYTES);
   n += SMW_SRAM_BYTES;
   if (!file_write(path, data, n)) return false;
-  if (!read_save(path, verify, journal)) { card_fail(6, 0); return false; }
-  if (memcmp(save, verify, sizeof(verify)) != 0) { card_fail(7, 0); return false; }
+  int fails = fail_count;
+  bool card = strncmp(path, "mc", 2) == 0;
+  if (!read_save(path, verify, journal)) {
+    /* Read fine but with the wrong size or header. */
+    if (fail_count == fails) {
+      if (card) card_fail_on(path, 6, 0);
+      else usb_fail(path, 6, 0);
+    }
+    return false;
+  }
+  if (memcmp(save, verify, sizeof(verify)) != 0) {
+    if (card) card_fail_on(path, 7, 0);
+    else usb_fail(path, 7, 0);
+    return false;
+  }
   return true;
 }
 
@@ -510,7 +566,8 @@ bool smw_save_progress(const uint8_t *save) {
   size_t used = 0;
   error_text[0] = '\0';
   card_recording = true;
-  card_step = card_result = 0;
+  card_step = card_result = usb_step = usb_result = 0;
+  card_file = usb_file = 0;
   for (int i = 0; i < count; ++i) {
     int store = order[i];
     int code = store_check(store);
@@ -528,7 +585,11 @@ bool smw_save_progress(const uint8_t *save) {
                        used ? " " : "", store + 1, code);
   }
   card_recording = false;
-  if (card_step && used + 8 < sizeof(error_text))
-    snprintf(error_text + used, sizeof(error_text) - used, " M%d%d", card_step, card_result);
+  if (usb_step && used + 12 < sizeof(error_text))
+    used += snprintf(error_text + used, sizeof(error_text) - used, " U%d%d%s", usb_step, usb_result,
+                     usb_file ? (char[]){usb_file, 0} : "");
+  if (card_step && used + 12 < sizeof(error_text))
+    snprintf(error_text + used, sizeof(error_text) - used, " M%d%d%s", card_step, card_result,
+             card_file ? (char[]){card_file, 0} : "");
   return false;
 }
