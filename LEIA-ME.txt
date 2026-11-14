@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.7 | NTSC 240p/480p | Português
+Retrogames Patos de Minas | v0.7.1 | NTSC 240p/480p | Português
 
 O QUE VOCÊ PRECISA
 
@@ -107,6 +107,12 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.7.1:
+- Corrige "ERRO AO SALVAR ... M6-5" em Memory Cards com saves de
+  versões antigas do port: esses arquivos tinham ficado só para gravação
+  e o PS2 recusava lê-los. Agora o jogo devolve a permissão de leitura,
+  recupera o progresso que estava neles e volta a salvar normalmente.
 
 Mudanças da v0.7:
 - Abertura da Retrogames e tela "Apoie o projeto" com o QR code do Pix,

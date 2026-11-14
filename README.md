@@ -2,7 +2,7 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.7 · NTSC 240p/480p · português.** Projeto gratuito, feito por fãs.
+**Versão 0.7.1 · NTSC 240p/480p · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
 - Vídeo 240p progressivo (cabo AV e a maioria dos adaptadores HDMI) ou 480p com scanlines (componente/HDMI).
@@ -28,7 +28,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O SHA-256 do ELF da v0.7 obtido com o ps2dev v2.0.0 foi `5ce9bba8eaa3466edc18a69e5d406c8ba3acbb23de09be4b839fbe5ca4863092`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O SHA-256 do ELF da v0.7.1 obtido com o ps2dev v2.0.0 foi `b480536136261cc3555f237796d1645d20d97e4d05b05e8dc5c346340b47d63d`.
 
 ## Jogar por USB
 

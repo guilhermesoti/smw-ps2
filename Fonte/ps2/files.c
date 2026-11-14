@@ -13,6 +13,8 @@
 #include <libmc.h>
 /* IOP open flags used by MCSERV (not the newlib values). */
 enum { CARD_O_RDONLY = 0x0001, CARD_O_RDWR = 0x0003, CARD_O_CREAT = 0x0200 };
+/* mcSetFileInfo: change only the attributes; readable + writable + executable. */
+enum { CARD_INFO_ATTR = 0x0004, CARD_ATTR_RWX = 0x0007 };
 #endif
 
 /* Progress can live next to the ROM (USB or another writable folder) or on
@@ -215,16 +217,33 @@ static bool card_path(const char *path, int *port, const char **name) {
   return true;
 }
 
+/* Saves from older versions of this port can be write-only on the card: the
+   BIOS memory card driver opens them, then refuses to read them (-5). Give
+   such a file read and write permission again; the progress is kept. */
+static bool card_make_readable(int port, const char *name) {
+  static sceMcTblGetDir info __attribute__((aligned(64)));
+  memset(&info, 0, sizeof(info));
+  info.AttrFile = CARD_ATTR_RWX;
+  if (mcSetFileInfo(port, 0, name, &info, CARD_INFO_ATTR) != 0) return false;
+  return card_wait() == 0;
+}
+
 static int card_read(int port, const char *name, uint8_t *buf, int cap) {
-  if (cap > (int)sizeof(card_buf) || mcOpen(port, 0, name, CARD_O_RDONLY) != 0) return -1;
-  int fd = card_wait();
-  if (fd < 0) { card_fail(5, fd); return -1; }
-  int got = -1;
-  if (mcRead(fd, card_buf, cap) == 0) got = card_wait();
-  if (got < 0) card_fail(6, got);
-  if (mcClose(fd) == 0) card_wait();
-  if (got > 0) memcpy(buf, card_buf, got);
-  return got;
+  if (cap > (int)sizeof(card_buf)) return -1;
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    if (mcOpen(port, 0, name, CARD_O_RDONLY) != 0) return -1;
+    int fd = card_wait();
+    if (fd == -5 && attempt == 0 && card_make_readable(port, name)) continue;
+    if (fd < 0) { card_fail(5, fd); return -1; }
+    int got = -1;
+    if (mcRead(fd, card_buf, cap) == 0) got = card_wait();
+    if (mcClose(fd) == 0) card_wait();
+    if (got == -5 && attempt == 0 && card_make_readable(port, name)) continue;
+    if (got < 0) { card_fail(6, got); return -1; }
+    if (got > 0) memcpy(buf, card_buf, got);
+    return got;
+  }
+  return -1;
 }
 
 static bool card_write(int port, const char *name, const uint8_t *buf, int size) {

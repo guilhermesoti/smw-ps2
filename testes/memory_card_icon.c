@@ -1,6 +1,6 @@
 /* Simula um Memory Card (arquivos, pastas e permissoes R/W como no MCMAN)
    e confere que salvar cria icon.sys + icone uma vez (e troca
-   o de versoes anteriores), em blocos de ate
+   o de versoes anteriores), e que saves antigos so-escrita voltam a ser lidos, em blocos de ate
    4096 bytes, e que o progresso volta igual. */
 #include <assert.h>
 #include <stdio.h>
@@ -10,7 +10,7 @@
 #define MAXF 16
 static struct { char name[64]; uint8_t data[65536]; int size, perm, used; } fs[MAXF];
 static struct { int file, pos, open; } fds[8];
-static int pending, writes_icon, max_piece;
+static int pending, writes_icon, max_piece, chmods;
 
 static int find(const char *n) { for (int i = 0; i < MAXF; i++) if (fs[i].used && !strcmp(fs[i].name, n)) return i; return -1; }
 
@@ -49,6 +49,11 @@ int mcWrite(int fd, const void *buf, int size) {
 int mcClose(int fd) { fds[fd].open = 0; pending = 0; return 0; }
 int mcDelete(int port, int slot, const char *name) { (void)port; (void)slot;
   int f = find(name); if (f < 0) { pending = -4; return 0; } fs[f].used = 0; pending = 0; return 0; }
+int mcSetFileInfo(int port, int slot, const char *name, const sceMcTblGetDir *info, unsigned flags) {
+  (void)port; (void)slot; int f = find(name);
+  assert(flags == 0x0004);
+  if (f < 0) { pending = -4; return 0; }
+  fs[f].perm = info->AttrFile & 3; chmods++; pending = 0; return 0; }
 int mcSync(int mode, int *cmd, int *result) { (void)mode; (void)cmd; *result = pending; return 1; }
 
 int main(void) {
@@ -85,6 +90,21 @@ int main(void) {
   before = writes_icon;
   assert(smw_save_progress(save));               /* ja atualizado: nao regrava */
   assert(writes_icon == before);
+  memset(back, 0, sizeof(back));
+  smw_load_progress(back);
+  assert(!memcmp(back, save, sizeof(save)));
+  /* Saves de versoes antigas que ficaram so-escrita no cartao (o driver da
+     BIOS abre, mas recusa ler com -5, o erro "M6-5"): o jogo devolve a
+     permissao de leitura, recupera o progresso e volta a salvar. */
+  for (int k = 0; k < MAXF; k++)
+    if (fs[k].used && strstr(fs[k].name, "/SMWPS2/SMW.")) fs[k].perm = 2;
+  memset(back, 0, sizeof(back));
+  smw_load_progress(back);
+  assert(!memcmp(back, save, sizeof(save)) && chmods >= 1);
+  memset(save, 0x55, sizeof(save));
+  for (int k = 0; k < MAXF; k++)
+    if (fs[k].used && strstr(fs[k].name, "/SMWPS2/SMW.")) fs[k].perm = 2;
+  assert(smw_save_progress(save) && !smw_save_error_text()[0]);
   memset(back, 0, sizeof(back));
   smw_load_progress(back);
   assert(!memcmp(back, save, sizeof(save)));
