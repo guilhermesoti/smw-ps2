@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.6.4 | NTSC 240p/480p | Português
+Retrogames Patos de Minas | v0.7 | NTSC 240p/480p | Português
 
 O QUE VOCÊ PRECISA
 
@@ -108,6 +108,11 @@ você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
 
+Mudanças da v0.7:
+- Abertura da Retrogames e tela "Apoie o projeto" com o QR code do Pix,
+  depois da escolha do vídeo. START pula a abertura; X ou START na tela
+  de apoio começa o jogo (ou ele começa sozinho depois de 20 segundos).
+
 Mudanças da v0.6.4:
 - Ícone do save refeito: cartucho cinza em 3D, mais largo, com o
   rótulo escrito só "SMW PS2" em letras grandes.
@@ -175,3 +180,20 @@ https://github.com/ps2dev/ps2dev/releases/tag/v2.0.0
 https://github.com/ps2dev/ps2sdk
 https://github.com/ps2dev/gsKit
 https://github.com/ps2homebrew/Open-PS2-Loader
+
+CRÉDITOS E APOIO
+
+Projeto gratuito, feito por fãs, sem ligação com a Nintendo. Feito por
+Guilherme Soti (Retrogames Patos de Minas), que dirigiu o projeto e
+testou tudo num PS2 de verdade, com o Claude (Anthropic) no
+desenvolvimento. O motor é do snesrev/smw, com a emulação de PPU e som
+derivada do LakeSnes; o PS2 usa PS2SDK e gsKit. Detalhes em CREDITOS.md.
+
+O port é e vai continuar gratuito. Se quiser apoiar os próximos (como um
+port do Tekken 3), pode doar qualquer valor:
+
+  Pix (chave aleatória): f19e4d1b-f35c-4541-919b-87a2cb540b9c
+  De fora do Brasil: https://ko-fi.com/guilhermesoti
+
+O QR code do Pix aparece na tela "Apoie o projeto" ao abrir o jogo.
+https://github.com/guilhermesoti/smw-ps2
