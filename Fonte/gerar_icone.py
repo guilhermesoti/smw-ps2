@@ -2,8 +2,7 @@
 
 Sem icon.sys e icone, o navegador do PS2 mostra a pasta como "dados
 corrompidos". Arte original (sem personagens da Nintendo): um cartucho cinza
-generico, levemente girado, com rotulo de um gatinho pulando e a faixa
-"SMW PS2". Formato conferido com saves comerciais: cabecalho de 20 bytes,
+generico, levemente girado, com rotulo escrito "SMW PS2". Formato conferido com saves comerciais: cabecalho de 20 bytes,
 coordenadas em 1/4096 (Y negativo para cima), quadros de animacao de 8 bytes
 e textura 128x128 ABGR1555 sem compressao (tipo 0x07).
 """
@@ -12,37 +11,8 @@ import struct
 from pathlib import Path
 
 W = H = 128
-ICON_VERSION = b"SMWICON3"  # muda quando o desenho muda: o jogo regrava o icone
+ICON_VERSION = b"SMWICON4"  # muda quando o desenho muda: o jogo regrava o icone
 BODY, DARK = (150, 150, 158), (95, 95, 105)
-PAL = {'K': (30, 24, 40), 'O': (245, 140, 40), 'W': (250, 245, 235), 'P': (240, 120, 150),
-       'T': (30, 170, 170), 't': (20, 120, 125), 'Y': (255, 230, 80)}
-CAT = [
-    "....K...........K.....",
-    "...KOK.........KOK....",
-    "...KOOK.......KOOK....",
-    "...KOPOKKKKKKKOPOK....",
-    "..KOOOOOOOOOOOOOOOK...",
-    "..KOOOOOOOOOOOOOOOK...",
-    ".KOOOOKKOOOOOKKOOOOK..",
-    ".KOOOOKWOOOOOKWOOOOK..",
-    ".KOOOOKKOOOOOKKOOOOK..",
-    "KKOOWWOOOOPPOOOOWWOKK.",
-    ".KOOWWOOOKWWKOOOWWOK..",
-    "..KOOOOOOOKKOOOOOOK...",
-    "...KKOOOOOOOOOOOKK....",
-    "KK...KKKKKKKKKKK...KK.",
-    "KOK.KTTTTTTTTTTTK.KOK.",
-    "KOOKTTTTTTTTTTTTTKOOK.",
-    ".KOKTTTTTTTTTTTTTKOK..",
-    "..KKTTTTWWWWWTTTTKK...",
-    "....KTTTWWWWWTTTK.....",
-    "....KtTTTTTTTTTtK.....",
-    "....KttttKKKttttK.....",
-    "...KOOK.......KOOK....",
-    "..KOOK.........KOOK...",
-    "..KWWK.........KWWK...",
-    "...KK...........KK....",
-]
 FONT = {
     'S': ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
     'M': ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
@@ -51,57 +21,36 @@ FONT = {
     '2': ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
     ' ': ["00000"] * 7,
 }
-LABEL_V = 125 / 128          # o rotulo usa as linhas 0-124; abaixo ficam as cores do cartucho
-UV_BODY = (124 / 128, 126.5 / 128)
-UV_DARK = (116 / 128, 126.5 / 128)
+LABEL_V = 120 / 128          # o rotulo usa as linhas 0-119; abaixo ficam as cores do cartucho
+UV_BODY = (124 / 128, 124 / 128)
+UV_DARK = (116 / 128, 124 / 128)
 
 def texture():
     px = [[(0, 0, 0)] * W for _ in range(H)]
-    def put(x, y, c):
-        if 0 <= x < W and 0 <= y < H:
-            px[y][x] = c
     def rect(x0, y0, x1, y1, c):
-        for y in range(y0, y1):
-            for x in range(x0, x1):
-                put(x, y, c)
-    for y in range(H):  # ceu em degrade
-        t = y / 96
+        for y in range(max(0, y0), min(H, y1)):
+            for x in range(max(0, x0), min(W, x1)):
+                px[y][x] = c
+    for y in range(H):  # fundo do rotulo: degrade azul escuro
+        t = y / 120
         for x in range(W):
-            px[y][x] = (int(90 + 80 * t), int(160 + 60 * t), 255)
-    for cx, cy in ((10, 18), (84, 30)):  # nuvens
-        for dx, dy, r in ((0, 0, 7), (8, -3, 8), (16, 0, 6)):
-            for y in range(-r, r + 1):
-                for x in range(-r, r + 1):
-                    if x * x + y * y <= r * r:
-                        put(cx + dx + x, cy + dy + y, (255, 255, 255))
-    for y in range(96, 104):  # chao de tijolos
-        for x in range(W):
-            mortar = y == 103 or (x + (8 if (y // 8) % 2 else 0)) % 16 == 15
-            put(x, y, (110, 60, 40) if mortar else (190, 100, 60))
-    for cx, cy in ((22, 44), (104, 56), (96, 14), (30, 80)):  # estrelinhas
-        for d in range(-2, 3):
-            put(cx + d, cy, PAL['Y'])
-            put(cx, cy + d, PAL['Y'])
-        put(cx, cy, (255, 255, 255))
-    s = 3
-    ox, oy = 64 - len(CAT[0]) * s // 2, 20
-    for r, row in enumerate(CAT):
-        for c, ch in enumerate(row):
-            if ch != '.':
-                rect(ox + c * s, oy + r * s, ox + (c + 1) * s, oy + (r + 1) * s, PAL[ch])
-    rect(0, 103, W, 104, PAL['Y'])  # faixa com o nome
-    rect(0, 104, W, 124, (200, 30, 40))
-    rect(0, 124, W, 125, PAL['Y'])
-    text, scale = "SMW PS2", 2
-    x = 64 - (len(text) * 6 * scale - scale) // 2
-    for ch in text:
-        for r, row in enumerate(FONT[ch]):
-            for c, bit in enumerate(row):
-                if bit == '1':
-                    rect(x + c * scale, 107 + r * scale, x + (c + 1) * scale, 107 + (r + 1) * scale, (255, 255, 255))
-        x += 6 * scale
-    rect(0, 125, W, 128, BODY)       # cores do corpo do cartucho
-    rect(112, 125, 120, 128, DARK)
+            px[y][x] = (int(20 + 30 * t), int(30 + 40 * t), int(90 + 70 * t))
+    rect(0, 0, W, 4, (230, 40, 50))      # frisos vermelhos
+    rect(0, 116, W, 120, (230, 40, 50))
+    def text(t, y, scale, color, shadow):
+        x = 64 - (len(t) * 6 * scale - scale) // 2
+        for ch in t:
+            for r, row in enumerate(FONT[ch]):
+                for c, bit in enumerate(row):
+                    if bit == '1':
+                        X, Y = x + c * scale, y + r * scale
+                        rect(X + 2, Y + 2, X + scale + 2, Y + scale + 2, shadow)
+                        rect(X, Y, X + scale, Y + scale, color)
+            x += 6 * scale
+    text("SMW", 14, 6, (255, 255, 255), (10, 10, 30))
+    text("PS2", 68, 6, (255, 220, 60), (10, 10, 30))
+    rect(0, 120, W, 128, BODY)           # cores do corpo do cartucho
+    rect(112, 120, 120, 128, DARK)
     out = bytearray()
     for row in px:
         for r, g, b in row:
@@ -127,15 +76,16 @@ def box(x0, x1, yt, yb, zf, zb, uv):
             quad([(x0, yb, zf), (x1, yb, zf), (x1, yb, zb), (x0, yb, zb)], (0, 1, 0), u))
 
 def cartridge():
-    """Cartucho generico: corpo cinza, ressalto no topo, ranhuras de pegada e rotulo."""
-    tris = box(-1.1, 1.1, -2.7, 0.0, -0.25, 0.25, UV_BODY)              # corpo
-    tris += box(-0.95, 0.95, -2.9, -2.7, -0.2, 0.2, UV_DARK)            # ressalto de cima
-    for i in range(4):                                                  # ranhuras de pegada
-        y = -0.18 - i * 0.12
-        tris += box(-0.7, 0.7, y - 0.05, y, -0.29, -0.25, UV_DARK)
+    """Cartucho generico, mais largo que alto: corpo cinza, topo recuado,
+    ranhuras de pegada e rotulo so com "SMW PS2"."""
+    tris = box(-1.45, 1.45, -2.2, 0.0, -0.25, 0.25, UV_BODY)            # corpo
+    tris += box(-1.25, 1.25, -2.4, -2.2, -0.2, 0.2, UV_DARK)            # topo recuado
+    for i in range(3):                                                  # ranhuras de pegada
+        y = -0.16 - i * 0.13
+        tris += box(-1.0, 1.0, y - 0.06, y, -0.29, -0.25, UV_DARK)
     lab = [(0, 0), (1, 0), (1, LABEL_V), (0, LABEL_V)]
     zl = -0.27
-    tris += quad([(-0.9, -2.55, zl), (0.9, -2.55, zl), (0.9, -0.7, zl), (-0.9, -0.7, zl)], (0, 0, -1), lab)
+    tris += quad([(-1.2, -2.05, zl), (1.2, -2.05, zl), (1.2, -0.6, zl), (-1.2, -0.6, zl)], (0, 0, -1), lab)
     return tris
 
 def rotate(tris, yaw):

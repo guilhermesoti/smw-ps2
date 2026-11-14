@@ -2,7 +2,7 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.6.3 · NTSC 240p/480p · português.** A v0.6.3 troca o ícone do save por um cartucho cinza em 3D com rótulo original e atualiza o ícone dos saves já existentes. A v0.6.2 grava icon.sys e um ícone 3D na pasta do save no Memory Card, para o navegador do PS2 mostrar o nome do jogo. A v0.6.1 corrige as permissões dos arquivos criados no Memory Card e recria arquivos antigos quando a abertura para gravação retorna -5. A v0.6 traz a tradução para português do Brasil das mensagens, dos nomes das fases e dos textos dos castelos (SELECT na abertura volta ao inglês). A v0.5 acrescenta o modo 480p opcional (Triângulo na abertura) com scanlines. A v0.4 usa os drivers de controle e Memory Card da BIOS do PS2, como os jogos comerciais. Desde a v0.3, o port troca o vídeo para 240p progressivo, sincroniza o jogo e o áudio com a TV, grava no Memory Card direto pelo MCSERV e mostra códigos em “ERRO AO SALVAR” (tabela no LEIA-ME). O jogo já rodou em PS2 físico pelo OPL; a v0.3 corrige os problemas observados nesse teste (gravação, cortes na imagem e engasgos). [Relatório técnico da v0.1](RELATORIO_TECNICO_SMW_PS2_v0.1.md)
+**Versão 0.6.4 · NTSC 240p/480p · português.** A v0.6.4 troca o ícone do save por um cartucho cinza em 3D escrito só "SMW PS2". A v0.6.3 troca o ícone do save por um cartucho cinza em 3D com rótulo original e atualiza o ícone dos saves já existentes. A v0.6.2 grava icon.sys e um ícone 3D na pasta do save no Memory Card, para o navegador do PS2 mostrar o nome do jogo. A v0.6.1 corrige as permissões dos arquivos criados no Memory Card e recria arquivos antigos quando a abertura para gravação retorna -5. A v0.6 traz a tradução para português do Brasil das mensagens, dos nomes das fases e dos textos dos castelos (SELECT na abertura volta ao inglês). A v0.5 acrescenta o modo 480p opcional (Triângulo na abertura) com scanlines. A v0.4 usa os drivers de controle e Memory Card da BIOS do PS2, como os jogos comerciais. Desde a v0.3, o port troca o vídeo para 240p progressivo, sincroniza o jogo e o áudio com a TV, grava no Memory Card direto pelo MCSERV e mostra códigos em “ERRO AO SALVAR” (tabela no LEIA-ME). O jogo já rodou em PS2 físico pelo OPL; a v0.3 corrige os problemas observados nesse teste (gravação, cortes na imagem e engasgos). [Relatório técnico da v0.1](RELATORIO_TECNICO_SMW_PS2_v0.1.md)
 
 ## Compilar o executável
 
@@ -19,7 +19,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O SHA-256 do ELF da v0.6.3 obtido com o ps2dev v2.0.0 foi `ebfb1ba68c1cd3dce43c2566b09057ea3ec9d87ffc35559f10e13bd3a3001f7c`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O SHA-256 do ELF da v0.6.4 obtido com o ps2dev v2.0.0 foi `e6ae82c2d75d31d218513b8ae94fe9986d8666610cb7e798110f03e8e0232c16`.
 
 ## Jogar por USB
 

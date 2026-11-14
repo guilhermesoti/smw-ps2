@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.6.3 | NTSC 240p/480p | Português
+Retrogames Patos de Minas | v0.6.4 | NTSC 240p/480p | Português
 
 O QUE VOCÊ PRECISA
 
@@ -46,8 +46,8 @@ Salve nos pontos oferecidos pelo próprio jogo.
   pendrive, o jogo continua usando o cartão.
 
 No navegador do PS2, a pasta SMWPS2 aparece como "Super Mario World /
-PS2 Retrogames", com um ícone 3D de cartucho cinza com rótulo colorido.
-Saves feitos antes da v0.6.3 ganham o ícone novo na próxima vez que
+PS2 Retrogames", com um ícone 3D de cartucho cinza escrito "SMW PS2".
+Saves feitos antes da v0.6.4 ganham o ícone novo na próxima vez que
 você salvar; o progresso não é alterado.
 
 SMW.SRM tem 2.048 bytes. SMW.BAK guarda o progresso anterior. SMW.TMP
@@ -107,6 +107,11 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.6.4:
+- Ícone do save refeito: cartucho cinza em 3D, mais largo, com o
+  rótulo escrito só "SMW PS2" em letras grandes.
+- Cartões com ícones de versões anteriores são atualizados ao salvar.
 
 Mudanças da v0.6.3:
 - Novo ícone do save: cartucho cinza em 3D, levemente girado, com
