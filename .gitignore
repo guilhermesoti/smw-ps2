@@ -1,0 +1,21 @@
+# Dados do cartucho usados localmente e imagem de CD gerada
+*.[sS][fF][cC]
+*.[sS][mM][cC]
+*.[zZ][iI][pP]
+*.[iI][sS][oO]
+/CD/
+
+# Progresso de jogo
+*.[sS][rR][mM]
+*.[bB][aA][kK]
+*.[tT][mM][pP]
+
+# Produtos da compilação e ambiente Python local
+/Fonte/build/
+*.[eE][lL][fF]
+*.[iI][rR][xX]
+*.o
+*.d
+.venv/
+__pycache__/
+*.pyc
