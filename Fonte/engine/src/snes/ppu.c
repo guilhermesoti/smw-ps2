@@ -11,7 +11,7 @@
 #include "snes.h"
 #include "snes_regs.h"
 #include "ppu_decode.h"
-#ifdef _EE
+#if defined(_EE) && defined(_MIPS_ARCH_R5900)  /* só no PS2; os testes no PC também usam _EE */
 #include <tamtypes.h>
 #include <malloc.h>
 #endif
@@ -26,7 +26,7 @@ static uint16_t ppu_getVramRemap(Ppu* ppu);
 
 
 Ppu* ppu_init(Snes* snes) {
-#ifdef _EE
+#if defined(_EE) && defined(_MIPS_ARCH_R5900)  /* só no PS2; os testes no PC também usam _EE */
   Ppu* ppu = memalign(64, sizeof(Ppu));
   if (ppu) memset(ppu, 0, sizeof(Ppu));
 #else
@@ -98,7 +98,7 @@ void ppu_handleVblank(Ppu* ppu) {
 static inline void ClearBackdrop(PpuPixelPrioBufs *buf, bool wide) {
   unsigned start=wide?0:kPpuExtraLeftRight;
   unsigned length=wide?kPpuXPixels:256;
-#ifdef _EE
+#if defined(_EE) && defined(_MIPS_ARCH_R5900)  /* só no PS2; os testes no PC também usam _EE */
   static const uint32_t fill[4] __attribute__((aligned(16))) = {
     0x05000500,0x05000500,0x05000500,0x05000500
   };
