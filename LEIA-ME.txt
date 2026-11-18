@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.9 | NTSC 240p/480p | Português
+Retrogames Patos de Minas | v0.10 (beta) | NTSC 240p/480p | 4:3 ou 16:9 | Português
 
 O QUE VOCÊ PRECISA
 
@@ -113,6 +113,9 @@ Na tela de abertura, durante os 3 segundos com as informações:
   SNES vira duas, com scanlines (visual de monitor de tubo/RGB).
 - CÍRCULO, ou não apertar nada: 240p, para cabo AV (amarelo) e para
   adaptadores HDMI que não aceitarem 480p.
+- QUADRADO (antes do TRIÂNGULO ou do CÍRCULO): tela 16:9, para TV no
+  modo widescreen (16:9, "Wide"). Para 16:9 em 480p, aperte QUADRADO
+  e depois TRIÂNGULO.
 IDIOMA: o jogo abre em português do Brasil. Para jogar em inglês, segure
 SELECT nessa mesma tela de abertura.
 
@@ -123,6 +126,7 @@ componente" em "Y Cb/Pb Cr" na Configuração do Sistema.
 Durante o jogo (segurando L2 + R2):
 - L2 + R2 + QUADRADO: liga/desliga as scanlines (no 480p).
 - L2 + R2 + CÍRCULO: liga/desliga a suavização da imagem.
+- L2 + R2 + CRUZ: troca entre 4:3 e 16:9.
 - L2 + R2 + TRIÂNGULO: liga/desliga o medidor de desempenho, no canto
   de baixo. "TELA 60" = todos os 60 quadros de cada segundo foram
   desenhados; "TELA 30" = metade foi pulada para manter a velocidade.
@@ -134,6 +138,26 @@ travar a imagem. Se um quadro demorar mais que o tempo de uma
 atualização, o jogo avança até 2 quadros sem desenhar, para manter a
 velocidade e a música corretas.
 
+TELA 16:9 (BETA)
+
+Nas fases, o jogo mostra 43 colunas a mais de cada lado (342 em vez de
+256): você vê mais da fase, sem esticar o desenho. O PS2 manda a imagem
+no formato normal e a TV, no modo 16:9, abre ela para as proporções
+certas. Com a TV em 4:3, a imagem fica espremida: troque o modo da TV
+ou volte para 4:3 com L2 + R2 + CRUZ.
+
+- Fases, salas de bônus, casas e castelos: tela larga.
+- Título, menus, mapa e telas de transição: continuam em 4:3, com
+  faixas pretas dos lados (o jogo não tem desenho além da borda nessas
+  telas).
+- Os inimigos e itens continuam surgindo e sumindo fora da área
+  visível, como no 4:3: o jogo passa a carregar os objetos mais longe.
+- No fim de algumas salas (por exemplo o telhado do castelo do Bowser) o
+  cenário acaba antes da borda e o resto fica com a cor do fundo.
+- Desenhar 342 colunas dá cerca de um terço a mais de trabalho. Se o
+  medidor (L2 + R2 + TRIÂNGULO) mostrar "TELA 30" com frequência numa
+  fase, conte para a gente qual foi.
+
 SOBRE ESTA VERSÃO
 
 A lógica do jogo foi compilada em C para o Emotion Engine do PS2. Os
@@ -141,6 +165,13 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.10 (beta):
+- Tela 16:9 opcional: QUADRADO na abertura ou L2 + R2 + CRUZ durante o
+  jogo (veja TELA 16:9 acima). Feita do zero neste port: o desenho da
+  tela ganhou as colunas extras dos dois lados, e o jogo carrega
+  cenário e objetos mais longe para não aparecerem nem sumirem à vista.
+- Em 4:3 nada muda: a imagem é idêntica à da v0.9, quadro a quadro.
 
 Mudanças da v0.9:
 - Câmera do mapa: ao olhar em volta (START no mapa principal) e deslocar
@@ -283,7 +314,8 @@ Guilherme Soti (Retrogames Patos de Minas), que dirigiu o projeto e
 testou tudo num PS2 de verdade, com o Claude (Anthropic) no
 desenvolvimento. O motor é do snesrev/smw, com a emulação de PPU e som
 derivada do LakeSnes; a PPU otimizada e duas correções vêm do port de
-blashy101; o PS2 usa PS2SDK e gsKit. Detalhes em CREDITOS.md.
+blashy101; a tela 16:9 foi feita neste port; o PS2 usa PS2SDK e gsKit.
+Detalhes em CREDITOS.md.
 
 O port é e vai continuar gratuito. Se quiser apoiar os próximos (como um
 port do Tekken 3), pode doar qualquer valor:

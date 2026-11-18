@@ -8,7 +8,7 @@ antes dele: abaixo está quem fez cada parte.
 | Quem | O que fez |
 |---|---|
 | **Guilherme Soti** — [Retrogames Patos de Minas](https://github.com/guilhermesoti) | Ideia e direção do projeto, todos os testes num PlayStation 2 de verdade (pelo OPL), relatos dos erros vistos no console e as escolhas da tradução (Princesa Peach, botões do PS2 nas dicas, "FIM DE JOGO") e do visual |
-| **Claude** (Anthropic, pelo Claude Code) | Desenvolvimento do port: camada PS2 (vídeo 240p/480p no GS, áudio, controles, Memory Card, USB), correções a partir dos testes no console, tradução para português feita dentro do port, ícone do save, abertura, documentação e, na v0.9, a adaptação das partes do port de blashy101 e os testes de salas e da câmera |
+| **Claude** (Anthropic, pelo Claude Code) | Desenvolvimento do port: camada PS2 (vídeo 240p/480p no GS, áudio, controles, Memory Card, USB), correções a partir dos testes no console, tradução para português feita dentro do port, ícone do save, abertura, documentação na v0.9, a adaptação das partes do port de blashy101 e os testes de salas e da câmera; na v0.10, a tela 16:9 (colunas extras na PPU, cenário e objetos carregados mais longe) e os testes dela |
 
 ## O jogo em C (a base de tudo)
 
@@ -30,6 +30,12 @@ antes dele: abaixo está quem fez cada parte.
     [SMWDisX](https://github.com/IsoFrieze/SMWDisX)) e o volume do PCM no `audsrv`.
 
   A tela larga 16:9 desse port **não** foi trazida: o arquivo dela tem licença PolyForm Noncommercial.
+
+## Tela 16:9 (v0.10)
+
+Escrita do zero neste port (`Fonte/engine/src/largo.c`, `largo.h` e as mudanças marcadas com
+`g_largo` no motor e na PPU), sem copiar código da tela larga de outros ports. Ela usa a estrutura de
+colunas extras (`extraLeftRight`) que já existia na PPU do snesrev/smw.
 
 ## Ferramentas e bibliotecas do PlayStation 2
 

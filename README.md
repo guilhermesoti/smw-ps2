@@ -2,10 +2,11 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.9 · NTSC 240p/480p · português.** Projeto gratuito, feito por fãs.
+**Versão 0.10 (beta) · NTSC 240p/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
 - Vídeo 240p progressivo (cabo AV e a maioria dos adaptadores HDMI) ou 480p com scanlines (componente/HDMI).
+- Tela 16:9 opcional (beta): nas fases mostra 43 colunas a mais de cada lado, para TV no modo widescreen. QUADRADO na abertura ou L2 + R2 + CRUZ no jogo.
 - Em português do Brasil: mensagens, nomes das fases e textos dos castelos. Segure SELECT na abertura para jogar em inglês.
 - Grava no pendrive ou no Memory Card (pasta `SMWPS2`, com ícone 3D no navegador do PS2).
 - Abre pelo OPL como aplicativo (ELF) ou como ISO na lista de jogos.
@@ -28,7 +29,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.9 obtido com o ps2dev v2.0.0 foi `d6c1e868b21cdce05c84b20ffc8528baef57fe16100392bec767aa6255526f34`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.10 obtido com o ps2dev v2.0.0 foi `8c7fb55ee1e51881a3c4a3f5d4393722f402eebb9a84a9dc0ee45d4bbdebfd1a`.
 
 ## Jogar por USB
 
@@ -61,6 +62,8 @@ Copie `CD/SMWG_000.01.Super Mario World.iso` para a pasta `CD/` do pendrive e at
 | Triângulo (△) | Segunda tecla de corrida e ação (X do SNES) |
 | Start / Select | Pausar ou iniciar / soltar o item da reserva |
 | L1 / R1 | Deslocar a câmera nas fases que permitem |
+| L2 + R2 + × | Trocar entre 4:3 e 16:9 |
+| L2 + R2 + △ / □ / ○ | Medidor de desempenho / scanlines (480p) / suavização |
 
 ## Repetir o teste de regressão
 
@@ -76,7 +79,23 @@ Varredura de todas as 235 salas do jogo com AddressSanitizer e UBSan (carrega ca
 
 ```sh
 python3 testes/testar_salas.py "/caminho/Super Mario World (USA).zip"
+python3 testes/testar_salas.py --largo "/caminho/Super Mario World (USA).zip"   # mesma varredura em 16:9
 ```
+
+Objetos que surgem ou somem dentro da área visível em 16:9 (cada sala é jogada com a tela larga e o
+teste acusa sprites que aparecem ou desaparecem longe das bordas). Rode numa pasta só com o jogo:
+
+```sh
+cc -O1 -std=gnu11 -fno-strict-aliasing -fwrapv -ffunction-sections -fdata-sections -Wl,--gc-sections \
+   -IFonte/engine -IFonte/ps2 $(pkg-config --cflags minizip zlib) \
+   $(find Fonte/engine/src -name '*.c') Fonte/ps2/files.c Fonte/ps2/game.c testes/aparecer.c \
+   $(pkg-config --libs minizip zlib) -lm -o /tmp/smw-aparecer
+/tmp/smw-aparecer /caminho/da/pasta/com/o/jogo/ 1 600 \
+   $(python3 -c 'import json; print(*["0x"+s["hex"] for s in json.load(open("testes/salas.json"))["salas"]])')
+```
+
+Na v0.10 o resultado foi `TOTAL surge=0 some=2`: um Koopa que cai num buraco e some antes de sair da
+tela por baixo e o bloco de mensagem da sala 1FF: comportamento normal do jogo.
 
 Volta da câmera no mapa depois de olhar em volta com START (deslocamentos de até 273 pixels). Use uma pasta só com o jogo, sem save:
 
@@ -123,7 +142,8 @@ Projeto **gratuito**, feito por fãs. Ele existe graças a:
   port, com a emulação de PPU e som derivada de **[LakeSnes](https://github.com/elzo-d/LakeSnes)**.
 - **[AI Super Mario World PS2 Native Port](https://github.com/blashy101/-AI-Super-Mario-World-PS2-Native-Port)**
   (blashy101, licença MIT): a PPU otimizada e os achados da câmera do mapa, das tabelas e do volume do
-  áudio, trazidos para este port na v0.9.
+  áudio, trazidos para este port na v0.9. A tela 16:9 da v0.10 foi escrita neste port, sem usar a
+  desse projeto (que tem outra licença).
 - **[ps2dev](https://github.com/ps2dev/ps2dev)**, **[PS2SDK](https://github.com/ps2dev/ps2sdk)** e
   **[gsKit](https://github.com/ps2dev/gsKit)**: as ferramentas e bibliotecas do PS2.
 - **[OPL](https://github.com/ps2homebrew/Open-PS2-Loader)**: para rodar no console.
