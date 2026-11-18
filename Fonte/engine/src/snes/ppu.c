@@ -10,6 +10,11 @@
 
 #include "snes.h"
 #include "snes_regs.h"
+#include "ppu_decode.h"
+#ifdef _EE
+#include <tamtypes.h>
+#include <malloc.h>
+#endif
 
 
 extern bool g_new_ppu;
@@ -21,8 +26,13 @@ static uint16_t ppu_getVramRemap(Ppu* ppu);
 
 
 Ppu* ppu_init(Snes* snes) {
+#ifdef _EE
+  Ppu* ppu = memalign(64, sizeof(Ppu));
+  if (ppu) memset(ppu, 0, sizeof(Ppu));
+#else
   Ppu* ppu = calloc(1, sizeof(Ppu));
-  ppu->snes = snes;
+#endif
+  if (ppu) ppu->snes = snes;
   return ppu;
 }
 
@@ -56,10 +66,12 @@ void ppu_reset(Ppu* ppu) {
 void ppu_saveload(Ppu *ppu, SaveLoadInfo *sli) {
   assert(offsetof(Ppu, cgwsel) + 1 - offsetof(Ppu, inidisp) == PPU_SAVESTATE_REGS_SIZE);
   assert(offsetof(Ppu, vram) + 0x10000 - offsetof(Ppu, cgram) == PPU_SAVESTATE_MEM_SIZE);
-  uint32 version[2] = {'P' | 'P' << 8 | 'U' << 16 | '0' << 24, PPU_SAVESTATE_REGS_SIZE + PPU_SAVESTATE_MEM_SIZE};
+  uint32_t version[2] = {'P' | 'P' << 8 | 'U' << 16 | '0' << 24, PPU_SAVESTATE_REGS_SIZE + PPU_SAVESTATE_MEM_SIZE};
   sli->func(sli, version, 8);
   sli->func(sli, &ppu->inidisp, PPU_SAVESTATE_REGS_SIZE);
   sli->func(sli, &ppu->cgram, PPU_SAVESTATE_MEM_SIZE);
+  ppu->paletteValid = false;
+  ppu->spriteListsValid = false;
 }
 
 void PpuBeginDrawing(Ppu *ppu, uint8_t *pixels, size_t pitch, uint32_t render_flags) {
@@ -83,9 +95,32 @@ void ppu_handleVblank(Ppu* ppu) {
   ppu->frameInterlace = PPU_interlace(ppu); // set if we have a interlaced frame
 }
 
-static inline void ClearBackdrop(PpuPixelPrioBufs *buf) {
-  for (size_t i = 0; i != arraysize(buf->data); i += 4)
-    memcpy(&buf->data[i], &(const uint64){0x0500050005000500ULL}, sizeof(uint64));
+static inline void ClearBackdrop(PpuPixelPrioBufs *buf, bool wide) {
+  unsigned start=wide?0:kPpuExtraLeftRight;
+  unsigned length=wide?kPpuXPixels:256;
+#ifdef _EE
+  static const uint32_t fill[4] __attribute__((aligned(16))) = {
+    0x05000500,0x05000500,0x05000500,0x05000500
+  };
+  CASSERT(sizeof(buf->data)%64==0);
+  uint8_t *dst=(uint8_t*)(buf->data+start);
+  unsigned blocks=length*sizeof(buf->data[0])/64;
+  __asm__ volatile(
+      "lq $8,0(%2)\n"
+      "1:\n"
+      "sq $8,0(%0)\n"
+      "sq $8,16(%0)\n"
+      "sq $8,32(%0)\n"
+      "sq $8,48(%0)\n"
+      "addiu %0,%0,64\n"
+      "addiu %1,%1,-1\n"
+      "bnez %1,1b\n"
+      "nop\n"
+      : "+&r"(dst), "+&r"(blocks) : "r"(fill) : "$8","memory");
+#else
+  for (size_t i = start; i != start+length; i += 4)
+    *(uint64_t*)&buf->data[i] = 0x0500050005000500;
+#endif
 }
 
 void ppu_runLine(Ppu* ppu, int line) {
@@ -106,6 +141,8 @@ void ppu_runLine(Ppu* ppu, int line) {
     ppu->rangeOver = false;
     ppu->timeOver = false;
     ppu->evenFrame = !ppu->evenFrame;
+    /* Native OAM uploads happen before this point; skip frames build no list. */
+    ppu->spriteListsValid = false;
   } else {  
     // Cache the brightness computation
     if (PPU_brightness(ppu) != ppu->lastBrightnessMult) {
@@ -119,7 +156,7 @@ void ppu_runLine(Ppu* ppu, int line) {
     }
 
     // evaluate sprites
-    ClearBackdrop(&ppu->objBuffer);
+    ClearBackdrop(&ppu->objBuffer,ppu->wideTile!=NULL);
     ppu->lineHasSprites = !PPU_forcedBlank(ppu) && ppu_evaluateSprites(ppu, line - 1);
 
     if (g_new_ppu) {
@@ -131,14 +168,14 @@ void ppu_runLine(Ppu* ppu, int line) {
 }
 
 typedef struct PpuWindows {
-  int16 edges[6];
+  int16_t edges[6];
   uint8 nr;
   uint8 bits;
 } PpuWindows;
 
 static void PpuWindows_Clear(PpuWindows *win, Ppu *ppu, uint layer) {
-  win->edges[0] = -(layer != 2 ? ppu->extraLeftCur : 0);
-  win->edges[1] = 256 + (layer != 2 ? ppu->extraRightCur : 0);
+  win->edges[0] = -(layer != 2 || ppu->wideTile ? ppu->extraLeftCur : 0);
+  win->edges[1] = 256 + (layer != 2 || ppu->wideTile ? ppu->extraRightCur : 0);
   win->nr = 1;
   win->bits = 0;
 }
@@ -147,21 +184,30 @@ static void PpuWindows_Calc(PpuWindows *win, Ppu *ppu, uint layer) {
   // Evaluate which spans to render based on the window settings.
   // There are at most 5 windows.
   // Algorithm from Snes9x
-  uint32 winflags = GET_WINDOW_FLAGS(ppu, layer);
+  uint32_t winflags = GET_WINDOW_FLAGS(ppu, layer);
   uint nr = 1;
-  int window_right = 256 + (layer != 2 ? ppu->extraRightCur : 0);
-  win->edges[0] = - (layer != 2 ? ppu->extraLeftCur : 0);
+  int window_right = 256 + (layer != 2 || ppu->wideTile ? ppu->extraRightCur : 0);
+  win->edges[0] = - (layer != 2 || ppu->wideTile ? ppu->extraLeftCur : 0);
   win->edges[1] = window_right;
   uint i, j;
   int t;
-  bool w1_ena = (winflags & kWindow1Enabled) && ppu->window1left <= ppu->window1right;
+  int w1_left = ppu->window1left, w1_right = ppu->window1right;
+  bool w1_ena = (winflags & kWindow1Enabled) && w1_left <= w1_right;
   if (w1_ena) {
-    if (ppu->window1left > win->edges[0]) {
-      win->edges[nr] = ppu->window1left;
+    /* The main map's centered submap iris stays enabled after it opens.
+     * Project its 16..240 aperture into the widened map frame as it animates.
+     * The native endpoints remain available to HDMA and to 4:3 rendering. */
+    if (ppu->wideMapIris && w1_left >= 16 && w1_left + w1_right == 256) {
+      int radius = 128 - w1_left, extra = ppu->extraLeftCur;
+      w1_left -= (radius * extra + 56) / 112;
+      w1_right += (radius * (extra - 1) + 56) / 112;
+    }
+    if (w1_left > win->edges[0]) {
+      win->edges[nr] = w1_left;
       win->edges[++nr] = window_right;
     }
-    if (ppu->window1right + 1 < window_right) {
-      win->edges[nr] = ppu->window1right + 1;
+    if (w1_right + 1 < window_right) {
+      win->edges[nr] = w1_right + 1;
       win->edges[++nr] = window_right;
     }
   }
@@ -188,8 +234,8 @@ static void PpuWindows_Calc(PpuWindows *win, Ppu *ppu, uint layer) {
   // get a bitmap of how regions map to windows
   uint8 w1_bits = 0, w2_bits = 0;
   if (w1_ena) {
-    for (i = 0; win->edges[i] != ppu->window1left; i++);
-    for (j = i; win->edges[j] != ppu->window1right + 1; j++);
+    for (i = 0; win->edges[i] != w1_left; i++);
+    for (j = i; win->edges[j] != w1_right + 1; j++);
     w1_bits = ((1 << (j - i)) - 1) << i;
   }
   if ((winflags & (kWindow1Enabled | kWindow1Inversed)) == (kWindow1Enabled | kWindow1Inversed))
@@ -204,209 +250,227 @@ static void PpuWindows_Calc(PpuWindows *win, Ppu *ppu, uint layer) {
   win->bits = w1_bits | w2_bits;
 }
 
-// Draw a whole line of a 4bpp background layer into bgBuffers
-static void PpuDrawBackground_4bpp(Ppu *ppu, uint y, bool sub, uint layer, PpuZbufType zhi, PpuZbufType zlo) {
-#define DO_PIXEL(i) do { \
-  pixel = (bits >> i) & 1 | (bits >> (7 + i)) & 2 | (bits >> (14 + i)) & 4 | (bits >> (21 + i)) & 8; \
-  if ((bits & (0x01010101 << i)) && z > dstz[i]) dstz[i] = z + pixel; } while (0)
-#define DO_PIXEL_HFLIP(i) do { \
-  pixel = (bits >> (7 - i)) & 1 | (bits >> (14 - i)) & 2 | (bits >> (21 - i)) & 4 | (bits >> (28 - i)) & 8; \
-  if ((bits & (0x80808080 >> i)) && z > dstz[i]) dstz[i] = z + pixel; } while (0)
-#define READ_BITS(ta, tile) (addr = &ppu->vram[((ta) + (tile) * 16) & 0x7fff], addr[0] | addr[8] << 16)
-  enum { kPaletteShift = 6 };
-  if (!IS_SCREEN_ENABLED(ppu, sub, layer))
-    return;  // layer is completely hidden
+/* Decode once per tile row, then compose packed nibbles. The clipping,
+   tilemap wrap, palette and per-pixel priority rules match the reference PPU. */
+static void PpuDrawBackground_wide(Ppu *ppu,uint y,bool sub,uint layer,
+                                    PpuZbufType zhi,PpuZbufType zlo,bool four_bpp) {
   PpuWindows win;
-  IS_SCREEN_WINDOWED(ppu, sub, layer) ? PpuWindows_Calc(&win, ppu, layer) : PpuWindows_Clear(&win, ppu, layer);
-  y += ppu->vScroll[layer];
-  int sc_offs = PPU_bgTilemapAdr(ppu, layer) + (((y >> 3) & 0x1f) << 5);
-  if ((y & 0x100) && PPU_bgTilemapHigher(ppu, layer))
-    sc_offs += PPU_bgTilemapWider(ppu, layer) ? 0x800 : 0x400;
-  const uint16 *tps[2] = {
-    &ppu->vram[sc_offs & 0x7fff],
-    &ppu->vram[sc_offs + (PPU_bgTilemapWider(ppu, layer) ? 0x400 : 0) & 0x7fff]
-  };
-  int tileadr = PPU_bgTileAdr(ppu, layer), pixel;
-  int tileadr1 = tileadr + 7 - (y & 0x7), tileadr0 = tileadr + (y & 0x7);
-  const uint16 *addr;
-  for (size_t windex = 0; windex < win.nr; windex++) {
-    if (win.bits & (1 << windex))
-      continue;  // layer is disabled for this window part
-    uint x = win.edges[windex] + ppu->hScroll[layer];
-    uint w = win.edges[windex + 1] - win.edges[windex];
-    PpuZbufType *dstz = ppu->bgBuffers[sub].data + win.edges[windex] + kPpuExtraLeftRight;
-    const uint16 *tp = tps[x >> 8 & 1] + ((x >> 3) & 0x1f);
-    const uint16 *tp_last = tps[x >> 8 & 1] + 31;
-    const uint16 *tp_next = tps[(x >> 8 & 1) ^ 1];
-#define NEXT_TP() if (tp != tp_last) tp += 1; else tp = tp_next, tp_next = tp_last - 31, tp_last = tp + 31;
-    // Handle clipped pixels on left side
-    if (x & 7) {
-      int curw = IntMin(8 - (x & 7), w);
-      w -= curw;
-      uint32 tile = *tp;
-      NEXT_TP();
-      int ta = (tile & 0x8000) ? tileadr1 : tileadr0;
-      PpuZbufType z = (tile & 0x2000) ? zhi : zlo;
-      uint32 bits = READ_BITS(ta, tile & 0x3ff);
-      if (bits) {
-        z += ((tile & 0x1c00) >> kPaletteShift);
-        if (tile & 0x4000) {
-          bits >>= (x & 7), x += curw;
-          do DO_PIXEL(0); while (bits >>= 1, dstz++, --curw);
-        } else {
-          bits <<= (x & 7), x += curw;
-          do DO_PIXEL_HFLIP(0); while (bits <<= 1, dstz++, --curw);
-        }
-      } else {
-        dstz += curw;
-      }
-    }
-    // Handle full tiles in the middle
-    while (w >= 8) {
-      uint32 tile = *tp;
-      NEXT_TP();
-      int ta = (tile & 0x8000) ? tileadr1 : tileadr0;
-      PpuZbufType z = (tile & 0x2000) ? zhi : zlo;
-      uint32 bits = READ_BITS(ta, tile & 0x3ff);
-      if (bits) {
-        z += ((tile & 0x1c00) >> kPaletteShift);
-        if (tile & 0x4000) {
-          DO_PIXEL(0); DO_PIXEL(1); DO_PIXEL(2); DO_PIXEL(3);
-          DO_PIXEL(4); DO_PIXEL(5); DO_PIXEL(6); DO_PIXEL(7);
-        } else {
-          DO_PIXEL_HFLIP(0); DO_PIXEL_HFLIP(1); DO_PIXEL_HFLIP(2); DO_PIXEL_HFLIP(3);
-          DO_PIXEL_HFLIP(4); DO_PIXEL_HFLIP(5); DO_PIXEL_HFLIP(6); DO_PIXEL_HFLIP(7);
+  if(IS_SCREEN_WINDOWED(ppu,sub,layer)) PpuWindows_Calc(&win,ppu,layer);
+  else PpuWindows_Clear(&win,ppu,layer);
+  unsigned base=PPU_bgTileAdr(ppu,layer);
+  for(unsigned span=0;span<win.nr;span++) {
+    if(win.bits&(1u<<span)) continue;
+    int sx=win.edges[span], end=win.edges[span+1];
+    PpuZbufType *dst=ppu->bgBuffers[sub].data+sx+kPpuExtraLeftRight;
+    while(sx<end) {
+      PpuWideTile sample={.run=8};
+      bool valid=ppu->wideTile(ppu,layer,sx,y,&sample);
+      unsigned count=UintMin(sample.run,end-sx);
+      if(valid) {
+        unsigned offset=sample.x&7, tile=sample.tile;
+        count=UintMin(count,8-offset);
+        unsigned row=sample.y&7;
+        if(tile&0x8000) row=7-row;
+        unsigned address=(base+(tile&1023)*(four_bpp?16:8)+row)&0x7fff;
+        uint32_t bits=ppu->vram[address];
+        if(four_bpp) bits|=(uint32_t)ppu->vram[(address+8)&0x7fff]<<16;
+        if(bits) {
+          uint32_t packed=four_bpp?PpuDecode4(bits,(tile&0x4000)!=0):PpuDecode2(bits,(tile&0x4000)!=0);
+          packed>>=offset*4;
+          PpuZbufType z=((tile&0x2000)?zhi:zlo)+((tile&0x1c00)>>(four_bpp?6:8));
+          for(unsigned i=0;i<count;i++,packed>>=4) {
+            unsigned color=packed&15;
+            if(color && z>dst[i]) dst[i]=z+color;
+          }
         }
       }
-      dstz += 8, w -= 8;
-    }
-    // Handle remaining clipped part
-    if (w) {
-      uint32 tile = *tp;
-      int ta = (tile & 0x8000) ? tileadr1 : tileadr0;
-      PpuZbufType z = (tile & 0x2000) ? zhi : zlo;
-      uint32 bits = READ_BITS(ta, tile & 0x3ff);
-      if (bits) {
-        z += ((tile & 0x1c00) >> kPaletteShift);
-        if (tile & 0x4000) {
-          do DO_PIXEL(0); while (bits >>= 1, dstz++, --w);
-        } else {
-          do DO_PIXEL_HFLIP(0); while (bits <<= 1, dstz++, --w);
-        }
-      }
+      assert(count>0);
+      sx+=count; dst+=count;
     }
   }
-#undef READ_BITS
-#undef DO_PIXEL
-#undef DO_PIXEL_HFLIP
 }
 
-// Draw a whole line of a 2bpp background layer into bgBuffers
-static void PpuDrawBackground_2bpp(Ppu *ppu, uint y, bool sub, uint layer, PpuZbufType zhi, PpuZbufType zlo) {
-#define DO_PIXEL(i) do { \
-  pixel = (bits >> i) & 1 | (bits >> (7 + i)) & 2; \
-  if (pixel && z > dstz[i]) dstz[i] = z + pixel; } while (0)
-#define DO_PIXEL_HFLIP(i) do { \
-  pixel = (bits >> (7 - i)) & 1 | (bits >> (14 - i)) & 2; \
-  if (pixel && z > dstz[i]) dstz[i] = z + pixel; } while (0)
-/* BG3 tiles 0x3C0-0x3FF come from the PT-BR accent font (see ptbr.h). */
-#define READ_BITS(ta, tile) ((layer == 2 && (tile) >= 0x3C0) ? \
-    (addr = &g_smw_extra_font[((tile) - 0x3C0) * 8 + ((ta) - tileadr)], addr[0]) : \
-    (addr = &ppu->vram[(ta) + (tile) * 8 & 0x7fff], addr[0]))
-  enum { kPaletteShift = 8 };
-  if (!IS_SCREEN_ENABLED(ppu, sub, layer))
-    return;  // layer is completely hidden
-  PpuWindows win;
-  IS_SCREEN_WINDOWED(ppu, sub, layer) ? PpuWindows_Calc(&win, ppu, layer) : PpuWindows_Clear(&win, ppu, layer);
-  y += ppu->vScroll[layer];
-  int sc_offs = PPU_bgTilemapAdr(ppu, layer) + (((y >> 3) & 0x1f) << 5);
-  if ((y & 0x100) && PPU_bgTilemapHigher(ppu, layer))
-    sc_offs += PPU_bgTilemapWider(ppu, layer) ? 0x800 : 0x400;
-  const uint16 *tps[2] = {
-    &ppu->vram[sc_offs & 0x7fff],
-    &ppu->vram[sc_offs + (PPU_bgTilemapWider(ppu, layer) ? 0x400 : 0) & 0x7fff]
+/* Packed tile rows shared by regular and wide VRAM bands. */
+static inline void PpuDrawVramSpan(Ppu *ppu,unsigned layer,PpuZbufType *dst,
+                                 unsigned width,unsigned x,unsigned y,
+                                 PpuZbufType zhi,PpuZbufType zlo,bool four_bpp) {
+  int sc = PPU_bgTilemapAdr(ppu, layer) + (((y >> 3) & 31) << 5);
+  if ((y & 256) && PPU_bgTilemapHigher(ppu, layer))
+    sc += PPU_bgTilemapWider(ppu, layer) ? 0x800 : 0x400;
+  const uint16_t *maps[2] = {
+    ppu->vram + (sc & 0x7fff),
+    ppu->vram + ((sc + (PPU_bgTilemapWider(ppu, layer) ? 0x400 : 0)) & 0x7fff)
   };
-  int tileadr = PPU_bgTileAdr(ppu, layer), pixel;
-  int tileadr1 = tileadr + 7 - (y & 0x7), tileadr0 = tileadr + (y & 0x7);
-
-  const uint16 *addr;
-  for (size_t windex = 0; windex < win.nr; windex++) {
-    if (win.bits & (1 << windex))
-      continue;  // layer is disabled for this window part
-    uint x = win.edges[windex] + ppu->hScroll[layer];
-    uint w = win.edges[windex + 1] - win.edges[windex];
-    PpuZbufType *dstz = ppu->bgBuffers[sub].data + win.edges[windex] + kPpuExtraLeftRight;
-    const uint16 *tp = tps[x >> 8 & 1] + ((x >> 3) & 0x1f);
-    const uint16 *tp_last = tps[x >> 8 & 1] + 31;
-    const uint16 *tp_next = tps[(x >> 8 & 1) ^ 1];
-
-#define NEXT_TP() if (tp != tp_last) tp += 1; else tp = tp_next, tp_next = tp_last - 31, tp_last = tp + 31;
-    // Handle clipped pixels on left side
-    if (x & 7) {
-      int curw = IntMin(8 - (x & 7), w);
-      w -= curw;
-      uint32 tile = *tp;
-      NEXT_TP();
-      int ta = (tile & 0x8000) ? tileadr1 : tileadr0;
-      PpuZbufType z = (tile & 0x2000) ? zhi : zlo;
-      uint32 bits = READ_BITS(ta, tile & 0x3ff);
+  int base = PPU_bgTileAdr(ppu, layer);
+  int rows[2] = {base + (y & 7), base + 7 - (y & 7)};
+    const uint16_t *tileptr = maps[x >> 8 & 1] + (x >> 3 & 31);
+    const uint16_t *last = maps[x >> 8 & 1] + 31;
+    const uint16_t *next = maps[(x >> 8 & 1) ^ 1];
+    while (width) {
+      uint16_t tile = *tileptr;
+      if (tileptr != last) tileptr++;
+      else { tileptr = next; next = last - 31; last = tileptr + 31; }
+      unsigned offset = x & 7;
+      unsigned count = UintMin(8 - offset, width);
+      unsigned row = rows[tile >> 15] + (tile & 1023) * (four_bpp ? 16 : 8);
+      /* BG3: as peças 0x3C0-0x3FF vêm da fonte com acentos (ptbr.h). */
+      const uint16_t *planes = (!four_bpp && layer == 2 && (tile & 1023) >= 0x3C0)
+          ? g_smw_extra_font + ((tile & 1023) - 0x3C0) * 8 + (rows[tile >> 15] - base)
+          : ppu->vram + (row & 0x7fff);
+      uint32_t bits = planes[0];
+      if (four_bpp) bits |= (uint32_t)planes[8] << 16;
       if (bits) {
-        z += ((tile & 0x1c00) >> kPaletteShift);
-        if (tile & 0x4000) {
-          bits >>= (x & 7), x += curw;
-          do DO_PIXEL(0); while (bits >>= 1, dstz++, --curw);
+        uint32_t packed = four_bpp ? PpuDecode4(bits, (tile & 0x4000) != 0)
+                                   : PpuDecode2(bits, (tile & 0x4000) != 0);
+        packed >>= offset * 4;
+        PpuZbufType z = ((tile & 0x2000) ? zhi : zlo) +
+                        ((tile & 0x1c00) >> (four_bpp ? 6 : 8));
+#define PIXEL(i) do { unsigned color = packed >> ((i) * 4) & 15; \
+  if (color && z > dst[i]) dst[i] = z + color; } while (0)
+        if (count == 8) {
+          PIXEL(0); PIXEL(1); PIXEL(2); PIXEL(3);
+          PIXEL(4); PIXEL(5); PIXEL(6); PIXEL(7);
         } else {
-          bits <<= (x & 7), x += curw;
-          do DO_PIXEL_HFLIP(0); while (bits <<= 1, dstz++, --curw);
+          for (unsigned i = 0; i < count; i++) {
+            unsigned color = packed & 15;
+            if (color && z > dst[i]) dst[i] = z + color;
+            packed >>= 4;
+          }
         }
+#undef PIXEL
+      }
+      dst += count; x += count; width -= count;
+    }
+}
+
+/* Resolve only side terrain through Map16. Geometry is computed per band;
+ * HDMA/IRQ changes remain visible on each scanline. */
+static void PpuDrawPreparedWide(Ppu *ppu,uint y,bool sub,uint layer,
+                              PpuZbufType zhi,PpuZbufType zlo,bool four_bpp) {
+  PpuWindows win;
+  if(IS_SCREEN_WINDOWED(ppu,sub,layer)) PpuWindows_Calc(&win,ppu,layer);
+  else PpuWindows_Clear(&win,ppu,layer);
+  unsigned base=PPU_bgTileAdr(ppu,layer);
+  for(unsigned windex=0;windex<win.nr;windex++) {
+    if(win.bits&(1u<<windex)) continue;
+    int sx=win.edges[windex], end=win.edges[windex+1];
+    while(sx<end) {
+      PpuWideSpan span;
+      bool visible=ppu->wideSpan(ppu,layer,sx,y,&span);
+      int right=IntMin(end,span.end);
+      assert(right>sx);
+      if(!visible) { sx=right; continue; }
+      unsigned width=right-sx;
+      PpuZbufType *dst=ppu->bgBuffers[sub].data+sx+kPpuExtraLeftRight;
+      if(!span.map16) {
+        PpuDrawVramSpan(ppu,layer,dst,width,span.x,span.y,zhi,zlo,four_bpp);
       } else {
-        dstz += curw;
-      }
-    }
-    // Handle full tiles in the middle
-    while (w >= 8) {
-      uint32 tile = *tp;
-      NEXT_TP();
-      int ta = (tile & 0x8000) ? tileadr1 : tileadr0;
-      PpuZbufType z = (tile & 0x2000) ? zhi : zlo;
-      uint32 bits = READ_BITS(ta, tile & 0x3ff);
-      if (bits) {
-        z += ((tile & 0x1c00) >> kPaletteShift);
-        if (tile & 0x4000) {
-          DO_PIXEL(0); DO_PIXEL(1); DO_PIXEL(2); DO_PIXEL(3);
-          DO_PIXEL(4); DO_PIXEL(5); DO_PIXEL(6); DO_PIXEL(7);
-        } else {
-          DO_PIXEL_HFLIP(0); DO_PIXEL_HFLIP(1); DO_PIXEL_HFLIP(2); DO_PIXEL_HFLIP(3);
-          DO_PIXEL_HFLIP(4); DO_PIXEL_HFLIP(5); DO_PIXEL_HFLIP(6); DO_PIXEL_HFLIP(7);
+        int x=span.x;
+        int logical=sx;
+        unsigned row=span.y&7;
+        while(width) {
+          uint16_t tile;
+          bool valid=ppu->wideMapTile(layer,x,span.y,&tile);
+          unsigned offset=x&7;
+          /* Retain v006's eight-pixel skip for a missing side tile. That
+           * skip may straddle the native-band boundary; do not expose pixels
+           * that the previous sampler skipped in a moving layer-2 scene. */
+          unsigned count=valid?UintMin(8-offset,width):UintMin(8,end-logical);
+          if(valid) {
+            unsigned address=(base+(tile&1023)*(four_bpp?16:8)+((tile&0x8000)?7-row:row))&0x7fff;
+            uint32_t bits=ppu->vram[address];
+            if(four_bpp) bits|=(uint32_t)ppu->vram[(address+8)&0x7fff]<<16;
+            if(bits) {
+              uint32_t packed=four_bpp?PpuDecode4(bits,(tile&0x4000)!=0):PpuDecode2(bits,(tile&0x4000)!=0);
+              packed>>=offset*4;
+              PpuZbufType z=((tile&0x2000)?zhi:zlo)+((tile&0x1c00)>>(four_bpp?6:8));
+#define PIXEL(i) do { unsigned color=packed>>((i)*4)&15; \
+  if(color && z>dst[i]) dst[i]=z+color; } while(0)
+              if(count==8) {
+                PIXEL(0); PIXEL(1); PIXEL(2); PIXEL(3);
+                PIXEL(4); PIXEL(5); PIXEL(6); PIXEL(7);
+              } else {
+                for(unsigned i=0;i<count;i++,packed>>=4) {
+                  unsigned color=packed&15;
+                  if(color && z>dst[i]) dst[i]=z+color;
+                }
+              }
+#undef PIXEL
+            }
+          }
+          dst+=count; x+=count; logical+=count;
+          if(count>width) { right+=count-width; width=0; }
+          else width-=count;
         }
       }
-      dstz += 8, w -= 8;
-    }
-    // Handle remaining clipped part
-    if (w) {
-      uint32 tile = *tp;
-      int ta = (tile & 0x8000) ? tileadr1 : tileadr0;
-      PpuZbufType z = (tile & 0x2000) ? zhi : zlo;
-      uint32 bits = READ_BITS(ta, tile & 0x3ff);
-      if (bits) {
-        z += ((tile & 0x1c00) >> kPaletteShift);
-        if (tile & 0x4000) {
-          do DO_PIXEL(0); while (bits >>= 1, dstz++, --w);
-        } else {
-          do DO_PIXEL_HFLIP(0); while (bits <<= 1, dstz++, --w);
-        }
-      }
+      sx=right;
     }
   }
-#undef NEXT_TP
-#undef READ_BITS
-#undef DO_PIXEL
-#undef DO_PIXEL_HFLIP
 }
 
+static void PpuDrawBackground_tiles(Ppu *ppu,uint y,bool sub,uint layer,
+                                    PpuZbufType zhi,PpuZbufType zlo,bool four_bpp) {
+  if(!IS_SCREEN_ENABLED(ppu,sub,layer)) return;
+  if(ppu->wideSpan) { PpuDrawPreparedWide(ppu,y,sub,layer,zhi,zlo,four_bpp); return; }
+  if(ppu->wideTile) { PpuDrawBackground_wide(ppu,y,sub,layer,zhi,zlo,four_bpp); return; }
+  PpuWindows win;
+  if(IS_SCREEN_WINDOWED(ppu,sub,layer)) PpuWindows_Calc(&win,ppu,layer);
+  else PpuWindows_Clear(&win,ppu,layer);
+  for(unsigned i=0;i<win.nr;i++) {
+    if(win.bits&(1u<<i)) continue;
+    PpuDrawVramSpan(ppu,layer,ppu->bgBuffers[sub].data+win.edges[i]+kPpuExtraLeftRight,
+      win.edges[i+1]-win.edges[i],win.edges[i]+ppu->hScroll[layer],
+      y+ppu->vScroll[layer],zhi,zlo,four_bpp);
+  }
+}
+static void PpuDrawBackground_4bpp(Ppu *ppu, uint y, bool sub, uint layer, PpuZbufType hi, PpuZbufType lo) {
+  PpuDrawBackground_tiles(ppu, y, sub, layer, hi, lo, true);
+}
+static void PpuDrawBackground_2bpp(Ppu *ppu, uint y, bool sub, uint layer, PpuZbufType hi, PpuZbufType lo) {
+  PpuDrawBackground_tiles(ppu, y, sub, layer, hi, lo, false);
+}
+
+/* Mosaic cells stay anchored at native logical X=0, including signed side
+ * columns. Sample through the wide projection before repeating a pixel;
+ * native mosaicModulo[] cannot be indexed with those negative columns. */
+static void PpuDrawWideMosaic(Ppu *ppu,unsigned y,bool sub,unsigned layer,
+                             PpuZbufType zhi,PpuZbufType zlo,bool four_bpp) {
+  if(!IS_SCREEN_ENABLED(ppu,sub,layer)) return;
+  PpuWindows win;
+  if(IS_SCREEN_WINDOWED(ppu,sub,layer)) PpuWindows_Calc(&win,ppu,layer);
+  else PpuWindows_Clear(&win,ppu,layer);
+  int size=PPU_mosaicSize(ppu), sy=ppu->mosaicModulo[y];
+  unsigned base=PPU_bgTileAdr(ppu,layer);
+  for(unsigned w=0;w<win.nr;w++) {
+    if(win.bits&(1u<<w)) continue;
+    int sx=win.edges[w],end=win.edges[w+1];
+    while(sx<end) {
+      int phase=sx%size;
+      if(phase<0) phase+=size;
+      unsigned count=UintMin(size-phase,end-sx);
+      PpuWideTile sample;
+      if(ppu->wideTile(ppu,layer,sx-phase,sy,&sample)) {
+        unsigned row=sample.y&7, tile=sample.tile;
+        if(tile&0x8000) row=7-row;
+        unsigned address=(base+(tile&1023)*(four_bpp?16:8)+row)&0x7fff;
+        uint32_t bits=ppu->vram[address];
+        if(four_bpp) bits|=(uint32_t)ppu->vram[(address+8)&0x7fff]<<16;
+        uint32_t packed=four_bpp?PpuDecode4(bits,(tile&0x4000)!=0):PpuDecode2(bits,(tile&0x4000)!=0);
+        unsigned color=(packed>>((sample.x&7)*4))&15;
+        if(color) {
+          PpuZbufType z=((tile&0x2000)?zhi:zlo)+((tile&0x1c00)>>(four_bpp?6:8));
+          PpuZbufType *dst=ppu->bgBuffers[sub].data+sx+kPpuExtraLeftRight;
+          for(unsigned i=0;i<count;i++) if(z>dst[i]) dst[i]=z+color;
+        }
+      }
+      sx+=count;
+    }
+  }
+}
 
 // Draw a whole line of a 4bpp background layer into bgBuffers, with mosaic applied
 static void PpuDrawBackground_4bpp_mosaic(Ppu *ppu, uint y, bool sub, uint layer, PpuZbufType zhi, PpuZbufType zlo) {
+  if(ppu->wideTile) { PpuDrawWideMosaic(ppu,y,sub,layer,zhi,zlo,true); return; }
 #define GET_PIXEL() pixel = (bits) & 1 | (bits >> 7) & 2 | (bits >> 14) & 4 | (bits >> 21) & 8
 #define GET_PIXEL_HFLIP() pixel = (bits >> 7) & 1 | (bits >> 14) & 2 | (bits >> 21) & 4 | (bits >> 28) & 8
 #define READ_BITS(ta, tile) (addr = &ppu->vram[((ta) + (tile) * 16) & 0x7fff], addr[0] | addr[8] << 16)
@@ -419,13 +483,13 @@ static void PpuDrawBackground_4bpp_mosaic(Ppu *ppu, uint y, bool sub, uint layer
   int sc_offs = PPU_bgTilemapAdr(ppu, layer) + (((y >> 3) & 0x1f) << 5);
   if ((y & 0x100) && PPU_bgTilemapHigher(ppu, layer))
     sc_offs += PPU_bgTilemapWider(ppu, layer) ? 0x800 : 0x400;
-  const uint16 *tps[2] = {
+  const uint16_t *tps[2] = {
     &ppu->vram[sc_offs & 0x7fff],
     &ppu->vram[sc_offs + (PPU_bgTilemapWider(ppu, layer) ? 0x400 : 0) & 0x7fff]
   };
   int tileadr = PPU_bgTileAdr(ppu, layer), pixel;
   int tileadr1 = tileadr + 7 - (y & 0x7), tileadr0 = tileadr + (y & 0x7);
-  const uint16 *addr;
+  const uint16_t *addr;
   for (size_t windex = 0; windex < win.nr; windex++) {
     if (win.bits & (1 << windex))
       continue;  // layer is disabled for this window part
@@ -433,17 +497,17 @@ static void PpuDrawBackground_4bpp_mosaic(Ppu *ppu, uint y, bool sub, uint layer
     PpuZbufType *dstz = ppu->bgBuffers[sub].data + sx + kPpuExtraLeftRight;
     PpuZbufType *dstz_end = ppu->bgBuffers[sub].data + win.edges[windex + 1] + kPpuExtraLeftRight;
     uint x = sx + ppu->hScroll[layer];
-    const uint16 *tp = tps[x >> 8 & 1] + ((x >> 3) & 0x1f);
-    const uint16 *tp_last = tps[x >> 8 & 1] + 31, *tp_next = tps[(x >> 8 & 1) ^ 1];
+    const uint16_t *tp = tps[x >> 8 & 1] + ((x >> 3) & 0x1f);
+    const uint16_t *tp_last = tps[x >> 8 & 1] + 31, *tp_next = tps[(x >> 8 & 1) ^ 1];
     x &= 7;
     int mosaic_size = PPU_mosaicSize(ppu);
     int w = mosaic_size - (sx - ppu->mosaicModulo[sx]);
     do {
       w = IntMin(w, dstz_end - dstz);
-      uint32 tile = *tp;
+      uint32_t tile = *tp;
       int ta = (tile & 0x8000) ? tileadr1 : tileadr0;
       PpuZbufType z = (tile & 0x2000) ? zhi : zlo;
-      uint32 bits = READ_BITS(ta, tile & 0x3ff);
+      uint32_t bits = READ_BITS(ta, tile & 0x3ff);
       if (tile & 0x4000) bits >>= x, GET_PIXEL(); else bits <<= x, GET_PIXEL_HFLIP();
       if (pixel) {
         pixel += (tile & 0x1c00) >> kPaletteShift;
@@ -466,8 +530,10 @@ static void PpuDrawBackground_4bpp_mosaic(Ppu *ppu, uint y, bool sub, uint layer
 
 // Draw a whole line of a 2bpp background layer into bgBuffers, with mosaic applied
 static void PpuDrawBackground_2bpp_mosaic(Ppu *ppu, int y, bool sub, uint layer, PpuZbufType zhi, PpuZbufType zlo) {
+  if(ppu->wideTile) { PpuDrawWideMosaic(ppu,y,sub,layer,zhi,zlo,false); return; }
 #define GET_PIXEL() pixel = (bits) & 1 | (bits >> 7) & 2
 #define GET_PIXEL_HFLIP() pixel = (bits >> 7) & 1 | (bits >> 14) & 2
+/* BG3 tiles 0x3C0-0x3FF come from the PT-BR accent font (see ptbr.h). */
 #define READ_BITS(ta, tile) ((layer == 2 && (tile) >= 0x3C0) ? \
     (addr = &g_smw_extra_font[((tile) - 0x3C0) * 8 + ((ta) - tileadr)], addr[0]) : \
     (addr = &ppu->vram[((ta) + (tile) * 8) & 0x7fff], addr[0]))
@@ -480,13 +546,13 @@ static void PpuDrawBackground_2bpp_mosaic(Ppu *ppu, int y, bool sub, uint layer,
   int sc_offs = PPU_bgTilemapAdr(ppu, layer) + (((y >> 3) & 0x1f) << 5);
   if ((y & 0x100) && PPU_bgTilemapHigher(ppu, layer))
     sc_offs += PPU_bgTilemapWider(ppu, layer) ? 0x800 : 0x400;
-  const uint16 *tps[2] = {
+  const uint16_t *tps[2] = {
     &ppu->vram[sc_offs & 0x7fff],
     &ppu->vram[sc_offs + (PPU_bgTilemapWider(ppu, layer) ? 0x400 : 0) & 0x7fff]
   };
   int tileadr = PPU_bgTileAdr(ppu, layer), pixel;
   int tileadr1 = tileadr + 7 - (y & 0x7), tileadr0 = tileadr + (y & 0x7);
-  const uint16 *addr;
+  const uint16_t *addr;
   for (size_t windex = 0; windex < win.nr; windex++) {
     if (win.bits & (1 << windex))
       continue;  // layer is disabled for this window part
@@ -494,17 +560,17 @@ static void PpuDrawBackground_2bpp_mosaic(Ppu *ppu, int y, bool sub, uint layer,
     PpuZbufType *dstz = ppu->bgBuffers[sub].data + sx + kPpuExtraLeftRight;
     PpuZbufType *dstz_end = ppu->bgBuffers[sub].data + win.edges[windex + 1] + kPpuExtraLeftRight;
     uint x = sx + ppu->hScroll[layer];
-    const uint16 *tp = tps[x >> 8 & 1] + ((x >> 3) & 0x1f);
-    const uint16 *tp_last = tps[x >> 8 & 1] + 31, *tp_next = tps[(x >> 8 & 1) ^ 1];
+    const uint16_t *tp = tps[x >> 8 & 1] + ((x >> 3) & 0x1f);
+    const uint16_t *tp_last = tps[x >> 8 & 1] + 31, *tp_next = tps[(x >> 8 & 1) ^ 1];
     x &= 7;
     int mosaic_size = PPU_mosaicSize(ppu);
     int w = mosaic_size - (sx - ppu->mosaicModulo[sx]);
     do {
       w = IntMin(w, dstz_end - dstz);
-      uint32 tile = *tp;
+      uint32_t tile = *tp;
       int ta = (tile & 0x8000) ? tileadr1 : tileadr0;
       PpuZbufType z = (tile & 0x2000) ? zhi : zlo;
-      uint32 bits = READ_BITS(ta, tile & 0x3ff);
+      uint32_t bits = READ_BITS(ta, tile & 0x3ff);
       if (tile & 0x4000) bits >>= x, GET_PIXEL(); else bits <<= x, GET_PIXEL_HFLIP();
       if (pixel) {
         pixel += (tile & 0x1c00) >> kPaletteShift;
@@ -546,10 +612,10 @@ static void PpuDrawBackground_mode7(Ppu *ppu, uint y, bool sub, PpuZbufType z) {
   uint8 mosaic_enabled = PPU_mosaicEnabled(ppu, 0);
   if (mosaic_enabled)
     y = ppu->mosaicModulo[y];
-  uint32 ry = PPU_m7yFlip(ppu) ? 255 - y : y;
-  uint32 m7startX = (ppu->m7matrix[0] * clippedH & ~63) + (ppu->m7matrix[1] * ry & ~63) +
+  uint32_t ry = PPU_m7yFlip(ppu) ? 255 - y : y;
+  uint32_t m7startX = (ppu->m7matrix[0] * clippedH & ~63) + (ppu->m7matrix[1] * ry & ~63) +
     (ppu->m7matrix[1] * clippedV & ~63) + (xCenter << 8);
-  uint32 m7startY = (ppu->m7matrix[2] * clippedH & ~63) + (ppu->m7matrix[3] * ry & ~63) +
+  uint32_t m7startY = (ppu->m7matrix[2] * clippedH & ~63) + (ppu->m7matrix[3] * ry & ~63) +
     (ppu->m7matrix[3] * clippedV & ~63) + (yCenter << 8);
   for (size_t windex = 0; windex < win.nr; windex++) {
     if (win.bits & (1 << windex))
@@ -557,18 +623,18 @@ static void PpuDrawBackground_mode7(Ppu *ppu, uint y, bool sub, PpuZbufType z) {
     int x = win.edges[windex], x2 = win.edges[windex + 1], tile;
     PpuZbufType *dstz = ppu->bgBuffers[sub].data + x + kPpuExtraLeftRight;
     PpuZbufType *dstz_end = ppu->bgBuffers[sub].data + x2 + kPpuExtraLeftRight;
-    uint32 rx = PPU_m7xFlip(ppu) ? 255 - x : x;
-    uint32 xpos = m7startX + ppu->m7matrix[0] * rx;
-    uint32 ypos = m7startY + ppu->m7matrix[2] * rx;
-    uint32 dx = PPU_m7xFlip(ppu) ? -ppu->m7matrix[0] : ppu->m7matrix[0];
-    uint32 dy = PPU_m7xFlip(ppu) ? -ppu->m7matrix[2] : ppu->m7matrix[2];
-    uint32 outside_value = PPU_m7largeField(ppu) ? 0x3ffff : 0xffffffff;
+    uint32_t rx = PPU_m7xFlip(ppu) ? 255 - x : x;
+    uint32_t xpos = m7startX + ppu->m7matrix[0] * rx;
+    uint32_t ypos = m7startY + ppu->m7matrix[2] * rx;
+    uint32_t dx = PPU_m7xFlip(ppu) ? -ppu->m7matrix[0] : ppu->m7matrix[0];
+    uint32_t dy = PPU_m7xFlip(ppu) ? -ppu->m7matrix[2] : ppu->m7matrix[2];
+    uint32_t outside_value = PPU_m7largeField(ppu) ? 0x3ffff : 0xffffffff;
     bool char_fill = PPU_m7charFill(ppu);
     if (mosaic_enabled) {
       int w = PPU_mosaicSize(ppu) - (x - ppu->mosaicModulo[x]);
       do {
         w = IntMin(w, dstz_end - dstz);
-        if ((uint32)(xpos | ypos) > outside_value) {
+        if ((uint32_t)(xpos | ypos) > outside_value) {
           if (!char_fill)
             continue;
           tile = 0;
@@ -583,7 +649,7 @@ static void PpuDrawBackground_mode7(Ppu *ppu, uint y, bool sub, PpuZbufType z) {
       } while (xpos += dx * w, ypos += dy * w, dstz += w, w = PPU_mosaicSize(ppu), dstz_end - dstz != 0);
     } else {
       do {
-        if ((uint32)(xpos | ypos) > outside_value) {
+        if ((uint32_t)(xpos | ypos) > outside_value) {
           if (!char_fill)
             continue;
           tile = 0;
@@ -612,7 +678,7 @@ static void PpuDrawSprites(Ppu *ppu, uint y, uint sub, bool clear_backdrop) {
     PpuZbufType *src = ppu->objBuffer.data + left + kPpuExtraLeftRight;
     PpuZbufType *dst = ppu->bgBuffers[sub].data + left + kPpuExtraLeftRight;
     if (clear_backdrop) {
-      memcpy(dst, src, width * sizeof(uint16));
+      memcpy(dst, src, width * sizeof(uint16_t));
     } else {
       do {
         if (src[0] > dst[0])
@@ -666,16 +732,85 @@ static void PpuDrawBackgrounds(Ppu *ppu, int y, bool sub) {
   }
 }
 
+static void PpuPreparePalette(Ppu *ppu) {
+  unsigned brightness = PPU_brightness(ppu);
+  if (ppu->paletteValid && ppu->paletteBrightness == brightness) return;
+  ppu->backdropMathValid = 0;
+  ppu->layer3MathValid = 0;
+  for (unsigned i = 0; i < 256; i++) {
+    unsigned color = ppu->cgram[i];
+    ppu->paletteRgb[i] = PpuPackRgb(ppu->brightnessMult[color & 31],
+        ppu->brightnessMult[color >> 5 & 31], ppu->brightnessMult[color >> 10 & 31]);
+  }
+  ppu->paletteBrightness = brightness; ppu->paletteValid = true;
+}
+
+static inline uint32_t PpuBlendRgb(Ppu *ppu, unsigned a, unsigned b, bool half, bool subtract) {
+  unsigned r = a & 31, g = a >> 5 & 31, blue = a >> 10 & 31;
+  unsigned r2 = b & 31, g2 = b >> 5 & 31, b2 = b >> 10 & 31;
+  if (subtract) {
+    r = r >= r2 ? r - r2 : 0;
+    g = g >= g2 ? g - g2 : 0;
+    blue = blue >= b2 ? blue - b2 : 0;
+  } else { r += r2; g += g2; blue += b2; }
+  const uint8_t *map = half ? ppu->brightnessMultHalf : ppu->brightnessMult;
+  return PpuPackRgb(map[r], map[g], map[blue]);
+}
+
+/* SMW commonly puts BG2 on the subscreen and blends it with the main
+   backdrop. In that case the first operand is constant for the whole span.
+   Cache the 255 possible subscreen colours; index zero uses fixed colour and
+   deliberately bypasses halving, so is evaluated separately per span. */
+static const uint32_t *PpuPrepareBackdropPalette(Ppu *ppu, bool unclipped) {
+  unsigned control = ppu->cgadsub & 0xc0;
+  if (ppu->backdropMathControl != control) {
+    ppu->backdropMathControl = control;
+    ppu->backdropMathValid = 0;
+  }
+  uint32_t *colors = ppu->backdropMathRgb[unclipped];
+  if (!(ppu->backdropMathValid & (1u << unclipped))) {
+    unsigned main = unclipped ? ppu->cgram[0] : 0;
+    for (unsigned i = 1; i < 256; i++)
+      colors[i] = PpuBlendRgb(ppu, main, ppu->cgram[i], control & 0x40, control & 0x80);
+    ppu->backdropMathValid |= 1u << unclipped;
+  }
+  colors[0] = PpuBlendRgb(ppu, unclipped ? ppu->cgram[0] : 0, ppu->fixedColor,
+                          false, control & 0x80);
+  return colors;
+}
+
+/* Flooded rooms put 2bpp BG3 on the main screen and scenery/sprites on the
+ * subscreen. A BG3 colour is one of only 32 CGRAM entries. Build a palette
+ * row when actually needed, retaining the exact native blend and clipping.
+ * Entry zero is fixed colour, so refresh it without subscreen halving. */
+static void PpuPrepareLayer3Palette(Ppu *ppu, unsigned index) {
+  unsigned control = ppu->cgadsub & 0xc0;
+  if (ppu->layer3MathControl != control) {
+    ppu->layer3MathControl = control;
+    ppu->layer3MathValid = 0;
+  }
+  uint32_t *colors = ppu->layer3MathRgb[index];
+  unsigned main = ppu->cgram[index];
+  if (!(ppu->layer3MathValid & (1u << index))) {
+    for (unsigned i = 1; i < 256; i++)
+      colors[i] = PpuBlendRgb(ppu, main, ppu->cgram[i], control & 0x40, control & 0x80);
+    ppu->layer3MathValid |= 1u << index;
+  }
+  colors[0] = PpuBlendRgb(ppu, main, ppu->fixedColor, false, control & 0x80);
+}
+
 static NOINLINE void PpuDrawWholeLine(Ppu *ppu, uint y) {
   if (PPU_forcedBlank(ppu)) {
     uint8 *dst = &ppu->renderBuffer[(y - 1) * ppu->renderPitch];
-    size_t n = sizeof(uint32) * (256 + ppu->extraLeftRight * 2);
+    size_t n = sizeof(uint32_t) * (256 + ppu->extraLeftRight * 2);
     memset(dst, 0, n);
     return;
   }
 
+  PpuPreparePalette(ppu);
+
   // Default background is backdrop
-  ClearBackdrop(&ppu->bgBuffers[0]);
+  ClearBackdrop(&ppu->bgBuffers[0],ppu->wideTile!=NULL);
 
   // Render main screen
   PpuDrawBackgrounds(ppu, y, false);
@@ -683,7 +818,7 @@ static NOINLINE void PpuDrawWholeLine(Ppu *ppu, uint y) {
   // Render also the subscreen?
   bool rendered_subscreen = false;
   if (PPU_preventMathMode(ppu) != 3 && PPU_addSubscreen(ppu) && PPU_mathEnabled(ppu)) {
-    ClearBackdrop(&ppu->bgBuffers[1]);
+    ClearBackdrop(&ppu->bgBuffers[1],ppu->wideTile!=NULL);
     if (ppu->screenEnabled[1] != 0) {
       PpuDrawBackgrounds(ppu, y, true);
       rendered_subscreen = true;
@@ -697,41 +832,78 @@ static NOINLINE void PpuDrawWholeLine(Ppu *ppu, uint y) {
     0x00, 0xff, 0xff, 0x00,
     0xff, 0x00, 0xff, 0x00,
   };
-  uint32 cw_clip_math = ((cwin.bits & kCwBitsMod[PPU_clipMode(ppu)]) ^ kCwBitsMod[PPU_clipMode(ppu) + 4]) |
+  uint32_t cw_clip_math = ((cwin.bits & kCwBitsMod[PPU_clipMode(ppu)]) ^ kCwBitsMod[PPU_clipMode(ppu) + 4]) |
     ((cwin.bits & kCwBitsMod[PPU_preventMathMode(ppu)]) ^ kCwBitsMod[PPU_preventMathMode(ppu) + 4]) << 8;
 
-  uint32 *dst = (uint32*)&ppu->renderBuffer[(y - 1) * ppu->renderPitch], *dst_org = dst;
+  uint32_t *dst = (uint32_t*)&ppu->renderBuffer[(y - 1) * ppu->renderPitch], *dst_org = dst;
 
-  dst += (ppu->extraLeftRight - ppu->extraLeftCur);
+  if(!ppu->wideTile) dst += ppu->extraLeftRight;
 
-  uint32 windex = 0;
+  uint32_t windex = 0;
   do {
-    uint32 left = cwin.edges[windex] + kPpuExtraLeftRight, right = cwin.edges[windex + 1] + kPpuExtraLeftRight;
+    uint32_t left = cwin.edges[windex] + kPpuExtraLeftRight, right = cwin.edges[windex + 1] + kPpuExtraLeftRight;
     // If clip is set, then zero out the rgb values from the main screen.
-    uint32 clip_color_mask = (cw_clip_math & 1) ? 0x1f : 0;
-    uint32 math_enabled_cur = PPU_mathEnabled(ppu) & ((cw_clip_math & 0x100) ? -1 : 0);
-    uint32 fixed_color = ppu->fixedColor;
+    uint32_t clip_color_mask = (cw_clip_math & 1) ? 0x1f : 0;
+    uint32_t math_enabled_cur = PPU_mathEnabled(ppu) & ((cw_clip_math & 0x100) ? -1 : 0);
+    uint32_t fixed_color = ppu->fixedColor;
     if (math_enabled_cur == 0 || fixed_color == 0 && !PPU_halfColor(ppu) && !rendered_subscreen) {
       // Math is disabled (or has no effect), so can avoid the per-pixel maths check
-      uint32 i = left;
+      uint32_t i = left;
       do {
-        uint32 color = ppu->cgram[ppu->bgBuffers[0].data[i] & 0xff];
-        dst[0] = ppu->brightnessMult[color & clip_color_mask] |
-          ppu->brightnessMult[(color >> 5) & clip_color_mask] << 8 |
-          (uint32)ppu->brightnessMult[(color >> 10) & clip_color_mask] << 16;
+        dst[0] = clip_color_mask ? ppu->paletteRgb[ppu->bgBuffers[0].data[i] & 0xff]
+                                 : PpuPackRgb(0, 0, 0);
       } while (dst++, ++i < right);
+    } else if ((math_enabled_cur == 0x20 ||
+                (ppu->wideBackdropMath && math_enabled_cur == 0x30)) && PPU_addSubscreen(ppu)) {
+      const uint32_t *blended = PpuPrepareBackdropPalette(ppu, clip_color_mask != 0);
+      const uint32_t *plain = ppu->paletteRgb;
+      const PpuZbufType *main = ppu->bgBuffers[0].data;
+      const PpuZbufType *sub = ppu->bgBuffers[1].data;
+      uint32_t black = PpuPackRgb(0, 0, 0);
+      for (unsigned i = left; i < right; i++, dst++) {
+        unsigned pixel = main[i];
+        unsigned layer = pixel & 0xf00;
+        if(layer == 0x500) dst[0] = blended[sub[i] & 255];
+        else if(layer == 0x400 && (math_enabled_cur & 0x10)) {
+          /* Only the uncommon OBJ pixels require a general two-color blend.
+           * Terrain/backdrop pixels reuse the same palette lookup as levels. */
+          unsigned other = sub[i] & 255;
+          dst[0] = PpuBlendRgb(ppu, clip_color_mask ? ppu->cgram[pixel & 255] : 0,
+              other ? ppu->cgram[other] : fixed_color,
+              other && PPU_halfColor(ppu), PPU_subtractColor(ppu));
+        } else dst[0] = clip_color_mask ? plain[pixel & 255] : black;
+      }
+    } else if (math_enabled_cur == 0x24 && PPU_addSubscreen(ppu) && PPU_mode(ppu) == 1) {
+      const uint32_t *backdrop = PpuPrepareBackdropPalette(ppu, clip_color_mask != 0);
+      const PpuZbufType *main = ppu->bgBuffers[0].data, *sub = ppu->bgBuffers[1].data;
+      const uint32_t *plain = ppu->paletteRgb;
+      uint32_t ready = 0, black = PpuPackRgb(0, 0, 0);
+      for (unsigned i = left; i < right; i++, dst++) {
+        unsigned pixel = main[i], layer = pixel & 0xf00;
+        if (layer == 0x500 || (layer == 0x200 && !clip_color_mask)) dst[0] = backdrop[sub[i] & 255];
+        else if (layer == 0x200) {
+          unsigned index = pixel & 31, bit = 1u << index;
+          if (!(ready & bit)) { PpuPrepareLayer3Palette(ppu, index); ready |= bit; }
+          dst[0] = ppu->layer3MathRgb[index][sub[i] & 255];
+        } else dst[0] = clip_color_mask ? plain[pixel & 255] : black;
+      }
     } else {
       uint8 *half_color_map = PPU_halfColor(ppu) ? ppu->brightnessMultHalf : ppu->brightnessMult;
       // Store this in locals
       math_enabled_cur |= PPU_addSubscreen(ppu) << 8 | PPU_subtractColor(ppu) << 9;
       // Need to check for each pixel whether to use math or not based on the main screen layer.
-      uint32 i = left;
+      uint32_t i = left;
       do {
-        uint32 color = ppu->cgram[ppu->bgBuffers[0].data[i] & 0xff], color2;
-        uint8 main_layer = (ppu->bgBuffers[0].data[i] >> 8) & 0xf;
-        uint32 r = color & clip_color_mask;
-        uint32 g = (color >> 5) & clip_color_mask;
-        uint32 b = (color >> 10) & clip_color_mask;
+        uint16_t pixel_info=ppu->bgBuffers[0].data[i];
+        uint8 main_layer = (pixel_info >> 8) & 0xf;
+        if (!(math_enabled_cur & (1u << main_layer))) {
+          dst[0]=clip_color_mask?ppu->paletteRgb[pixel_info&255]:PpuPackRgb(0,0,0);
+          continue;
+        }
+        uint32_t color = ppu->cgram[pixel_info & 0xff], color2;
+        uint32_t r = color & clip_color_mask;
+        uint32_t g = (color >> 5) & clip_color_mask;
+        uint32_t b = (color >> 10) & clip_color_mask;
         uint8 *color_map = ppu->brightnessMult;
         if (math_enabled_cur & (1 << main_layer)) {
           if (math_enabled_cur & 0x100) {  // addSubscreen ?
@@ -742,7 +914,7 @@ static NOINLINE void PpuDrawWholeLine(Ppu *ppu, uint y) {
           } else {
             color2 = fixed_color, color_map = half_color_map;
           }
-          uint32 r2 = (color2 & 0x1f), g2 = ((color2 >> 5) & 0x1f), b2 = ((color2 >> 10) & 0x1f);
+          uint32_t r2 = (color2 & 0x1f), g2 = ((color2 >> 5) & 0x1f), b2 = ((color2 >> 10) & 0x1f);
           if (math_enabled_cur & 0x200) {  // subtractColor?
             r = (r >= r2) ? r - r2 : 0;
             g = (g >= g2) ? g - g2 : 0;
@@ -753,91 +925,96 @@ static NOINLINE void PpuDrawWholeLine(Ppu *ppu, uint y) {
             b += b2;
           }
         }
-        dst[0] = color_map[r] | color_map[g] << 8 | (uint32)color_map[b] << 16;
+        dst[0] = PpuPackRgb(color_map[r], color_map[g], color_map[b]);
       } while (dst++, ++i < right);
     }
   } while (cw_clip_math >>= 1, ++windex < cwin.nr);
 
 }
 
-static bool ppu_evaluateSprites(Ppu* ppu, int line) {
+static void PpuPrepareSpriteLists(Ppu *ppu) {
   static const uint8 spriteSizes[8][2] = {
     {8, 16}, {8, 32}, {8, 64}, {16, 32},
     {16, 64}, {32, 64}, {16, 32}, {16, 32}
   };
-
-  // TODO: iterate over oam normally to determine in-range sprites,
-  //   then iterate those in-range sprites in reverse for tile-fetching
-  // TODO: rectangular sprites, wierdness with sprites at -256
+  for (unsigned line = 0; line < 256; line++) ppu->spriteLines[line].count = 0;
   uint8_t index = PPU_objPriority(ppu) ? (ppu->oamaddl & 0xfe) : 0;
+  for (unsigned i = 0; i < 128; i++, index += 2) {
+    PpuSprite *s = &ppu->spriteCache[index >> 1];
+    unsigned high = ppu->highOam[index >> 3] >> (index & 7);
+    s->x = (ppu->oam[index] & 255) - ((high & 1) << 8);
+    if(ppu->wideTile && ppu->wideOamValid[index>>1]) s->x=ppu->wideOamX[index>>1];
+    s->y = ppu->oam[index] >> 8;
+    s->size = spriteSizes[PPU_objSize(ppu)][high >> 1 & 1];
+    s->attributes = ppu->oam[index + 1];
+    s->tileAddress = (s->attributes & 0x100) ? PPU_objTileAdr2(ppu) : PPU_objTileAdr1(ppu);
+    s->z = 0x80 + ((s->attributes & 0xe00) >> 5) +
+      (SPRITE_PRIO_TO_PRIO((s->attributes & 0x3000) >> 12, (s->attributes & 0x800) == 0) << 8);
+    if (s->x <= -(int)s->size-(ppu->wideTile?ppu->extraLeftCur:0)) continue;
+    if(ppu->wideTile && s->x>=256+ppu->extraRightCur) continue;
+    unsigned height = PPU_objInterlace(ppu) ? s->size / 2 : s->size;
+    for (unsigned row = 0; row < height; row++) {
+      PpuSpriteLine *list = &ppu->spriteLines[(s->y + row) & 255];
+      if (list->count < (ppu->wideTile?128:33)) list->sprite[list->count++] = index >> 1;
+    }
+  }
+  ppu->spriteListsValid = true;
+}
+
+static bool ppu_evaluateSprites(Ppu* ppu, int line) {
+  if (!ppu->spriteListsValid) PpuPrepareSpriteLists(ppu);
+  const PpuSpriteLine *list = &ppu->spriteLines[line];
   int spritesFound = 0;
   int tilesFound = 0;
-  for(int i = 0; i < 128; i++) {
-    uint8_t y = ppu->oam[index] >> 8;
-    // check if the sprite is on this line and get the sprite size
-    uint8_t row = line - y;
-    int spriteSize = spriteSizes[PPU_objSize(ppu)][(ppu->highOam[index >> 3] >> ((index & 7) + 1)) & 1];
-    int spriteHeight = PPU_objInterlace(ppu) ? spriteSize / 2 : spriteSize;
-    if(row < spriteHeight) {
-      // in y-range, get the x location, using the high bit as well
-      int x = ppu->oam[index] & 0xff;
-      x |= ((ppu->highOam[index >> 3] >> (index & 7)) & 1) << 8;
-      if(x > 255) x -= 512;
-      // if in x-range
-      if(x > -spriteSize) {
-        // break if we found 32 sprites already
-        spritesFound++;
-        if(spritesFound > 32) {
-          ppu->rangeOver = true;
+  for(unsigned i = 0; i < list->count; i++) {
+    const PpuSprite *s = &ppu->spriteCache[list->sprite[i]];
+    uint8_t row = line - s->y;
+    int spriteSize = s->size;
+    int x = s->x;
+    // break if we found 32 sprites already
+    spritesFound++;
+    if(spritesFound > 32 && !ppu->wideTile) {
+      ppu->rangeOver = true;
+      break;
+    }
+    // update row according to obj-interlace
+    if(PPU_objInterlace(ppu)) row = row * 2 + (ppu->evenFrame ? 0 : 1);
+    // get some data for the sprite and y-flip row if needed
+    int oam1 = s->attributes;
+    int objAdr = s->tileAddress;
+    if(oam1 & 0x8000) row = spriteSize - 1 - row;
+    // fetch all tiles in x-range
+    PpuZbufType z = s->z;
+
+    for(int col = 0; col < spriteSize; col += 8) {
+      if(col+x>-8-(ppu->wideTile?ppu->extraLeftCur:0) && col+x<256+(ppu->wideTile?ppu->extraRightCur:0)) {
+        // break if we found 34 8*1 slivers already
+        tilesFound++;
+        if(tilesFound > 34 && !ppu->wideTile) {
+          ppu->timeOver = true;
           break;
         }
-        // update row according to obj-interlace
-        if(PPU_objInterlace(ppu)) row = row * 2 + (ppu->evenFrame ? 0 : 1);
-        // get some data for the sprite and y-flip row if needed
-        int oam1 = ppu->oam[index + 1];
-        int tile = oam1 & 0xff;
-        int objAdr = (oam1 & 0x100) ? PPU_objTileAdr2(ppu) : PPU_objTileAdr1(ppu);
-        int palette = (oam1 & 0xe00) >> 9;
-        bool hFlipped = oam1 & 0x4000;
-        if(oam1 & 0x8000) row = spriteSize - 1 - row;
-        // fetch all tiles in x-range
-        int paletteBase = 0x80 + 16 * ((oam1 & 0xe00) >> 9);
-        int prio = SPRITE_PRIO_TO_PRIO((oam1 & 0x3000) >> 12, (oam1 & 0x800) == 0);
-        PpuZbufType z = paletteBase + (prio << 8);
+        // figure out which tile this uses, looping within 16x16 pages, and get it's data
+        int usedCol = oam1 & 0x4000 ? spriteSize - 1 - col : col;
+        int usedTile = ((((oam1 & 0xff) >> 4) + (row >> 3)) << 4) | (((oam1 & 0xf) + (usedCol >> 3)) & 0xf);
+        uint16_t *addr = &ppu->vram[(objAdr + usedTile * 16 + (row & 0x7)) & 0x7fff];
+        uint32_t plane = addr[0] | (uint32_t)addr[8] << 16;
+        uint32_t packed_pixels = PpuDecode4(plane, (oam1 & 0x4000) != 0);
+        // go over each pixel
+        int px_left = IntMax(-(col+x+(ppu->wideTile?ppu->extraLeftCur:0)),0);
+        int px_right = IntMin(256+(ppu->wideTile?ppu->extraRightCur:0)-(col+x),8);
+        PpuZbufType *dst = ppu->objBuffer.data + col + x + px_left + kPpuExtraLeftRight;
 
-        for(int col = 0; col < spriteSize; col += 8) {
-          if(col + x > -8 && col + x < 256) {
-            // break if we found 34 8*1 slivers already
-            tilesFound++;
-            if(tilesFound > 34) {
-              ppu->timeOver = true;
-              break;
-            }
-            // figure out which tile this uses, looping within 16x16 pages, and get it's data
-            int usedCol = oam1 & 0x4000 ? spriteSize - 1 - col : col;
-            int usedTile = ((((oam1 & 0xff) >> 4) + (row >> 3)) << 4) | (((oam1 & 0xf) + (usedCol >> 3)) & 0xf);
-            uint16 *addr = &ppu->vram[(objAdr + usedTile * 16 + (row & 0x7)) & 0x7fff];
-            uint32 plane = addr[0] | addr[8] << 16;
-            // go over each pixel
-            int px_left = IntMax(-(col + x + kPpuExtraLeftRight), 0);
-            int px_right = IntMin(256 + kPpuExtraLeftRight - (col + x), 8);
-            PpuZbufType *dst = ppu->objBuffer.data + col + x + px_left + kPpuExtraLeftRight;
-
-            for (int px = px_left; px < px_right; px++, dst++) {
-              int shift = oam1 & 0x4000 ? px : 7 - px;
-              uint32 bits = plane >> shift;
-              int pixel = (bits >> 0) & 1 | (bits >> 7) & 2 | (bits >> 14) & 4 | (bits >> 21) & 8;
-              // draw it in the buffer if there is a pixel here, and the buffer there is still empty
-              if (pixel != 0 && (dst[0] & 0xff) == 0)
-                dst[0] = z + pixel;
-            }
-
-          }
+        for (int px = px_left; px < px_right; px++, dst++) {
+          int pixel = packed_pixels >> (px * 4) & 15;
+          // draw it in the buffer if there is a pixel here, and the buffer there is still empty
+          if (pixel != 0 && (dst[0] & 0xff) == 0)
+            dst[0] = z + pixel;
         }
-        if(tilesFound > 34) break; // break out of sprite-loop if max tiles found
+
       }
     }
-    index += 2;
+    if(tilesFound > 34 && !ppu->wideTile) break;
   }
   return tilesFound != 0;
 }
@@ -963,21 +1140,25 @@ void ppu_write(Ppu* ppu, uint8_t adr, uint8_t val) {
       ppu->inidisp = val;
       break;
     case OBSEL & 0xff:
+      ppu->spriteListsValid = false;
       ppu->obsel = val;
       break;
     case OAMADDL & 0xff:
+      ppu->spriteListsValid = false;
       ppu->oamaddl = val;
       ppu->oamAdr = val;
       ppu->oamInHigh = ppu->oamaddh & 1;
       ppu->oamSecondWrite = false;
       break;
     case OAMADDH & 0xff:
+      ppu->spriteListsValid = false;
       ppu->oamaddh = val;
       ppu->oamInHigh = val & 1;
       ppu->oamAdr = ppu->oamaddl;
       ppu->oamSecondWrite = false;
       break;
     case 0x04: {
+      ppu->spriteListsValid = false;
       if(ppu->oamInHigh) {
         ppu->highOam[((ppu->oamAdr & 0xf) << 1) | ppu->oamSecondWrite] = val;
         if(ppu->oamSecondWrite) {
@@ -1098,7 +1279,12 @@ void ppu_write(Ppu* ppu, uint8_t adr, uint8_t val) {
       if(!ppu->cgramSecondWrite) {
         ppu->cgramBuffer = val;
       } else {
-        ppu->cgram[ppu->cgramPointer++] = (val << 8) | ppu->cgramBuffer;
+        uint16_t color = (val << 8) | ppu->cgramBuffer;
+        if (ppu->cgram[ppu->cgramPointer] != color) {
+          ppu->cgram[ppu->cgramPointer] = color;
+          ppu->paletteValid=false;
+        }
+        ppu->cgramPointer++;
       }
       ppu->cgramSecondWrite = !ppu->cgramSecondWrite;
       break;
@@ -1153,6 +1339,7 @@ void ppu_write(Ppu* ppu, uint8_t adr, uint8_t val) {
       if (val & 0x20) ppu->fixedColor = (ppu->fixedColor & ~(0x1f <<  0)) | (val & 0x1f) << 0;  // red
       break;
     case SETINI & 0xff:
+      ppu->spriteListsValid = false;
       ppu->setini = val;
       break;
     default:

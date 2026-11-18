@@ -9,10 +9,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "saveload.h"
+
 typedef struct Ppu Ppu;
 
 #include "snes.h"
-
 
 typedef struct BgLayer {
   uint16_t xhScroll;
@@ -26,8 +27,8 @@ typedef struct BgLayer {
 } BgLayer;
 
 enum {
-  kPpuXPixels = 256,
-  kPpuExtraLeftRight = 0,
+  kPpuXPixels = 448,
+  kPpuExtraLeftRight = 96,
 };
 
 typedef uint16_t PpuZbufType;
@@ -35,7 +36,19 @@ typedef uint16_t PpuZbufType;
 typedef struct PpuPixelPrioBufs {
   // This holds the prio in the upper 8 bits and the color in the lower 8 bits.
   PpuZbufType data[kPpuXPixels];
-} PpuPixelPrioBufs;
+} PpuPixelPrioBufs __attribute__((aligned(16)));
+
+/* Keep 33 candidates to preserve the order of sprite/tile overflow checks. */
+typedef struct PpuSpriteLine {
+  uint8_t count;
+  uint8_t sprite[128];
+} PpuSpriteLine;
+
+typedef struct PpuSprite {
+  int16_t x;
+  uint16_t attributes, tileAddress, z;
+  uint8_t y, size;
+} PpuSprite;
 
 enum {
   kPpuRenderFlags_NewRenderer = 1,
@@ -64,6 +77,17 @@ typedef struct WindowLayer {
 
 #define PPU_SAVESTATE_REGS_SIZE 0x40
 #define PPU_SAVESTATE_MEM_SIZE 0x10420
+
+typedef struct PpuWideTile {
+  uint16_t tile;
+  int x, y, run;
+} PpuWideTile;
+
+/* A contiguous source projection for one scanline band. */
+typedef struct PpuWideSpan {
+  int x, y, end;
+  bool map16;
+} PpuWideSpan;
 
 struct Ppu {
   // Snes registers. Saved to snapshot. Need to be stable
@@ -133,6 +157,10 @@ struct Ppu {
   // pixel buffer (xbgr)
   // times 2 for even and odd frame
 
+  /* Wide hooks are presentation state; the hardware snapshot is unchanged. */
+  bool (*wideTile)(struct Ppu *, unsigned, int, int, PpuWideTile *);
+  int16_t wideOamX[128];
+  bool wideOamValid[128];
   uint8_t extraLeftCur, extraRightCur, extraLeftRight;
   uint8_t lastMosaicModulo;
   uint8_t lastBrightnessMult;
@@ -148,14 +176,42 @@ struct Ppu {
   void *pad2;
 
   // -- START OF SNAPSHOT, 0x10420 bytes
-  uint16_t cgram[0x100];
+  uint16_t cgram[0x100] __attribute__((aligned(16)));
   uint16_t oam[0x100];
   uint8_t highOam[0x20];
   uint16_t vram[0x8000];
   // -- END OF SNAPSHOT
 
+  /* Presentation caches, outside the emulated register/memory snapshot. */
+  uint32_t paletteRgb[256];
+  uint8_t paletteBrightness;
+  bool paletteValid;
+  uint32_t backdropMathRgb[2][256];
+  uint8_t backdropMathControl, backdropMathValid;
+
+  bool spriteListsValid;
+  PpuSprite spriteCache[128];
+  PpuSpriteLine spriteLines[256];
+
+  /* Prepared once per contiguous band; legacy wideTile remains a reference
+     fallback. Appended to keep the independent v006 oracle's field offsets. */
+  bool (*wideSpan)(struct Ppu *,unsigned,int,int,PpuWideSpan *);
+  bool (*wideMapTile)(unsigned,int,int,uint16_t *);
+  /* Allow cached backdrop blends when OBJ math is also enabled. */
+  bool wideBackdropMath;
+  /* Presentation caches, outside the hardware snapshot and saved state. */
+  uint32_t layer3MathRgb[32][256];
+  uint32_t layer3MathValid;
+  uint8_t layer3MathControl;
+  bool wideMapIris;
+
 
 };
+
+/* Port SMW PS2: textura CT32 do GS, R no byte baixo (como a PPU anterior). */
+static inline uint32_t PpuPackRgb(uint32_t r, uint32_t g, uint32_t b) {
+  return r | g << 8 | b << 16;
+}
 
 #define SPRITE_PRIO_TO_PRIO(prio, level6) (((prio) * 4 + 2) * 16 + 4 + (level6 ? 2 : 0))
 #define SPRITE_PRIO_TO_PRIO_HI(prio) ((prio) * 4 + 2)
