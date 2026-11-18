@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.8 | NTSC 240p/480p | Português
+Retrogames Patos de Minas | v0.9 | NTSC 240p/480p | Português
 
 O QUE VOCÊ PRECISA
 
@@ -123,6 +123,11 @@ componente" em "Y Cb/Pb Cr" na Configuração do Sistema.
 Durante o jogo (segurando L2 + R2):
 - L2 + R2 + QUADRADO: liga/desliga as scanlines (no 480p).
 - L2 + R2 + CÍRCULO: liga/desliga a suavização da imagem.
+- L2 + R2 + TRIÂNGULO: liga/desliga o medidor de desempenho, no canto
+  de baixo. "TELA 60" = todos os 60 quadros de cada segundo foram
+  desenhados; "TELA 30" = metade foi pulada para manter a velocidade.
+  "DESENHO" é o tempo médio de um quadro desenhado e "LOGICA" o de um
+  quadro pulado (só a lógica do jogo). Um quadro cabe em 16,7 ms.
 
 O ritmo do jogo segue a atualização da TV, e o som se ajusta a ela sem
 travar a imagem. Se um quadro demorar mais que o tempo de uma
@@ -136,6 +141,25 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.9:
+- Câmera do mapa: ao olhar em volta (START no mapa principal) e deslocar
+  a vista 128 pixels ou mais, a câmera voltava para o lado errado e
+  ficava parada longe do Mario, com o mapa travado. Agora volta certo.
+- Castelo do Bowser (Porta da Frente): os desenhos em losango de uma das
+  salas apareciam com peças erradas. O C só tinha 1 das 4 variantes
+  desse objeto; agora as 4 vêm do cartucho.
+- Outras 7 leituras além do fim de tabelas do motor (entrada em cano
+  vertical, pose $46 do Mario, Cheep-Cheep vertical, memória de sprites
+  $12, rolagem da camada 2, caminhos do mapa e blocos nas salas de
+  Mode 7) agora leem os bytes certos do cartucho. Antes funcionavam por
+  sorte da arrumação da memória.
+- Desenho da tela (PPU) mais rápido, vindo de outro port de SMW para
+  PS2 (veja CREDITOS.md). Testado quadro a quadro: a imagem é idêntica
+  à da PPU anterior em 116.400 quadros (235 salas, português e inglês).
+- Som: o volume do áudio do jogo no PS2 saía pela metade (cerca de
+  -6 dB) por um ajuste do audsrv. Agora sai no volume cheio.
+- Medidor de desempenho: L2 + R2 + TRIÂNGULO (veja acima).
 
 Mudanças da v0.8:
 - Corrige o progresso perdido ao reiniciar (ex.: Palácio Amarelo salvo
@@ -235,13 +259,15 @@ pelo seu caminho e execute em um terminal Bash, na pasta extraída:
   export PATH="$PS2DEV/bin:$PS2DEV/ee/bin:$PS2DEV/iop/bin:$PS2SDK/bin:$PATH"
   make -C Fonte -j4
 
-O resultado fica em APPS/SMW/SMW.ELF. Para gerar a ISO, coloque a sua
+O resultado fica em APPS/SMW/SMW.ELF. O módulo de som (audsrv) é
+compilado da pasta Fonte/audsrv junto com o resto. Para gerar a ISO, coloque a sua
 cópia em APPS/SMW/Super Mario World (USA).zip e use Python 3.8 ou
 superior com pycdlib instalado:
 
   python3 Fonte/gerar_iso.py
 
 O motor parte de snesrev/smw, revisão bd80629bc968267239c4a2fb77fa96d0ed62da7b.
+A PPU vem do port github.com/blashy101/-AI-Super-Mario-World-PS2-Native-Port.
 Os avisos dos projetos estão na pasta Licencas.
 
 https://github.com/snesrev/smw
@@ -256,7 +282,8 @@ Projeto gratuito, feito por fãs, sem ligação com a Nintendo. Feito por
 Guilherme Soti (Retrogames Patos de Minas), que dirigiu o projeto e
 testou tudo num PS2 de verdade, com o Claude (Anthropic) no
 desenvolvimento. O motor é do snesrev/smw, com a emulação de PPU e som
-derivada do LakeSnes; o PS2 usa PS2SDK e gsKit. Detalhes em CREDITOS.md.
+derivada do LakeSnes; a PPU otimizada e duas correções vêm do port de
+blashy101; o PS2 usa PS2SDK e gsKit. Detalhes em CREDITOS.md.
 
 O port é e vai continuar gratuito. Se quiser apoiar os próximos (como um
 port do Tekken 3), pode doar qualquer valor:

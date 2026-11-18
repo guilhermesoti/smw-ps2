@@ -1,3 +1,10 @@
+/* PPU otimizada vinda do port "AI Super Mario World PS2 Native Port"
+   (github.com/blashy101/-AI-Super-Mario-World-PS2-Native-Port, commit b2521e8,
+   licença MIT em Licencas/SMW-PS2-blashy101-MIT.txt), que parte da PPU do
+   snesrev/LakeSnes. Adaptações deste port: ponteiro snes e leitura de $2137
+   como na PPU anterior, fonte de acentos PT-BR no BG3 (peças 0x3C0-0x3FF),
+   cores no formato da textura CT32 (ppu.h) e código MMI só no R5900. Os
+   ganchos de tela larga (wideTile etc.) ficam desligados (NULL). */
 #include "ppu.h"
 #include "../ptbr.h"
 

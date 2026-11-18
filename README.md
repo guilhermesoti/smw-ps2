@@ -2,7 +2,7 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.8 · NTSC 240p/480p · português.** Projeto gratuito, feito por fãs.
+**Versão 0.9 · NTSC 240p/480p · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
 - Vídeo 240p progressivo (cabo AV e a maioria dos adaptadores HDMI) ou 480p com scanlines (componente/HDMI).
@@ -28,7 +28,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O SHA-256 do ELF da v0.8 obtido com o ps2dev v2.0.0 foi `16751e2077b942a2da0e13b1e1c8ba435d97e71d7bc7ac982de552c7d225a8c0`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.9 obtido com o ps2dev v2.0.0 foi `7e99dfda900a4f1c4c6f8c4ecad53576ece66d458aa93f9931f7a39f05b40ce2`.
 
 ## Jogar por USB
 
@@ -72,6 +72,22 @@ python3 testes/testar_percurso.py --sanitizar "/caminho/Super Mario World (USA).
 
 O teste compila o motor para o PC, joga o mesmo percurso duas vezes em pastas temporárias e verifica a fase, o salto, o áudio e o CRC da imagem final.
 
+Varredura de todas as 235 salas do jogo com AddressSanitizer e UBSan (carrega cada sala pelo próprio motor e joga alguns segundos; acusa leituras e escritas fora das tabelas). Leva uns 3 minutos:
+
+```sh
+python3 testes/testar_salas.py "/caminho/Super Mario World (USA).zip"
+```
+
+Volta da câmera no mapa depois de olhar em volta com START (deslocamentos de até 273 pixels). Use uma pasta só com o jogo, sem save:
+
+```sh
+cc -O1 -std=gnu11 -fno-strict-aliasing -fwrapv -fsanitize=address,undefined \
+   -IFonte/engine -IFonte/ps2 $(pkg-config --cflags minizip zlib) \
+   $(find Fonte/engine/src -name '*.c') Fonte/ps2/files.c Fonte/ps2/game.c testes/camera_mapa.c \
+   $(pkg-config --libs minizip zlib) -lm -o /tmp/smw-camera
+ASAN_OPTIONS=detect_leaks=0 /tmp/smw-camera /caminho/da/pasta/com/o/jogo/
+```
+
 Testes do salvamento (Memory Card simulado em `testes/mocks/mc_mock.h`, pendrive numa pasta temporária). Rode a partir da pasta `testes/`:
 
 ```sh
@@ -105,6 +121,9 @@ Projeto **gratuito**, feito por fãs. Ele existe graças a:
 - **[snesrev/smw](https://github.com/snesrev/smw)** (snesrev e contribuidores), revisão
   `bd80629bc968267239c4a2fb77fa96d0ed62da7b`: *Super Mario World* reimplementado em C, a base de todo o
   port, com a emulação de PPU e som derivada de **[LakeSnes](https://github.com/elzo-d/LakeSnes)**.
+- **[AI Super Mario World PS2 Native Port](https://github.com/blashy101/-AI-Super-Mario-World-PS2-Native-Port)**
+  (blashy101, licença MIT): a PPU otimizada e os achados da câmera do mapa, das tabelas e do volume do
+  áudio, trazidos para este port na v0.9.
 - **[ps2dev](https://github.com/ps2dev/ps2dev)**, **[PS2SDK](https://github.com/ps2dev/ps2sdk)** e
   **[gsKit](https://github.com/ps2dev/gsKit)**: as ferramentas e bibliotecas do PS2.
 - **[OPL](https://github.com/ps2homebrew/Open-PS2-Loader)**: para rodar no console.

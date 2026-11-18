@@ -1,0 +1,16 @@
+audsrv (servidor de áudio do IOP) para o port SMW PS2
+
+Origem: PS2SDK, pasta iop/sound/audsrv, commit
+b12f8af37bd42ec13b1bafb7ab6e7bdcfb4b683b (o mesmo do ps2dev v2.0.0).
+Licença: GNU Library General Public License 2 (Licencas/audsrv-LGPL-2.txt).
+Sem mudanças, este código gera um audsrv.irx idêntico byte a byte ao que
+vem no ps2dev v2.0.0.
+
+Única mudança: em src/audsrv.c, update_volume() grava no volume de entrada
+do PCM (BVOL) o valor da API mapeado de 0..0x3fff para 0..0x7fff. Os
+registradores de entrada do SPU2 vão até 0x7fff (o próprio audsrv usa 0x7fff
+no AVOL); com 0x3fff o som saía com metade da amplitude (cerca de -6 dB).
+O volume master continua em 0x3fff. Achado do port
+github.com/blashy101/-AI-Super-Mario-World-PS2-Native-Port.
+
+O Makefile da pasta Fonte compila este módulo e o embute no SMW.ELF.
