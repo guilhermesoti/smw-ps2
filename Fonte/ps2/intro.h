@@ -20,7 +20,9 @@ void smw_sprite_suave(GSGLOBAL *gs, GSTEXTURE *t, float x0, float y0, float x1, 
    quadro e convertido no lugar para o formato do GS. 480p: 448 linhas. */
 void smw_mostra_quadro(GSGLOBAL *gs, GSTEXTURE *tex, uint32_t *quadro, bool p480, int bright, int suave);
 
-/* Um "blip" curto ao trocar de opcao. */
+/* Um "blip" curto ao trocar de opcao: so marca; o som sai em smw_som_menu. */
 void smw_blip(bool audio_ok);
+/* Som de um pedaco dos menus: o resto do bip marcado ou silencio. */
+void smw_som_menu(int16_t *stereo, int frames);
 
 #endif

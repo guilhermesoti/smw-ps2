@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.13.1 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
+Retrogames Patos de Minas | v0.13.2 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
 
 O QUE VOCÊ PRECISA
 
@@ -222,6 +222,11 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.13.2 (beta):
+- O bip da tela AJUSTES não fica mais repetindo. O módulo de som do PS2
+  continua tocando o que ficou no buffer quando nada novo chega; agora
+  as telas de menu mandam silêncio a cada quadro, como o jogo.
 
 Mudanças da v0.13.1 (beta):
 - Suavização desligada por padrão. No teste no console pelo cabo AV

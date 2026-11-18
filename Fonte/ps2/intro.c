@@ -292,20 +292,31 @@ static void present(GSGLOBAL *gs, GSTEXTURE *tex, bool p480, int bright) {
   smw_mostra_quadro(gs, tex, canvas_px, p480, bright, intro_suave);
 }
 
-/* Um "blip" curto ao trocar de opcao. */
+/* Um "blip" curto ao trocar de opcao. Ele nao vai direto para o audsrv: o
+   IOP le o buffer circular sem parar e, se nada novo chega, toca de novo o
+   que ficou nele (o bip repetia a cada 0,1 s). smw_som_menu() manda o bip
+   junto com o silencio de cada quadro dos menus. */
 #define BLIP_FRAMES (RATE / 25)
-static int16_t blip_buf[BLIP_FRAMES * 2];
+static int16_t blip_buf[BLIP_FRAMES];
+static int blip_pos = BLIP_FRAMES;  /* amostras do bip que ja tocaram */
 void smw_blip(bool audio_ok) {
   if (!audio_ok) return;
-  if (!blip_buf[2]) {
+  if (!blip_buf[1]) {
     float a = 2 * 3.14159265f * 880.0f / RATE;
     for (int i = 0; i < BLIP_FRAMES; i++) {
       float env = 1.0f - (float)i / BLIP_FRAMES;
-      int16_t v = (int16_t)(sinf(a * i) * env * env * 0.18f * 32767);
-      blip_buf[i * 2] = blip_buf[i * 2 + 1] = v;
+      blip_buf[i] = (int16_t)(sinf(a * i) * env * env * 0.18f * 32767);
     }
   }
-  if (audsrv_available() >= (int)sizeof(blip_buf)) audsrv_play_audio((const char *)blip_buf, sizeof(blip_buf));
+  blip_pos = 0;
+}
+
+void smw_som_menu(int16_t *stereo, int frames) {
+  for (int i = 0; i < frames; i++) {
+    int16_t v = 0;
+    if (blip_pos < BLIP_FRAMES) v = blip_buf[blip_pos++];
+    stereo[i * 2] = stereo[i * 2 + 1] = v;
+  }
 }
 
 void smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version, int suave) {

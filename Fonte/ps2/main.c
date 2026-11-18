@@ -19,7 +19,7 @@
 #include <timer.h>
 #include <unistd.h>
 
-#define SMW_VERSAO "0.13.1"
+#define SMW_VERSAO "0.13.2"
 
 #define DECLARE_DRIVER(n) extern unsigned char n##_irx[]; extern unsigned int size_##n##_irx
 DECLARE_DRIVER(bdm);
@@ -257,8 +257,27 @@ static void video_abre(int modo, bool compat) {
   video.compat = compat;
 }
 
+/* Menus (carregando, AJUSTES, "A IMAGEM APARECEU?"): the IOP side of
+   audsrv keeps reading its ring buffer even when nothing new arrives, so
+   whatever is left there plays again every ~0.1 s (a lone blip kept
+   beeping). Each menu frame therefore sends sound, the blip or silence,
+   keeping the queue at the same level as the game (samples_for_next_frame). */
+static void som_menu(void) {
+  if (!sound) return;
+  int target = 3 * 535 * 4;
+  if (target > audio_capacity / 2) target = audio_capacity / 2;
+  int frames = (target - (audio_capacity - audsrv_available())) / 4;
+  while (frames > 0) {
+    int n = frames < SMW_MAX_SAMPLES ? frames : SMW_MAX_SAMPLES;
+    smw_som_menu(stereo, n);
+    audsrv_play_audio((const char *)stereo, n * 4);
+    frames -= n;
+  }
+}
+
 /* One frame of a settings screen (already drawn in quadro). */
 static void mostra_quadro(int bright) {
+  som_menu();
   smw_mostra_quadro(gs, &quadro_tex, quadro, video.p480, bright, video.suave);
 }
 
