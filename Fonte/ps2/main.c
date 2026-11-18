@@ -331,7 +331,10 @@ static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
   if (pressed & PAD_SQUARE) video.scanlines = !video.scanlines;
   if (pressed & PAD_CIRCLE) video.smooth = !video.smooth;
   if (pressed & PAD_TRIANGLE) perf.on = !perf.on, perf.text[0] = 0;
-  if (pressed & PAD_CROSS) set_aspect(!video.wide);
+  if (pressed & PAD_CROSS) {
+    set_aspect(!video.wide);
+    smw_tela_changed(video.wide);  /* fica gravado junto com o proximo save */
+  }
   return 0;
 }
 
@@ -387,7 +390,7 @@ int main(int argc, char **argv) {
   if (argc && argv && argv[0]) smw_boot_folder(argv[0], folder);
   bool from_disc = smw_path_is_disc(folder);
   init_scr();
-  scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v0.10\n\n");
+  scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v0.11\n\n");
   scr_printf(from_disc ? "Iniciando controles e Memory Card...\n"
                        : "Iniciando USB, controles e Memory Card...\n");
   start_drivers(from_disc);
@@ -419,28 +422,41 @@ int main(int argc, char **argv) {
   scr_printf("Drivers de controle e Memory Card: %s\n%s", card_drivers, report);
   smw_load_report(report, sizeof(report));
   scr_printf("%sNovos saves vao para: %s\n", report, smw_save_location());
+  /* Ajustes de abertura: SMW.CFG (feito pelo Gravador no PC) da o padrao;
+     a tela escolhida no PS2 (SMW.OPT) vale mais que a do SMW.CFG. */
+  SmwOptions cfg;
+  smw_read_config(&cfg);
+  int tela = smw_read_saved_tela();
+  if (tela == SMW_OPT_ASK) tela = cfg.tela;
+  bool english = cfg.idioma == 1, other_language = false;
+  video.p480 = cfg.video == 1;
   /* Three seconds to read the above and pick the video mode. */
   scr_printf("\nVIDEO: aperte TRIANGULO para 480p (adaptador HDMI ou componente)\n"
-             "       ou CIRCULO para 240p (cabo AV). Sem apertar: 240p.\n"
-             "TELA: aperte QUADRADO antes para 16:9 (TV no modo widescreen).\n"
-             "IDIOMA: portugues. Segure SELECT para jogar em ingles.\n");
+             "       ou CIRCULO para 240p (cabo AV). Sem apertar: %s.\n",
+             video.p480 ? "480p (SMW.CFG)" : "240p");
+  if (tela == SMW_OPT_ASK) scr_printf("TELA: 4:3 ou 16:9, escolha depois da abertura.\n");
+  else scr_printf("TELA: %s. Segure QUADRADO para escolher de novo.\n", tela ? "16:9" : "4:3");
+  scr_printf("IDIOMA: %s. Segure SELECT para jogar em %s.\n",
+             english ? "ingles" : "portugues", english ? "portugues" : "ingles");
   for (int i = 0; i < 60; ++i) {
     unsigned connected = 0;
     uint16_t a = read_pad(0, &connected, NULL) | read_pad(1, &connected, NULL);
-    if (a & (1u << 2)) g_ptbr = false;                  /* Select */
-    if (a & (1u << 1)) video.wide = true;               /* Square = SNES Y */
+    if (a & (1u << 2)) other_language = true;           /* Select */
+    if (a & (1u << 1)) tela = SMW_OPT_ASK;              /* Square = SNES Y */
     if (a & (1u << 9)) { video.p480 = true; break; }   /* Triangle = SNES X */
-    if (a & (1u << 8)) break;                           /* Circle = SNES A */
+    if (a & (1u << 8)) { video.p480 = false; break; }  /* Circle = SNES A */
     usleep(50000);
   }
+  g_ptbr = english == other_language;
   scr_printf("Video: %s | Tela: %s | Idioma: %s\n",
-             video.p480 ? "480p (sem imagem? reinicie sem apertar nada)" : "240p",
-             video.wide ? "16:9" : "4:3", g_ptbr ? "portugues" : "ingles");
+             video.p480 ? "480p (sem imagem? reinicie e aperte CIRCULO)" : "240p",
+             tela == SMW_OPT_ASK ? "escolher" : tela ? "16:9" : "4:3", g_ptbr ? "portugues" : "ingles");
   sleep(1);
 
   start_video();
-  set_aspect(video.wide);
-  smw_intro(gs, video.p480, sound, "0.10");
+  /* Na primeira vez (tela ainda nao escolhida) a abertura pergunta. */
+  if (smw_intro(gs, video.p480, sound, "0.11", &tela)) smw_save_tela(tela);
+  set_aspect(tela == 1);
   const uint32_t field = measure_field();
   uint32_t last = cpu_ticks();
   int pending = 0, debt = 0;

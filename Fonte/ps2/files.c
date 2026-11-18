@@ -37,6 +37,7 @@ enum { ERR_NOT_READY = 1, ERR_UNFORMATTED = 2, ERR_WRONG_TYPE = 3,
 enum { ICON_SPARE_KB = 16 };
 
 static char folder_dir[SMW_PATH];
+static bool rom_on_disc;           /* the game came from the ISO (cdrom0:) */
 static bool memory_card_ok;
 static int active_store = -1;
 static uint32_t max_generation;    /* newest save generation seen */
@@ -176,6 +177,7 @@ RomResult smw_find_rom(const char *boot, uint8_t **rom, char path[SMW_PATH], uin
       if (result == ROM_GOOD) {
         if (disc) folder_dir[0] = '\0';
         else strcpy(folder_dir, dir);
+        rom_on_disc = disc;
         return ROM_GOOD;
       }
       if (result == ROM_NO_MEMORY) return result;
@@ -817,6 +819,9 @@ static int save_to(int store, const uint8_t *save, uint32_t generation) {
   return 0;
 }
 
+static int pending_tela = -1;
+static bool write_options_to(int store, int tela);
+
 bool smw_save_progress(const uint8_t *save) {
   int order[STORE_COUNT], count = 0;
   if (active_store >= 0) order[count++] = active_store;
@@ -843,6 +848,8 @@ bool smw_save_progress(const uint8_t *save) {
       char text[48];
       snprintf(text, sizeof(text), "SALVO: %s", kStoreNames[store]);
       set_notice(text);
+      /* A troca de tela feita no jogo (L2+R2+X) vai junto com o save. */
+      if (pending_tela >= 0 && write_options_to(store, pending_tela)) pending_tela = -1;
       return true;
     }
     if (used + 4 < sizeof(error_text))
@@ -860,3 +867,110 @@ bool smw_save_progress(const uint8_t *save) {
     snprintf(error_text + used, sizeof(error_text) - used, " CHEIO");
   return false;
 }
+
+/* ------------------------------------------------------- options --- */
+
+/* SMW.CFG: feito pelo Gravador no PC, ao lado do jogo (APPS/SMW) ou dentro
+   da ISO. So e lido. SMW.OPT: a escolha feita no PS2 (tela FORMATO DA TELA
+   ou L2+R2+X), gravada onde fica o save. Os dois sao texto, uma linha
+   "chave=valor" cada; linhas com # e chaves desconhecidas sao ignoradas. */
+
+static bool same_word(const char *a, const char *b) { return strcasecmp(a, b) == 0; }
+
+static char *trim(char *s) {
+  while (*s == ' ' || *s == '\t' || *s == '\r') ++s;
+  size_t n = strlen(s);
+  while (n && (s[n-1] == ' ' || s[n-1] == '\t' || s[n-1] == '\r')) s[--n] = '\0';
+  return s;
+}
+
+static void parse_options(char *text, SmwOptions *o) {
+  char *line = text;
+  while (line && *line) {
+    char *next = strchr(line, '\n');
+    if (next) *next++ = '\0';
+    char *eq = strchr(line, '=');
+    if (eq && *trim(line) != '#') {
+      *eq = '\0';
+      const char *key = trim(line), *value = trim(eq + 1);
+      if (same_word(key, "tela")) {
+        if (same_word(value, "4:3")) o->tela = 0;
+        else if (same_word(value, "16:9")) o->tela = 1;
+        else if (same_word(value, "perguntar")) o->tela = SMW_OPT_ASK;
+      } else if (same_word(key, "video")) {
+        if (same_word(value, "240p")) o->video = 0;
+        else if (same_word(value, "480p")) o->video = 1;
+        else if (same_word(value, "perguntar")) o->video = SMW_OPT_ASK;
+      } else if (same_word(key, "idioma")) {
+        if (same_word(value, "pt") || same_word(value, "portugues")) o->idioma = 0;
+        else if (same_word(value, "en") || same_word(value, "ingles")) o->idioma = 1;
+      }
+    }
+    line = next;
+  }
+}
+
+static bool read_options(const char *path, SmwOptions *o) {
+  char text[512];
+  int n = file_read(path, (uint8_t *)text, sizeof(text) - 1);
+  if (n <= 0) return false;
+  text[n] = '\0';
+  parse_options(text, o);
+  return true;
+}
+
+void smw_read_config(SmwOptions *o) {
+  char path[SMW_PATH];
+  o->tela = o->video = o->idioma = SMW_OPT_ASK;
+  if (rom_on_disc) {
+    if (!read_options("cdrom0:/SMW.CFG", o)) read_options("cdrom0:/SMW.CFG;1", o);
+  }
+  else if (folder_dir[0] && join_path(path, folder_dir, "SMW.CFG")) read_options(path, o);
+}
+
+/* Onde procurar e gravar o SMW.OPT: primeiro o lugar do save. */
+static int store_order(int order[STORE_COUNT]) {
+  int count = 0;
+  if (active_store >= 0) order[count++] = active_store;
+  for (int store = 0; store < STORE_COUNT; ++store)
+    if (store != active_store) order[count++] = store;
+  return count;
+}
+
+int smw_read_saved_tela(void) {
+  int order[STORE_COUNT], count = store_order(order);
+  for (int i = 0; i < count; ++i) {
+    char path[SMW_PATH];
+    SmwOptions o = {SMW_OPT_ASK, SMW_OPT_ASK, SMW_OPT_ASK};
+    if (store_check(order[i]) != 0 || !join_path(path, store_dir(order[i]), "SMW.OPT")) continue;
+    if (read_options(path, &o) && o.tela != SMW_OPT_ASK) return o.tela;
+  }
+  return SMW_OPT_ASK;
+}
+
+static bool write_options_to(int store, int tela) {
+  char path[SMW_PATH], text[32];
+  const char *dir = store_dir(store);
+  if (!join_path(path, dir, "SMW.OPT")) return false;
+  bool recording = card_recording;
+  card_recording = false;  /* falha aqui nao entra no ERRO AO SALVAR */
+  if (store != STORE_FOLDER) make_folder(dir);
+  int n = snprintf(text, sizeof(text), "tela=%s\n", tela ? "16:9" : "4:3");
+  bool ok = file_write(path, (const uint8_t *)text, n);
+  card_recording = recording;
+  if (ok && store != STORE_FOLDER) write_card_icon(dir, store - STORE_MC0);
+  return ok;
+}
+
+bool smw_save_tela(int tela) {
+  int order[STORE_COUNT], count = store_order(order);
+  pending_tela = tela;
+  for (int i = 0; i < count; ++i)
+    if (store_check(order[i]) == 0 && write_options_to(order[i], tela)) {
+      pending_tela = -1;
+      return true;
+    }
+  return false;
+}
+
+void smw_tela_changed(int tela) { pending_tela = tela; }

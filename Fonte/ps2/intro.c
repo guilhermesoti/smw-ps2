@@ -3,12 +3,16 @@
  * sintetizado aqui mesmo), o titulo do port e a tela "Apoie o projeto" com o
  * QR code do Pix.
  *
+ * Na primeira vez, entre a vinheta e a tela de apoio, vem a tela FORMATO
+ * DA TELA (formato.c), para escolher 4:3 ou 16:9.
+ *
  * Roda depois da escolha do video (main.c), antes do jogo. Cada quadro e
  * desenhado pela CPU num quadro 320 x 224 e esticado na tela pelo GS.
  * START pula a vinheta; na tela de apoio, X ou START (ou 20 s) seguem para
  * o jogo. Sem controle conectado, a abertura segue sozinha. */
 #include "intro.h"
 #include "intro_qr.h"
+#include "formato.h"
 #include <audsrv.h>
 #include <kernel.h>
 #include <libpad.h>
@@ -261,11 +265,56 @@ static void present(GSGLOBAL *gs, GSTEXTURE *tex, bool p480, int bright) {
   gsKit_sync_flip(gs);
 }
 
-void smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version) {
+/* Um "blip" curto ao trocar de opcao. */
+#define BLIP_FRAMES (RATE / 25)
+static int16_t blip_buf[BLIP_FRAMES * 2];
+static void blip(bool audio_ok) {
+  if (!audio_ok) return;
+  if (!blip_buf[2]) {
+    float a = 2 * 3.14159265f * 880.0f / RATE;
+    for (int i = 0; i < BLIP_FRAMES; i++) {
+      float env = 1.0f - (float)i / BLIP_FRAMES;
+      int16_t v = (int16_t)(sinf(a * i) * env * env * 0.18f * 32767);
+      blip_buf[i * 2] = blip_buf[i * 2 + 1] = v;
+    }
+  }
+  if (audsrv_available() >= (int)sizeof(blip_buf)) audsrv_play_audio((const char *)blip_buf, sizeof(blip_buf));
+}
+
+/* Tela FORMATO DA TELA. Devolve true quando o jogador confirma (X ou
+   START); sem resposta em 20 s segue com a opcao marcada, sem gravar. */
+static bool aspect_screen(GSGLOBAL *gs, GSTEXTURE *tex, bool p480, bool audio_ok, int *tela) {
+  enum { LIMITE = 20 };
+  unsigned held = read_buttons();
+  int sel = 0, leaving = -1;
+  bool confirmed = false;
+  for (int frame = 0;; frame++) {
+    unsigned now = read_buttons(), pressed = now & ~held;
+    held = now;
+    if (leaving < 0) {
+      if ((pressed & PAD_LEFT) && sel != 0) sel = 0, blip(audio_ok);
+      if ((pressed & PAD_RIGHT) && sel != 1) sel = 1, blip(audio_ok);
+      if (frame >= 20 && (pressed & (PAD_CROSS | PAD_START))) confirmed = true, leaving = frame;
+      if (frame >= 60 * LIMITE) leaving = frame;
+    }
+    formato_desenha(canvas_px, msx, sel, frame, LIMITE - frame / 60);
+    int bright = frame < 20 ? frame * 128 / 20 : 128;
+    if (leaving >= 0) {
+      bright = 128 - (frame - leaving) * 128 / 20;
+      if (frame - leaving > 20) break;
+    }
+    present(gs, tex, p480, bright < 0 ? 0 : bright);
+  }
+  *tela = sel;
+  return confirmed;
+}
+
+bool smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version, int *tela) {
   enum { A_START = 20, LOCK = 110, A_FADE = 300, B_START = 330, B_FADE = 450, C_START = 480 };
   static GSTEXTURE tex;
   unsigned held = 0xFFFF;
   int leaving = -1, leave_at = 0, skip = 0;
+  bool ask = tela && *tela < 0, confirmed = false;
   char line[64];
 
   tex.Width = W;
@@ -275,7 +324,7 @@ void smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version) {
   tex.TBW = W / 64;
   tex.Mem = (u32 *)canvas_px;
   tex.Vram = gsKit_vram_alloc(gs, gsKit_texture_size(W, H, GS_PSM_CT32), GSKIT_ALLOC_USERBUFFER);
-  if (tex.Vram == GSKIT_ALLOC_ERROR) return;  /* sem VRAM: vai direto ao jogo */
+  if (tex.Vram == GSKIT_ALLOC_ERROR) return false;  /* sem VRAM: vai direto ao jogo */
 
   sound = audio_ok ? malloc(SOUND_FRAMES * 4) : NULL;
   sound_at = 0;
@@ -292,6 +341,11 @@ void smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version) {
     if (f >= C_START + 60 && leaving < 0 && (pressed & (PAD_START | PAD_CROSS))) leaving = 0;
     if (f >= C_START + 60 * 20 && leaving < 0) leaving = 0;
     if (f >= A_START && f < C_START) feed_sound();
+    if (ask && f >= C_START) {
+      ask = false;
+      confirmed = aspect_screen(gs, &tex, p480, audio_ok, tela);
+      held = read_buttons();  /* o X que confirmou nao pula a tela de apoio */
+    }
     memset(canvas_px, 0, sizeof(canvas_px));
     if (f < A_START) {
       /* preto */
@@ -358,4 +412,5 @@ void smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version) {
   present(gs, &tex, p480, 0);
   free(sound);
   sound = NULL;
+  return confirmed;
 }
