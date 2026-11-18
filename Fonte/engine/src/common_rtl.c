@@ -261,6 +261,7 @@ void SmwCopyToVramLow(uint16 vram_addr, const uint8 *src, int n) {
 }
 
 void RtlUpdatePalette(const ram_u16 *src, int dst, int n) {
+  g_snes->ppu->paletteValid = false;  /* a PPU guarda as cores já convertidas */
   for(int i = 0; i < n; i++)
     g_snes->ppu->cgram[dst + i] = src[i];
 }

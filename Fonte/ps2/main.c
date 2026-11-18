@@ -46,6 +46,16 @@ static const char *card_drivers = "nenhum";
    second line like a CRT fed with RGB. */
 static struct { bool p480, scanlines, smooth; } video = {false, true, false};
 
+/* L2+R2 + Triangle: performance meter. Every 60 game frames it shows how
+   many were drawn and the average EE time of a frame with and without
+   drawing (game logic + PPU), not counting the wait for the TV. */
+static struct {
+  bool on;
+  unsigned steps, drawn;
+  uint32_t draw_ticks, logic_ticks;
+  char text[64];
+} perf;
+
 static void stop_with(const char *reason) {
   scr_printf("\n%s\n", reason);
   printf("SMW: %s\n", reason);
@@ -254,6 +264,7 @@ static void present(void) {
     draw_text(8, 8, msg, 0x00000070);
   }
   draw_notice();
+  if (perf.on && perf.text[0]) draw_text(8, SMW_HEIGHT - 26, perf.text, 0x00402000);
   SyncDCache(pixels, pixels + SMW_WIDTH * SMW_HEIGHT);
   gs->PrimAlphaEnable = GS_SETTING_OFF;
   gsKit_clear(gs, GS_SETREG_RGBAQ(0, 0, 0, 0, 0));
@@ -292,7 +303,8 @@ static int samples_for_next_frame(void) {
   return n;
 }
 
-/* L2+R2 + Square: scanlines on/off (480p). L2+R2 + Circle: smoothing. While
+/* L2+R2 + Square: scanlines on/off (480p). L2+R2 + Circle: smoothing.
+   L2+R2 + Triangle: performance meter. While
    L2+R2 are held the pad sends nothing to the game. */
 static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
   uint16_t pressed = raw & ~*previous;
@@ -300,7 +312,27 @@ static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
   if ((raw & (PAD_L2 | PAD_R2)) != (PAD_L2 | PAD_R2)) return game;
   if (pressed & PAD_SQUARE) video.scanlines = !video.scanlines;
   if (pressed & PAD_CIRCLE) video.smooth = !video.smooth;
+  if (pressed & PAD_TRIANGLE) perf.on = !perf.on, perf.text[0] = 0;
   return 0;
+}
+
+/* EE Count runs at 294.912 MHz: 29491 ticks = 0.1 ms. */
+static void perf_step(bool draw, uint32_t ticks) {
+  ++perf.steps;
+  if (draw) ++perf.drawn, perf.draw_ticks += ticks;
+  else perf.logic_ticks += ticks;
+  if (perf.steps < 60) return;
+  unsigned skipped = perf.steps - perf.drawn;
+  unsigned d = perf.drawn ? perf.draw_ticks / perf.drawn / 29491 : 0;
+  if (skipped) {
+    unsigned l = perf.logic_ticks / skipped / 29491;
+    snprintf(perf.text, sizeof(perf.text), "TELA %u - DESENHO %u.%u MS - LOGICA %u.%u MS",
+             perf.drawn, d / 10, d % 10, l / 10, l % 10);
+  } else {
+    snprintf(perf.text, sizeof(perf.text), "TELA %u - DESENHO %u.%u MS", perf.drawn, d / 10, d % 10);
+  }
+  perf.steps = perf.drawn = 0;
+  perf.draw_ticks = perf.logic_ticks = 0;
 }
 
 static void step_game(bool draw) {
@@ -311,7 +343,9 @@ static void step_game(bool draw) {
   p1 = video_hotkeys(p1, raw1, &previous[0]);
   p2 = video_hotkeys(p2, raw2, &previous[1]);
   int samples = samples_for_next_frame();
+  uint32_t start = cpu_ticks();
   smw_frame(p1, p2, stable_pads(connected), stereo, samples, draw);
+  perf_step(draw, cpu_ticks() - start);
   if (sound) {
     int bytes = samples * 4;
     if (audsrv_available() >= bytes) audsrv_play_audio((const char *)stereo, bytes);
@@ -334,7 +368,7 @@ int main(int argc, char **argv) {
   if (argc && argv && argv[0]) smw_boot_folder(argv[0], folder);
   bool from_disc = smw_path_is_disc(folder);
   init_scr();
-  scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v0.8\n\n");
+  scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v0.9\n\n");
   scr_printf(from_disc ? "Iniciando controles e Memory Card...\n"
                        : "Iniciando USB, controles e Memory Card...\n");
   start_drivers(from_disc);
@@ -383,7 +417,7 @@ int main(int argc, char **argv) {
   sleep(1);
 
   start_video();
-  smw_intro(gs, video.p480, sound, "0.8");
+  smw_intro(gs, video.p480, sound, "0.9");
   const uint32_t field = measure_field();
   uint32_t last = cpu_ticks();
   int pending = 0, debt = 0;
