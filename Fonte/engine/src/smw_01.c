@@ -549,7 +549,6 @@ static const uint8 kSpr026_Thwomp_YDisp[5] = { 0x0, 0x0, 0x10, 0x10, 0x8,  };
 static const uint8 kSpr026_Thwomp_Tiles[5] = { 0x8e, 0x8e, 0xae, 0xae, 0xc8,  };
 static const uint8 kSpr026_Thwomp_Prop[5] = { 0x3, 0x43, 0x3, 0x43, 0x3,  };
 static const uint8 kSpr017_GeneratorCheepCheep_Init_InitXSpeed[2] = { 0x10, 0xf0,  };
-static const uint8 kSprXXX_FixedMovementCheepCheep_SwimmingXSpeed[2] = { 0x8, 0xf8,  };
 static const uint8 kSprXXX_FixedMovementCheepCheep_SwimmingYSpeed[4] = { 0x0, 0x0, 0x8, 0xf8,  };
 static const uint8 kSprXXX_FixedMovementCheepCheep_KickedXSpeed[2] = { 0xf0, 0x10,  };
 static const uint8 kSprXXX_FixedMovementCheepCheep_FloppingYSpeed[4] = { 0xe0, 0xe8, 0xd0, 0xd8,  };
@@ -3980,7 +3979,9 @@ void Spr016_VerticalCheepCheep(uint8 k) {  // 01b033
     uint8 v1 = spr_table00c2[k] & 1;
     if (spr_table151c[k])
       v1 += 2;
-    spr_xspeed[k] = kSprXXX_FixedMovementCheepCheep_SwimmingXSpeed[v1];
+    /* DATA_01B01D: o Cheep-Cheep vertical (índices 2 e 3) usa X = 0, os dois
+       bytes seguintes no cartucho. */
+    spr_xspeed[k] = RomFixedPtr(0x01b01d)[v1];
     spr_yspeed[k] = kSprXXX_FixedMovementCheepCheep_SwimmingYSpeed[v1];
     if ((UpdateNormalSpritePosition_X(k) & 0xC) == 0)
       UpdateNormalSpritePosition_Y(k);

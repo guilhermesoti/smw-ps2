@@ -730,7 +730,6 @@ static const uint8 kUndergroundObj37_LargeCanvas_CanvasPosLo[8] = { 0x50, 0x58, 
 static const uint8 kUndergroundObj37_LargeCanvas_CanvasPosHi[8] = { 0xc8, 0xc8, 0xc8, 0xc8, 0xc8, 0xc8, 0xc9, 0xc9,  };
 static const uint16 kUndergroundObj37_LargeCanvas_ScreenPosLo[16] = { 0xc800, 0xc9b0, 0xcb60, 0xcd10, 0xcec0, 0xd070, 0xd220, 0xd3d0, 0xd580, 0xd730, 0xd8e0, 0xda90, 0xdc40, 0xddf0, 0xdfa0, 0xe150,  };
 static const uint16 kUndergroundObj37_LargeCanvas_ScreenPosHi[16] = { 0xc800, 0xc9b0, 0xcb60, 0xcd10, 0xcec0, 0xd070, 0xd220, 0xd3d0, 0xd580, 0xd730, 0xd8e0, 0xda90, 0xdc40, 0xddf0, 0xdfa0, 0xe150,  };
-static const uint8 kExtObj71_Canvas1_Tiles[19] = { 0x5c, 0x5d, 0x5e, 0x60, 0x73, 0x74, 0x75, 0x73, 0x74, 0x75, 0x73, 0x74, 0x75, 0x73, 0x74, 0x75, 0x76, 0x76, 0x76,  };
 static const uint8 kExtObj71_Canvas1_TileIndex[4] = { 0x0, 0x13, 0x26, 0x39,  };
 static const uint8 kUndergroundObj36_4SidedGround_LeftTiles[3] = { 0x45, 0x50, 0x4d,  };
 static const uint8 kUndergroundObj36_4SidedGround_MiddleTiles[3] = { 0x0, 0xf0, 0x4e,  };
@@ -3565,16 +3564,20 @@ void UndergroundObj37_LargeCanvas(uint8 k) {  // 0ddf3a
     uint16 r6 = kUndergroundObj37_LargeCanvas_ScreenPosHi[v11];
     uint8 *v12 = g_ram + r4w;
     uint8 *v13 = g_ram + 0xC800;
-    MemCpy(v12, v13, 0x1B1);
+    /* O MVN original copia para a frente, byte a byte; a primeira tela de
+       destino começa no último byte da origem, então memcpy não serve. */
+    for (unsigned i = 0; i < 0x1B1; i++) v12[i] = v13[i];
     uint8 *v14 = g_ram + 0x10000 + (r6);
     uint8 *v15 = g_ram + 0x10000 + 0xC800;
-    MemCpy(v14, v15, 0x1B1);
+    for (unsigned i = 0; i < 0x1B1; i++) v14[i] = v15[i];
     if (!--blocks_size_or_type)
       break;
     ++r8;
   }
 }
 
+/* Os objetos $71-$74 usam as 4 variantes de 19 peças de DATA_0DE05E; a
+   tabela do C só tinha a primeira. Lidas direto do cartucho. */
 void ExtObj71_Canvas1(uint8 k) {  // 0de0ae
   uint8 v0 = blocks_sub_scr_pos;
   uint8 v1 = kExtObj71_Canvas1_TileIndex[(uint8)(blocks_size_or_type - 113)];
@@ -3583,7 +3586,7 @@ void ExtObj71_Canvas1(uint8 k) {  // 0de0ae
   uint8 r2 = 3;
   do {
     SetMap16HighByteForCurrentObject_Page01(v0);
-    v0 = HandleHorizontalSubScreenCrossingForCurrentObject(v0, kExtObj71_Canvas1_Tiles[v1++]);
+    v0 = HandleHorizontalSubScreenCrossingForCurrentObject(v0, RomFixedPtr(0x0de05e)[v1++]);
   } while ((--r2 & 0x80) == 0);
   RestoreLevelDataPointerInObjects();
   uint8 v2 = HandleVerticalSubScreenCrossingForCurrentObject_HorizontalLevel();
@@ -3591,7 +3594,7 @@ void ExtObj71_Canvas1(uint8 k) {  // 0de0ae
     r2 = 2;
     do {
       SetMap16HighByteForCurrentObject_Page00(v2);
-      v2 = HandleHorizontalSubScreenCrossingForCurrentObject(v2, kExtObj71_Canvas1_Tiles[v1++]);
+      v2 = HandleHorizontalSubScreenCrossingForCurrentObject(v2, RomFixedPtr(0x0de05e)[v1++]);
     } while ((--r2 & 0x80) == 0);
     RestoreLevelDataPointerInObjects();
     v2 = HandleVerticalSubScreenCrossingForCurrentObject_HorizontalLevel();
@@ -3599,7 +3602,7 @@ void ExtObj71_Canvas1(uint8 k) {  // 0de0ae
   r2 = 2;
   do {
     SetMap16HighByteForCurrentObject_Page00(v2);
-    v2 = HandleHorizontalSubScreenCrossingForCurrentObject(v2, kExtObj71_Canvas1_Tiles[v1++]);
+    v2 = HandleHorizontalSubScreenCrossingForCurrentObject(v2, RomFixedPtr(0x0de05e)[v1++]);
   } while ((--r2 & 0x80) == 0);
   SetMap16HighByteForCurrentObject_Page01(v2);
   SetMap16LowByte(v2, 0x5F);
@@ -3608,7 +3611,7 @@ void ExtObj71_Canvas1(uint8 k) {  // 0de0ae
   uint8 v3 = HandleVerticalSubScreenCrossingForCurrentObject_HorizontalLevel();
   do {
     SetMap16HighByteForCurrentObject_Page00(v3);
-    v3 = HandleHorizontalSubScreenCrossingForCurrentObject(v3, kExtObj71_Canvas1_Tiles[v1++]);
+    v3 = HandleHorizontalSubScreenCrossingForCurrentObject(v3, RomFixedPtr(0x0de05e)[v1++]);
   } while ((--r2 & 0x80) == 0);
 }
 

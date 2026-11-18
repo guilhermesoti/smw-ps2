@@ -262,10 +262,8 @@ static const uint16 kSpr0F1_UnusedSprite_DATA_05CA1E[4] = { 0x0, 0x100, 0x302, 0
 static const uint16 kSpr0F1_UnusedSprite_DATA_05CA26[12] = { 0x1, 0x101, 0x600, 0x600, 0x0, 0x100, 0x100, 0x8, 0x800, 0x0, 0x100, 0x1,  };
 static const uint16 kSpr0EF_Layer2ScrollSOrL_DATA_05CA3E[2] = { 0x800, 0x800,  };
 static const uint16 kSpr0EF_Layer2ScrollSOrL_DATA_05CA42[2] = { 0x0, 0x100,  };
-static const uint16 kSpr0EF_Layer2ScrollSOrL_DATA_05CA46[1] = { 0x101,  };
 static const uint16 kSpr0EA_Layer2Scroll_DATA_05CA48[5] = { 0x300, 0x300, 0x300, 0x300, 0x300,  };
 static const uint16 kSpr0EA_Layer2Scroll_DATA_05CA52[5] = { 0x0, 0x100, 0x200, 0x300, 0x400,  };
-static const uint16 kSpr0EA_Layer2Scroll_DirectionToStartMoving[2] = { 0x1, 0x0,  };
 static const uint8 kSpr0E7_SpecialAutoScroll_DATA_05CA61[7] = { 0x1, 0x18, 0x1e, 0x29, 0x2d, 0x35, 0x47,  };
 static const uint8 kSpr0E7_SpecialAutoScroll_DATA_05CA68[7] = { 0x16, 0x5, 0xa, 0x3, 0x7, 0x11, 0x9,  };
 static const uint8 kLayer1SpecialScrolling01_VariableScroll_DATA_05CA6F[80] = { 0x0, 0x9, 0x14, 0x1c, 0x24, 0x28, 0x33, 0x3c, 0x43, 0x4b, 0x54, 0x60, 0x67, 0x74, 0x77, 0x7b, 0x83, 0x8a, 0x8d, 0x90, 0x99, 0xa0, 0xb0, 0x0, 0x9, 0x14, 0x2c, 0x3c, 0xb0, 0x0, 0x9, 0x11, 0x1d, 0x2c, 0x32, 0x41, 0x48, 0x63, 0x6b, 0x70, 0x0, 0x27, 0x37, 0x70, 0x0, 0x7, 0x12, 0x27, 0x32, 0x48, 0x5b, 0x70, 0x0, 0x20, 0x28, 0x3a, 0x40, 0x5f, 0x66, 0x6b, 0x6b, 0x80, 0x80, 0x89, 0x92, 0x96, 0x9a, 0x9e, 0xa0, 0xb0, 0x0, 0x10, 0x1a, 0x20, 0x2b, 0x30, 0x3b, 0x40, 0x4b, 0x50,  };
@@ -1317,7 +1315,8 @@ void Spr0EF_Layer2ScrollSOrL_05BEC6() {  // 05bec6
   uint8 v0 = l1_l2_scroll_spr_scroll_type_index[0];
   if (scroll_spr_layer_index)
     v0 = l1_l2_scroll_spr_scroll_type_index[1];
-  int16 v1 = *(ram_u16 *)((int8 *)&kSpr0EF_Layer2ScrollSOrL_DATA_05CA46 + v0);
+  /* Leitura de 16 bits em DATA_05CA46+índice: passa para DATA_05CA48. */
+  int16 v1 = PAIR16(RomFixedPtr(0x05ca46)[v0 + 1], RomFixedPtr(0x05ca46)[v0]);
   *(ram_u16 *)&l1_l2_scroll_spr_current_state[scroll_spr_layer_index >> 2] = v1;
   int8 v2 = v1;
   uint8 v3 = kSharedScrollSpriteTables_DATA_05CBED[(uint8)(2 * v0)];
@@ -1343,7 +1342,8 @@ void Spr0EA_Layer2Scroll_05BF20() {  // 05bf20
   uint8 v0 = l1_l2_scroll_spr_scroll_type_index[0];
   if (scroll_spr_layer_index)
     v0 = l1_l2_scroll_spr_scroll_type_index[1];
-  uint16 v1 = WORD(*((uint8 *)kSpr0EA_Layer2Scroll_DirectionToStartMoving + v0));
+  /* DATA_05CA5C tem 5 bytes; a leitura de 16 bits do último entra em DATA_05CA61. */
+  uint16 v1 = PAIR16(RomFixedPtr(0x05ca5c)[v0 + 1], RomFixedPtr(0x05ca5c)[v0]);
   *(ram_u16 *)&l1_l2_scroll_spr_current_state[scroll_spr_layer_index >> 2] = v1;
   int8 v2 = v1;
   uint8 v3 = kSharedScrollSpriteTables_DATA_05CBF5[(uint8)(2 * v0)];
