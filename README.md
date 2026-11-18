@@ -28,7 +28,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.9 obtido com o ps2dev v2.0.0 foi `7e99dfda900a4f1c4c6f8c4ecad53576ece66d458aa93f9931f7a39f05b40ce2`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.9 obtido com o ps2dev v2.0.0 foi `d6c1e868b21cdce05c84b20ffc8528baef57fe16100392bec767aa6255526f34`.
 
 ## Jogar por USB
 
