@@ -10,6 +10,12 @@ enum { SMW_WIDTH = 256, SMW_HEIGHT = 224, SMW_SAMPLES = 534, SMW_MAX_SAMPLES = 5
        SMW_ROM_BYTES = 512 * 1024, SMW_SRAM_BYTES = 2048 };
 
 void smw_start(uint8_t *rom, uint32_t *pixels);
+/* Tela larga 16:9: SMW_WIDE_WIDTH colunas por linha (43 + 256 + 43), em
+   linhas de pitch pixels (>= SMW_WIDE_WIDTH). Com on = false volta a 256
+   colunas em linhas de SMW_WIDTH. As cenas sem suporte ficam com faixas
+   pretas dos lados. */
+enum { SMW_WIDE_WIDTH = 342, SMW_MAX_PITCH = 384 };
+void smw_set_widescreen(bool on, uint32_t *pixels, unsigned pitch);
 void smw_frame(uint16_t p1, uint16_t p2, unsigned pads, int16_t *stereo, int samples,
                bool draw_pixels);
 void smw_load_progress(uint8_t *save);

@@ -2,6 +2,7 @@
 #include "funcs.h"
 #include "smw_rtl.h"
 #include "variables.h"
+#include "largo.h"
 
 void (*kProcessMinorExtendedSprites_MinorExtendedSpritesPtrs[12])(uint8 k) = {
     &ProcessMinorExtendedSprites_Return, &MExtSpr01_BrickPiece,  &MExtSpr02_SmallStar,   &MExtSpr03_EggShell,
@@ -2988,9 +2989,13 @@ void ParseLevelSpriteList_Entry2() {  // 02a802
     r0 = t & 0xF0;
     v0 = HIBYTE(mirror_current_layer1_ypos) + (t >> 8);
   } else {
-    uint16 t = kParseLevelSpriteList_DATA_02A7F6[camera_layer1_scrolling_direction] + (uint8)mirror_current_layer1_xpos;
+    /* Coluna onde os objetos da fase são criados: 48 px à esquerda ou
+       32 px à direita da área visível (que cresce g_largo de cada lado). */
+    uint8 dir = camera_layer1_scrolling_direction;
+    uint16 cam = mirror_current_layer1_xpos + (dir == 2 ? g_largo : dir == 0 ? -g_largo : 0);
+    uint16 t = kParseLevelSpriteList_DATA_02A7F6[dir] + (uint8)cam;
     r0 = t & 0xF0;
-    v0 = HIBYTE(mirror_current_layer1_xpos) + (t >> 8);
+    v0 = HIBYTE(cam) + (t >> 8);
   }
   int8 v1 = kParseLevelSpriteList_DATA_02A7F9[camera_layer1_scrolling_direction] + v0;
   if (v1 >= 0) {
@@ -5395,7 +5400,7 @@ LABEL_10:
     }
     uint8 r1 = r3 | counter_global_frames & 1;
     uint16 xpos = PAIR16(kSubOffscreen_Bank02_DATA_02D00F[r1], kSubOffscreen_Bank02_DATA_02D007[r1]) +
-        mirror_current_layer1_xpos - GetSprXPos(k);
+        ((r1 & 1) ? -g_largo : g_largo) + mirror_current_layer1_xpos - GetSprXPos(k);
     uint8 v3 = (xpos >> 8);
     if (r1 & 1)
       v3 ^= 0x80;
@@ -5583,7 +5588,7 @@ PointU8 AimTowardsPlayer_Bank23(uint8 k, uint8 a) {  // 02d2fb
 GetDrawInfoRes GetDrawInfo_Bank23_ReturnsTwice(uint8 k) {  // 02d378
   spr_yoffscreen_flag[k] = 0;
   spr_xoffscreen_flag[k] = (uint16)(GetSprXPos(k) - mirror_current_layer1_xpos) >= 256;
-  bool carry = (uint16)(GetSprXPos(k) - mirror_current_layer1_xpos + 0x40) >= 0x180;
+  bool carry = (uint16)(GetSprXPos(k) - mirror_current_layer1_xpos + 0x40 + g_largo) >= 0x180 + 2 * g_largo;
   spr_table15c4[k] = carry;
   if (carry) {
     return (GetDrawInfoRes) { .idx = 0xff, .x = 0, .y = 0 };

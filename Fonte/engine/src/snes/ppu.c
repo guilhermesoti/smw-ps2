@@ -102,6 +102,18 @@ void ppu_handleVblank(Ppu* ppu) {
   ppu->frameInterlace = PPU_interlace(ppu); // set if we have a interlaced frame
 }
 
+/* Tela larga (16:9) do port: colunas extras à esquerda/direita da tela
+   nativa de 256, lidas da VRAM como as demais (extraLeftCur/extraRightCur). */
+static inline bool PpuLargo(const Ppu *ppu) {
+  return ppu->wideTile != NULL || (ppu->extraLeftCur | ppu->extraRightCur) != 0;
+}
+
+/* Posição de x dentro da célula de mosaico, também para x negativo. */
+static inline int PpuMosaicPhase(const Ppu *ppu, int x) {
+  int m = PPU_mosaicSize(ppu);
+  return x >= 0 ? x - ppu->mosaicModulo[x] : ((x % m) + m) % m;
+}
+
 static inline void ClearBackdrop(PpuPixelPrioBufs *buf, bool wide) {
   unsigned start=wide?0:kPpuExtraLeftRight;
   unsigned length=wide?kPpuXPixels:256;
@@ -163,7 +175,7 @@ void ppu_runLine(Ppu* ppu, int line) {
     }
 
     // evaluate sprites
-    ClearBackdrop(&ppu->objBuffer,ppu->wideTile!=NULL);
+    ClearBackdrop(&ppu->objBuffer,PpuLargo(ppu));
     ppu->lineHasSprites = !PPU_forcedBlank(ppu) && ppu_evaluateSprites(ppu, line - 1);
 
     if (g_new_ppu) {
@@ -199,7 +211,16 @@ static void PpuWindows_Calc(PpuWindows *win, Ppu *ppu, uint layer) {
   uint i, j;
   int t;
   int w1_left = ppu->window1left, w1_right = ppu->window1right;
+  int w2_left = ppu->window2left, w2_right = ppu->window2right;
   bool w1_ena = (winflags & kWindow1Enabled) && w1_left <= w1_right;
+  bool w2_ena = (winflags & kWindow2Enabled) && w2_left <= w2_right;
+  /* Tela larga: uma janela que encosta na borda da tela nativa (0 ou 255)
+     continua pelas colunas extras, como se a tela fosse mais larga. */
+  int ext_left = -win->edges[0], ext_right = window_right - 256;
+  if (w1_left == 0) w1_left = -ext_left;
+  if (w1_right == 255) w1_right = 255 + ext_right;
+  if (w2_left == 0) w2_left = -ext_left;
+  if (w2_right == 255) w2_right = 255 + ext_right;
   if (w1_ena) {
     /* The main map's centered submap iris stays enabled after it opens.
      * Project its 16..240 aperture into the widened map frame as it animates.
@@ -218,9 +239,8 @@ static void PpuWindows_Calc(PpuWindows *win, Ppu *ppu, uint layer) {
       win->edges[++nr] = window_right;
     }
   }
-  bool w2_ena = (winflags & kWindow2Enabled) && ppu->window2left <= ppu->window2right;
   if (w2_ena) {
-    for (i = 0; i <= nr && (t = ppu->window2left) != win->edges[i]; i++) {
+    for (i = 0; i <= nr && (t = w2_left) != win->edges[i]; i++) {
       if (t < win->edges[i]) {
         for (j = nr++; j >= i; j--)
           win->edges[j + 1] = win->edges[j];
@@ -228,7 +248,7 @@ static void PpuWindows_Calc(PpuWindows *win, Ppu *ppu, uint layer) {
         break;
       }
     }
-    for (; i <= nr && (t = ppu->window2right + 1) != win->edges[i]; i++) {
+    for (; i <= nr && (t = w2_right + 1) != win->edges[i]; i++) {
       if (t < win->edges[i]) {
         for (j = nr++; j >= i; j--)
           win->edges[j + 1] = win->edges[j];
@@ -248,8 +268,8 @@ static void PpuWindows_Calc(PpuWindows *win, Ppu *ppu, uint layer) {
   if ((winflags & (kWindow1Enabled | kWindow1Inversed)) == (kWindow1Enabled | kWindow1Inversed))
     w1_bits = ~w1_bits;
   if (w2_ena) {
-    for (i = 0; win->edges[i] != ppu->window2left; i++);
-    for (j = i; win->edges[j] != ppu->window2right + 1; j++);
+    for (i = 0; win->edges[i] != w2_left; i++);
+    for (j = i; win->edges[j] != w2_right + 1; j++);
     w2_bits = ((1 << (j - i)) - 1) << i;
   }
   if ((winflags & (kWindow2Enabled | kWindow2Inversed)) == (kWindow2Enabled | kWindow2Inversed))
@@ -508,7 +528,7 @@ static void PpuDrawBackground_4bpp_mosaic(Ppu *ppu, uint y, bool sub, uint layer
     const uint16_t *tp_last = tps[x >> 8 & 1] + 31, *tp_next = tps[(x >> 8 & 1) ^ 1];
     x &= 7;
     int mosaic_size = PPU_mosaicSize(ppu);
-    int w = mosaic_size - (sx - ppu->mosaicModulo[sx]);
+    int w = mosaic_size - PpuMosaicPhase(ppu, sx);
     do {
       w = IntMin(w, dstz_end - dstz);
       uint32_t tile = *tp;
@@ -525,8 +545,18 @@ static void PpuDrawBackground_4bpp_mosaic(Ppu *ppu, uint y, bool sub, uint layer
         } while (++i != w);
       }
       dstz += w, x += w;
-      for (; x >= 8; x -= 8)
-        tp = (tp != tp_last) ? tp + 1 : tp_next;
+      /* Na tela larga a linha pode atravessar duas vezes a borda entre as
+         duas metades do mapa de peças; troca as metades a cada travessia. */
+      for (; x >= 8; x -= 8) {
+        if (tp != tp_last) {
+          tp++;
+        } else {
+          const uint16_t *half = tp_next;
+          tp_next = tp_last - 31;
+          tp_last = half + 31;
+          tp = half;
+        }
+      }
       w = mosaic_size;
     } while (dstz_end - dstz != 0);
   }
@@ -571,7 +601,7 @@ static void PpuDrawBackground_2bpp_mosaic(Ppu *ppu, int y, bool sub, uint layer,
     const uint16_t *tp_last = tps[x >> 8 & 1] + 31, *tp_next = tps[(x >> 8 & 1) ^ 1];
     x &= 7;
     int mosaic_size = PPU_mosaicSize(ppu);
-    int w = mosaic_size - (sx - ppu->mosaicModulo[sx]);
+    int w = mosaic_size - PpuMosaicPhase(ppu, sx);
     do {
       w = IntMin(w, dstz_end - dstz);
       uint32_t tile = *tp;
@@ -588,8 +618,18 @@ static void PpuDrawBackground_2bpp_mosaic(Ppu *ppu, int y, bool sub, uint layer,
         } while (++i != w);
       }
       dstz += w, x += w;
-      for (; x >= 8; x -= 8)
-        tp = (tp != tp_last) ? tp + 1 : tp_next;
+      /* Na tela larga a linha pode atravessar duas vezes a borda entre as
+         duas metades do mapa de peças; troca as metades a cada travessia. */
+      for (; x >= 8; x -= 8) {
+        if (tp != tp_last) {
+          tp++;
+        } else {
+          const uint16_t *half = tp_next;
+          tp_next = tp_last - 31;
+          tp_last = half + 31;
+          tp = half;
+        }
+      }
       w = mosaic_size;
     } while (dstz_end - dstz != 0);
   }
@@ -638,7 +678,7 @@ static void PpuDrawBackground_mode7(Ppu *ppu, uint y, bool sub, PpuZbufType z) {
     uint32_t outside_value = PPU_m7largeField(ppu) ? 0x3ffff : 0xffffffff;
     bool char_fill = PPU_m7charFill(ppu);
     if (mosaic_enabled) {
-      int w = PPU_mosaicSize(ppu) - (x - ppu->mosaicModulo[x]);
+      int w = PPU_mosaicSize(ppu) - PpuMosaicPhase(ppu, x);
       do {
         w = IntMin(w, dstz_end - dstz);
         if ((uint32_t)(xpos | ypos) > outside_value) {
@@ -817,7 +857,7 @@ static NOINLINE void PpuDrawWholeLine(Ppu *ppu, uint y) {
   PpuPreparePalette(ppu);
 
   // Default background is backdrop
-  ClearBackdrop(&ppu->bgBuffers[0],ppu->wideTile!=NULL);
+  ClearBackdrop(&ppu->bgBuffers[0],PpuLargo(ppu));
 
   // Render main screen
   PpuDrawBackgrounds(ppu, y, false);
@@ -825,7 +865,7 @@ static NOINLINE void PpuDrawWholeLine(Ppu *ppu, uint y) {
   // Render also the subscreen?
   bool rendered_subscreen = false;
   if (PPU_preventMathMode(ppu) != 3 && PPU_addSubscreen(ppu) && PPU_mathEnabled(ppu)) {
-    ClearBackdrop(&ppu->bgBuffers[1],ppu->wideTile!=NULL);
+    ClearBackdrop(&ppu->bgBuffers[1],PpuLargo(ppu));
     if (ppu->screenEnabled[1] != 0) {
       PpuDrawBackgrounds(ppu, y, true);
       rendered_subscreen = true;
@@ -844,7 +884,16 @@ static NOINLINE void PpuDrawWholeLine(Ppu *ppu, uint y) {
 
   uint32_t *dst = (uint32_t*)&ppu->renderBuffer[(y - 1) * ppu->renderPitch], *dst_org = dst;
 
-  if(!ppu->wideTile) dst += ppu->extraLeftRight;
+  if(!ppu->wideTile) {
+    /* Quadro de 256 + 2*extraLeftRight colunas. A parte desenhada tem
+       256 + extraLeftCur + extraRightCur; o que sobrar fica preto. */
+    unsigned drawn = 256 + ppu->extraLeftCur + ppu->extraRightCur;
+    unsigned total = 256 + 2 * ppu->extraLeftRight;
+    unsigned pad = drawn < total ? (total - drawn) / 2 : 0;
+    for (unsigned i = 0; i < pad; i++) dst[i] = PpuPackRgb(0, 0, 0);
+    for (unsigned i = pad + drawn; i < total; i++) dst[i] = PpuPackRgb(0, 0, 0);
+    dst += pad;
+  }
 
   uint32_t windex = 0;
   do {
@@ -949,7 +998,10 @@ static void PpuPrepareSpriteLists(Ppu *ppu) {
   for (unsigned i = 0; i < 128; i++, index += 2) {
     PpuSprite *s = &ppu->spriteCache[index >> 1];
     unsigned high = ppu->highOam[index >> 3] >> (index & 7);
-    s->x = (ppu->oam[index] & 255) - ((high & 1) << 8);
+    /* X tem 9 bits (0-511). Na tela larga, 256..255+extraRightCur ficam à
+       direita da tela nativa; o resto acima de 255 é negativo, como no SNES. */
+    s->x = (ppu->oam[index] & 255) | ((high & 1) << 8);
+    if (s->x >= 256 + ppu->extraRightCur) s->x -= 512;
     if(ppu->wideTile && ppu->wideOamValid[index>>1]) s->x=ppu->wideOamX[index>>1];
     s->y = ppu->oam[index] >> 8;
     s->size = spriteSizes[PPU_objSize(ppu)][high >> 1 & 1];
@@ -957,12 +1009,12 @@ static void PpuPrepareSpriteLists(Ppu *ppu) {
     s->tileAddress = (s->attributes & 0x100) ? PPU_objTileAdr2(ppu) : PPU_objTileAdr1(ppu);
     s->z = 0x80 + ((s->attributes & 0xe00) >> 5) +
       (SPRITE_PRIO_TO_PRIO((s->attributes & 0x3000) >> 12, (s->attributes & 0x800) == 0) << 8);
-    if (s->x <= -(int)s->size-(ppu->wideTile?ppu->extraLeftCur:0)) continue;
-    if(ppu->wideTile && s->x>=256+ppu->extraRightCur) continue;
+    if (s->x <= -(int)s->size-ppu->extraLeftCur) continue;
+    if(s->x>=256+ppu->extraRightCur) continue;
     unsigned height = PPU_objInterlace(ppu) ? s->size / 2 : s->size;
     for (unsigned row = 0; row < height; row++) {
       PpuSpriteLine *list = &ppu->spriteLines[(s->y + row) & 255];
-      if (list->count < (ppu->wideTile?128:33)) list->sprite[list->count++] = index >> 1;
+      if (list->count < (PpuLargo(ppu)?128:33)) list->sprite[list->count++] = index >> 1;
     }
   }
   ppu->spriteListsValid = true;
@@ -980,7 +1032,7 @@ static bool ppu_evaluateSprites(Ppu* ppu, int line) {
     int x = s->x;
     // break if we found 32 sprites already
     spritesFound++;
-    if(spritesFound > 32 && !ppu->wideTile) {
+    if(spritesFound > 32 && !PpuLargo(ppu)) {
       ppu->rangeOver = true;
       break;
     }
@@ -994,10 +1046,10 @@ static bool ppu_evaluateSprites(Ppu* ppu, int line) {
     PpuZbufType z = s->z;
 
     for(int col = 0; col < spriteSize; col += 8) {
-      if(col+x>-8-(ppu->wideTile?ppu->extraLeftCur:0) && col+x<256+(ppu->wideTile?ppu->extraRightCur:0)) {
+      if(col+x>-8-ppu->extraLeftCur && col+x<256+ppu->extraRightCur) {
         // break if we found 34 8*1 slivers already
         tilesFound++;
-        if(tilesFound > 34 && !ppu->wideTile) {
+        if(tilesFound > 34 && !PpuLargo(ppu)) {
           ppu->timeOver = true;
           break;
         }
@@ -1008,8 +1060,8 @@ static bool ppu_evaluateSprites(Ppu* ppu, int line) {
         uint32_t plane = addr[0] | (uint32_t)addr[8] << 16;
         uint32_t packed_pixels = PpuDecode4(plane, (oam1 & 0x4000) != 0);
         // go over each pixel
-        int px_left = IntMax(-(col+x+(ppu->wideTile?ppu->extraLeftCur:0)),0);
-        int px_right = IntMin(256+(ppu->wideTile?ppu->extraRightCur:0)-(col+x),8);
+        int px_left = IntMax(-(col+x+ppu->extraLeftCur),0);
+        int px_right = IntMin(256+ppu->extraRightCur-(col+x),8);
         PpuZbufType *dst = ppu->objBuffer.data + col + x + px_left + kPpuExtraLeftRight;
 
         for (int px = px_left; px < px_right; px++, dst++) {
@@ -1021,7 +1073,7 @@ static bool ppu_evaluateSprites(Ppu* ppu, int line) {
 
       }
     }
-    if(tilesFound > 34 && !ppu->wideTile) break;
+    if(tilesFound > 34 && !PpuLargo(ppu)) break;
   }
   return tilesFound != 0;
 }

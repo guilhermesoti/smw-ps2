@@ -5,6 +5,7 @@
 #include "src/snes/snes.h"
 #include "src/variables.h"
 #include "src/ptbr.h"
+#include "src/largo.h"
 
 Snes *g_snes;
 SpcPlayer *g_spc_player;
@@ -40,6 +41,15 @@ void smw_start(uint8_t *rom, uint32_t *pixels) {
   smw_load_progress(g_sram);
 }
 
+void smw_set_widescreen(bool on, uint32_t *pixels, unsigned pitch) {
+  g_largo_max = on ? SMW_LARGO_EXTRA : 0;
+  g_largo = 0;
+  Ppu *ppu = g_snes->ppu;
+  ppu->extraLeftRight = g_largo_max;
+  ppu->extraLeftCur = ppu->extraRightCur = 0;
+  PpuBeginDrawing(ppu, (uint8_t *)pixels, (on ? pitch : SMW_WIDTH) * 4, 0);
+}
+
 static uint16_t filter_dpad(uint16_t buttons) {
   if ((buttons & 0x30) == 0x30) buttons &= ~0x30;
   if ((buttons & 0xc0) == 0xc0) buttons &= ~0xc0;
@@ -55,10 +65,13 @@ void smw_frame(uint16_t p1, uint16_t p2, unsigned pads, int16_t *stereo, int sam
   g_snes->input2->currentState = filter_dpad(p2);
   g_ram[kSmwRam_APUI02] = g_spc_player->port_to_snes[2];
   g_snes->runningWhichVersion = 2;
+  LargoAtualiza();
   SmwRunOneFrameOfGame();
   g_snes->runningWhichVersion = 0;
   ++snes_frame_counter;
   RtlPushApuState();
+  LargoAtualiza();
+  g_snes->ppu->extraLeftCur = g_snes->ppu->extraRightCur = g_largo;
   SmwDrawPpuFrame(draw_pixels);
   if (samples < 1 || samples > SMW_MAX_SAMPLES) samples = SMW_SAMPLES;
   RtlRenderAudio(stereo, samples, 2);

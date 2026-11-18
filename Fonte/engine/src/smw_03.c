@@ -2,6 +2,7 @@
 #include "funcs.h"
 #include "smw_rtl.h"
 #include "variables.h"
+#include "largo.h"
 
 static FuncU8 *const kSpr0C5_BigBooBoss_BigBooBossPtrs[7] = {
     &Spr0C5_BigBooBoss_StoppedBeforeFadeIn,
@@ -3483,7 +3484,8 @@ void SubOffscreen_Bank03_03B85F(uint8 k, uint8 r3) {  // 03b85f
     if ((spr_property_bits167a[k] & 4) == 0) {
       uint8 r1 = r3 | counter_global_frames & 1;
       uint16 xpos =
-          PAIR16(kSubOffscreen_Bank03_DATA_03B847[r1], kSubOffscreen_Bank03_DATA_03B83F[r1]) + mirror_current_layer1_xpos - GetSprXPos(k);
+          PAIR16(kSubOffscreen_Bank03_DATA_03B847[r1], kSubOffscreen_Bank03_DATA_03B83F[r1]) +
+          ((r1 & 1) ? -g_largo : g_largo) + mirror_current_layer1_xpos - GetSprXPos(k);
       uint8 r0 = xpos >> 8;
       if (r1 & 1)
         r0 ^= 0x80;

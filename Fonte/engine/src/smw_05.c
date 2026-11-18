@@ -3,6 +3,7 @@
 #include "funcs.h"
 #include "smw_rtl.h"
 #include "variables.h"
+#include "largo.h"
 
 void (*kBufferScrollingTiles_Layer1_Main_PtrsLong058823[32])(void) = {
     &BufferScrollingTiles_Layer1,
@@ -740,11 +741,20 @@ void BufferScrollingTiles_Layer1() {  // 0589ce
   if ((*((uint8 *)&camera_layer1_row_column_to_update_left_up + v0) & 0x10) != 0)
     v1 = 36;
   LOBYTE(blocks_layer1_vramupload_address) = v1;
-  uint16 R0_W = (uint16)(*(ram_u16 *)((int8 *)&camera_layer1_row_column_to_update_left_up + v0) & 0x1F0) >> 4;
+  /* Coluna da fase copiada para a VRAM. O jogo também envia colunas fora
+     da fase (antes do início e depois do fim), que no 4:3 nunca aparecem;
+     na tela larga elas repetem a primeira/última coluna da fase. */
+  uint16 col = *(ram_u16 *)((int8 *)&camera_layer1_row_column_to_update_left_up + v0);
+  if (g_largo_max && camera_last_screen_horiz) {
+    int16 ultima = camera_last_screen_horiz * 16 - 1;
+    if ((int16)col < 0) col = 0;
+    else if ((int16)col > ultima) col = ultima;
+  }
+  uint16 R0_W = (uint16)(col & 0x1F0) >> 4;
   const uint8 *plo = IndirPtr((LongPtr *)(r10 + 3 * R0_W), 0);
   const uint8 *phi = IndirPtr((LongPtr *)(r13 + 3 * R0_W), 0);
   uint8 bank = sign8(misc_level_tileset_setting - 16) ? 13 : 5;
-  uint16 r8 = *((uint8 *)&camera_layer1_row_column_to_update_left_up + v0) & 0xF;
+  uint16 r8 = col & 0xF;
   uint16 v4 = 0;
   do {
     uint16 v5 = r8;
