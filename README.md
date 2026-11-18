@@ -81,8 +81,8 @@ python3 testes/testar_salas.py "/caminho/Super Mario World (USA).zip"
 Volta da câmera no mapa depois de olhar em volta com START (deslocamentos de até 273 pixels). Use uma pasta só com o jogo, sem save:
 
 ```sh
-cc -O1 -std=gnu11 -fno-strict-aliasing -fwrapv -fsanitize=address,undefined \
-   -IFonte/engine -IFonte/ps2 $(pkg-config --cflags minizip zlib) \
+cc -O1 -std=gnu11 -fno-strict-aliasing -fwrapv -ffunction-sections -fdata-sections -Wl,--gc-sections \
+   -fsanitize=address,undefined -IFonte/engine -IFonte/ps2 $(pkg-config --cflags minizip zlib) \
    $(find Fonte/engine/src -name '*.c') Fonte/ps2/files.c Fonte/ps2/game.c testes/camera_mapa.c \
    $(pkg-config --libs minizip zlib) -lm -o /tmp/smw-camera
 ASAN_OPTIONS=detect_leaks=0 /tmp/smw-camera /caminho/da/pasta/com/o/jogo/
