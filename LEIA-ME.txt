@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.13 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
+Retrogames Patos de Minas | v0.13.1 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
 
 O QUE VOCÊ PRECISA
 
@@ -208,11 +208,11 @@ O Gravador grava SMW.CFG junto do jogo (em APPS/SMW ou dentro da ISO),
 um texto simples com o que já vem marcado na tela AJUSTES:
   tela=perguntar        (ou 4:3, 16:9)
   video=perguntar       (ou 240p, 480i, 480p)
-  suavizacao=perguntar  (ou forte, media, nao)
+  suavizacao=perguntar  (ou nao, media, forte)
   idioma=pt             (ou en)
 Dá para editar no Bloco de Notas. O que foi escolhido no próprio PS2
 (SMW.OPT, onde fica o save) vale mais que o SMW.CFG. Sem esses arquivos
-a tela AJUSTES começa em 240p, 4:3, suavização forte e português, e
+a tela AJUSTES começa em 240p, 4:3, suavização desligada e português, e
 espera você apertar X.
 
 SOBRE ESTA VERSÃO
@@ -222,6 +222,13 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.13.1 (beta):
+- Suavização desligada por padrão. No teste no console pelo cabo AV
+  numa TV de tela plana, a imagem ficou melhor sem suavização, porque
+  a própria TV já deixa a imagem macia. Forte e média continuam na
+  tela AJUSTES e no L2 + R2 + CÍRCULO. Quem já escolheu no PS2 continua
+  com o que escolheu (SMW.OPT).
 
 Mudanças da v0.13 (beta):
 - Tela AJUSTES no lugar da tela de texto do começo: vídeo (240p, 480i

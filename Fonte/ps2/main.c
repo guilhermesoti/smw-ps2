@@ -19,7 +19,7 @@
 #include <timer.h>
 #include <unistd.h>
 
-#define SMW_VERSAO "0.13"
+#define SMW_VERSAO "0.13.1"
 
 #define DECLARE_DRIVER(n) extern unsigned char n##_irx[]; extern unsigned int size_##n##_irx
 DECLARE_DRIVER(bdm);
@@ -49,10 +49,11 @@ static const char *card_drivers = "nenhum";
    in both fields of an interlaced picture (flat TVs often handle it better
    than 240p over the AV cable). 480p: component or HDMI adapter; there each
    SNES line becomes two TV lines, and optional scanlines darken every
-   second line like a CRT fed with RGB. suave: 0 sharp, 1 medium, 2 strong
-   (GS bilinear filter). */
+   second line like a CRT fed with RGB. suave: 0 sharp (default: over the AV
+   cable the TV already softens the picture), 1 medium, 2 strong (GS bilinear
+   filter). */
 static struct { int modo; bool p480, scanlines, wide, compat; int suave; } video = {
-    SMW_VIDEO_240P, false, true, false, false, 2};
+    SMW_VIDEO_240P, false, true, false, false, 0};
 static SmwOptions opcoes;  /* what is saved in SMW.OPT */
 /* Image columns and row length in pixels: 256/256 (4:3) or 342/384 (16:9). */
 static unsigned screen_w = SMW_WIDTH, screen_pitch = SMW_WIDTH;
@@ -557,7 +558,7 @@ int main(int argc, char **argv) {
   smw_read_config(&cfg);
   smw_options_clear(&salvo);
   smw_read_saved_options(&salvo);
-  opcoes = (SmwOptions){0, SMW_VIDEO_240P, 0, 2, 0};
+  opcoes = (SmwOptions){0, SMW_VIDEO_240P, 0, 0, 0};
   const SmwOptions *fontes[2] = {&cfg, &salvo};
   for (int i = 0; i < 2; ++i) {
     if (fontes[i]->tela >= 0) opcoes.tela = fontes[i]->tela;

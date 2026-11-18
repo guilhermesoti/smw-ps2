@@ -107,7 +107,7 @@ const Nucleo = (() => {
   const OPCOES = {
     tela: ['perguntar', '4:3', '16:9'],
     video: ['perguntar', '240p', '480i', '480p'],
-    suavizacao: ['perguntar', 'forte', 'media', 'nao'],
+    suavizacao: ['perguntar', 'nao', 'media', 'forte'],
     idioma: ['pt', 'en'],
   };
 
@@ -116,7 +116,7 @@ const Nucleo = (() => {
     return [
       '# Gravador SMW PS2 - como o jogo abre',
       '# tela: perguntar, 4:3 ou 16:9 | video: perguntar, 240p, 480i ou 480p',
-      '# suavizacao: perguntar, forte, media ou nao | idioma: pt ou en',
+      '# suavizacao: perguntar, nao, media ou forte | idioma: pt ou en',
       'tela=' + v('tela'),
       'video=' + v('video'),
       'suavizacao=' + v('suavizacao'),

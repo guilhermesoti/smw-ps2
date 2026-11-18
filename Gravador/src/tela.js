@@ -205,7 +205,7 @@
       a.video === 'perguntar' ? 'Você escolhe o vídeo (240p, 480i ou 480p).'
         : 'Já marcado: ' + a.video + (a.video === '240p' ? '.' : ' (se a TV não mostrar, volta para os ajustes).'),
       a.tela === 'perguntar' ? 'Você escolhe 4:3 ou 16:9.' : 'Já marcado: tela ' + a.tela + '.',
-      a.suavizacao === 'perguntar' ? 'Suavização: forte, se você não mudar.'
+      a.suavizacao === 'perguntar' ? 'Suavização: desligada, se você não mudar.'
         : 'Suavização ' + (a.suavizacao === 'nao' ? 'desligada.' : a.suavizacao === 'media' ? 'média.' : 'forte.'),
       a.idioma === 'pt' ? 'Jogo em português.' : 'Jogo em inglês.',
       'Abertura Retrogames.',
