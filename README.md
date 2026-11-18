@@ -2,11 +2,11 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.13.2 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
+**Versão 0.13.3 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
-- Tela AJUSTES no começo: vídeo 240p (cabo AV, TV de tubo), 480i (cabo AV, TV de tela plana) ou 480p com scanlines (componente/HDMI), tela 4:3 ou 16:9, suavização (desligada, média, forte; desligada por padrão) e idioma. Vídeo novo só fica se você confirmar que a imagem apareceu.
-- No 240p e no 480i, 1280 pontos por linha: todo pixel do SNES com a mesma largura, também no 16:9.
+- Tela AJUSTES no começo: vídeo 240p (cabo AV, qualquer TV; o recomendado), 480i (só para TV que não mostra 240p) ou 480p com scanlines (componente/HDMI), tela 4:3 ou 16:9, suavização (desligada, média, forte; desligada por padrão) e idioma. Vídeo novo só fica se você confirmar que a imagem apareceu.
+- 1280 pontos por linha em todos os vídeos (no 480p, quadro de 16 bits): todo pixel do SNES com a mesma largura, também no 16:9.
 - Tela 16:9 opcional (beta): nas fases mostra 43 colunas a mais de cada lado, para TV no modo widescreen. Escolha na tela AJUSTES; L2 + R2 + CRUZ troca no jogo.
 - **Gravador SMW PS2**: um HTML que abre em qualquer navegador, confere a cópia do jogo e grava o aplicativo, a ISO ou os dois no pendrive.
 - Em português do Brasil: mensagens, nomes das fases e textos dos castelos. Segure SELECT na abertura para jogar em inglês.
@@ -31,7 +31,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.13.2 obtido com o ps2dev v2.0.0 foi `fbfc13366945f06350143f4874d3a2d33dd7d46180801ae02b7346b0d9b53bf8`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.13.3 obtido com o ps2dev v2.0.0 foi `9024b152d73b8d36785bfab822e8399b17049ecc6aea1396cbaafba5b09f543e`.
 
 ## Gravador SMW PS2 (programa no PC)
 

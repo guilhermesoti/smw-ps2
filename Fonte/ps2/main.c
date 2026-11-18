@@ -19,7 +19,7 @@
 #include <timer.h>
 #include <unistd.h>
 
-#define SMW_VERSAO "0.13.2"
+#define SMW_VERSAO "0.13.3"
 
 #define DECLARE_DRIVER(n) extern unsigned char n##_irx[]; extern unsigned int size_##n##_irx
 DECLARE_DRIVER(bdm);
@@ -45,9 +45,10 @@ static bool sound;
 static int audio_capacity;  /* bytes in audsrv's ring buffer */
 static const char *card_drivers = "nenhum";
 
-/* Video. 240p: like the SNES, for CRT TVs. 480i: the same 224 lines shown
-   in both fields of an interlaced picture (flat TVs often handle it better
-   than 240p over the AV cable). 480p: component or HDMI adapter; there each
+/* Video. 240p: like the SNES; the sharpest over the AV cable on any TV
+   (tested on a CRT and on a flat TV). 480i: the same 224 lines shown in both
+   fields of an interlaced picture, for TVs that do not show 240p; flat TVs
+   deinterlace it and it comes out softer. 480p: component or HDMI adapter; there each
    SNES line becomes two TV lines, and optional scanlines darken every
    second line like a CRT fed with RGB. suave: 0 sharp (default: over the AV
    cable the TV already softens the picture), 1 medium, 2 strong (GS bilinear
@@ -192,9 +193,13 @@ extern unsigned char msx[];  /* PS2SDK libdebug 8x8 font */
 
 /* Video modes. VIDEO_AJUSTES is the one of the settings screen: 480i with
    640 columns, the mode of the PS2SDK text screen, which every TV shows.
-   The game uses 1280 columns in 240p and 480i (512 if compat): 5 per SNES
-   pixel in 4:3 (the same picture as 512 = 2 per pixel) and about 3.74 in
-   16:9, where 512 gave alternating 1- and 2-column pixels. 480p keeps 640. */
+   The game uses 1280 columns (5 per SNES pixel in 4:3, about 3.74 in 16:9):
+   with 512 in 240p/480i the 16:9 pixels alternated 1 and 2 columns, and
+   with 640 in 480p every SNES pixel was 2 or 3 columns (2.5 each). 480p at
+   1280 x 480 uses a 16-bit frame buffer (two 32-bit ones do not fit in the
+   4 MB of VRAM); SNES colours have 5 bits per channel, so nothing is lost.
+   compat: the old widths (512, or 640 in 480p) for a TV that does not show
+   1280. */
 enum { VIDEO_AJUSTES = 100 };
 
 static void video_abre(int modo, bool compat) {
@@ -211,12 +216,14 @@ static void video_abre(int modo, bool compat) {
   }
   gs = gsKit_init_global();
   if (!gs) stop_with("Sem memoria para iniciar o video.");
+  gs->PSM = GS_PSM_CT32;
   if (modo == SMW_VIDEO_480P) {
     gs->Mode = GS_MODE_DTV_480P;
     gs->Interlace = GS_NONINTERLACED;
     gs->Field = GS_FRAME;
-    gs->Width = 640;
+    gs->Width = compat ? 640 : 1280;
     gs->Height = 480;
+    if (!compat) gs->PSM = GS_PSM_CT16;
   } else {
     gs->Mode = GS_MODE_NTSC;
     /* 480i in FIELD mode with 224 lines: every line is shown in both fields. */
@@ -226,7 +233,6 @@ static void video_abre(int modo, bool compat) {
     gs->Width = modo == VIDEO_AJUSTES ? 640 : compat ? 512 : 1280;
     gs->Height = SMW_HEIGHT;
   }
-  gs->PSM = GS_PSM_CT32;
   gs->ZBuffering = GS_SETTING_OFF;
   gs->DoubleBuffering = GS_SETTING_ON;
   gs->PrimAlphaEnable = GS_SETTING_OFF;
@@ -599,22 +605,21 @@ int main(int argc, char **argv) {
     tela_ajustes(&opcoes, contagem, aviso, situacao);
     contagem = false;
     aviso = NULL;
-    bool analogico = opcoes.video != SMW_VIDEO_480P;
     /* O modo que ja foi confirmado nesta TV entra direto; um modo novo
        pergunta se a imagem apareceu. Se 1280 colunas nao aparecerem, tenta
-       512 antes de voltar para os ajustes. */
+       a largura antiga (512, ou 640 no 480p) antes de voltar para os
+       ajustes. */
     if (conhecido && opcoes.video == salvo.video) {
-      video_abre(opcoes.video, analogico && opcoes.compat == 1);
+      video_abre(opcoes.video, opcoes.compat == 1);
       break;
     }
-    video_abre(opcoes.video, analogico && opcoes.compat == 1);
+    opcoes.compat = 0;
+    video_abre(opcoes.video, false);
     if (confirma_video(opcoes.idioma)) break;
-    if (analogico && opcoes.compat != 1) {
-      video_abre(opcoes.video, true);
-      if (confirma_video(opcoes.idioma)) {
-        opcoes.compat = 1;
-        break;
-      }
+    video_abre(opcoes.video, true);
+    if (confirma_video(opcoes.idioma)) {
+      opcoes.compat = 1;
+      break;
     }
     static const char *const nomes[] = {"240p", "480p", "480i"};
     snprintf(aviso_texto, sizeof(aviso_texto),

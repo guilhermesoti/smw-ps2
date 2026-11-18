@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.13.2 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
+Retrogames Patos de Minas | v0.13.3 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
 
 O QUE VOCÊ PRECISA
 
@@ -132,19 +132,20 @@ VÍDEO E DESEMPENHO
 Depois do carregamento vem a tela AJUSTES. Direcional para cima e para
 baixo escolhe a linha, para os lados muda o valor, X ou START começa:
 - VÍDEO:
-  240p: cabo AV (amarelo) em TV de tubo. É a imagem mais parecida com
-  a do SNES.
-  480i: cabo AV em TV de tela plana. As mesmas 224 linhas aparecem nos
-  dois campos da imagem entrelaçada; muitas TVs de tela plana tratam
-  isso melhor que o 240p. Experimente se o 240p ficar ruim na sua TV.
-  480p: adaptador HDMI ou cabo componente. Cada linha do SNES vira duas,
+  240p: cabo AV (amarelo), em TV de tubo ou de tela plana. É a imagem
+  mais nítida e mais parecida com a do SNES. Use esta.
+  480i: só se a sua TV não mostrar o 240p. As mesmas 224 linhas
+  aparecem nos dois campos da imagem entrelaçada, e a TV de tela plana
+  desentrelaça, o que em geral deixa a imagem menos nítida.
+  480p: adaptador HDMI ou cabo componente (no cabo AV não aparece).
+  Cada linha do SNES vira duas,
   com scanlines (visual de monitor de tubo/RGB). O PS2 deve estar com
   "Saída de vídeo componente" em "Y Cb/Pb Cr" na Configuração do
   Sistema.
 - TELA: 4:3 ou 16:9 (veja TELA 16:9 abaixo), com o teste do círculo.
-- SUAVIZAÇÃO: forte, média ou desligada. Deixa os pixels mais macios,
-  sem serrilhado; ajuda muito no cabo AV e em TV de tela plana. A
-  própria tela AJUSTES já mostra o efeito. Vale para o jogo todo,
+- SUAVIZAÇÃO: desligada, média ou forte. Deixa os pixels mais macios,
+  sem serrilhado. No cabo AV a própria TV já deixa a imagem macia, por
+  isso vem desligada; experimente no 480p. Vale para o jogo todo,
   inclusive a abertura.
 - IDIOMA: português do Brasil ou inglês (o original).
 
@@ -155,10 +156,10 @@ sozinho para a tela AJUSTES. Os ajustes ficam gravados (SMW.OPT, onde
 fica o save) e, da próxima vez, o jogo começa sozinho em 5 segundos;
 aperte qualquer botão para mudar alguma coisa.
 
-No 240p e no 480i o PS2 desenha cada pixel do SNES com a mesma largura
+Em todos os vídeos o PS2 desenha cada pixel do SNES com a mesma largura
 (1280 pontos por linha), também no 16:9. Se a sua TV ou adaptador não
-mostrar essa saída, o jogo tenta sozinho a de 512 pontos antes de voltar
-para os ajustes, e lembra disso.
+mostrar essa saída, o jogo tenta sozinho a antiga (512 pontos, ou 640
+no 480p) antes de voltar para os ajustes, e lembra disso.
 
 Durante o jogo (segurando L2 + R2):
 - L2 + R2 + QUADRADO: liga/desliga as scanlines (no 480p).
@@ -222,6 +223,15 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.13.3 (beta):
+- 480p com 1280 pontos por linha: antes, com 640, cada pixel do SNES
+  saía com 2 ou 3 pontos de largura (2,5 em média) e a imagem ficava
+  irregular. Se o adaptador não mostrar, volta sozinho para 640.
+- 240p indicado para o cabo AV em qualquer TV. No teste numa TV de tela
+  plana o 240p ficou bem melhor que o 480i, que agora é só para TV que
+  não mostra o 240p.
+- Ao escolher um vídeo novo, ele sempre tenta primeiro os 1280 pontos.
 
 Mudanças da v0.13.2 (beta):
 - O bip da tela AJUSTES não fica mais repetindo. O módulo de som do PS2
