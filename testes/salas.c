@@ -3,7 +3,8 @@
    e escritas fora das tabelas com AddressSanitizer/UBSan. Não prova que o
    jogo inteiro pode ser terminado.
 
-   Uso: salas <pasta com o jogo> <quadros por sala> <sala> [<sala>...] */
+   Uso: salas <pasta com o jogo> <quadros por sala> <sala> [<sala>...]
+   Com SMW_LARGO no ambiente, joga em tela larga 16:9. */
 #include "files.h"
 #include "src/common_rtl.h"
 #include "src/variables.h"
@@ -16,7 +17,7 @@
 #include <string.h>
 
 extern Snes *g_snes;
-static uint32_t pixels[SMW_WIDTH * SMW_HEIGHT] __attribute__((aligned(64)));
+static uint32_t pixels[SMW_MAX_PITCH * SMW_HEIGHT] __attribute__((aligned(64)));
 static int16_t amostras[SMW_MAX_SAMPLES * 2];
 static uint8_t ram_base[sizeof(g_ram)];
 static Snes snes_base;
@@ -61,6 +62,7 @@ int main(int argc, char **argv) {
   g_ptbr = getenv("SMW_INGLES") == NULL;
   smw_start(rom, pixels);
   free(rom);
+  if (getenv("SMW_LARGO")) smw_set_widescreen(true, pixels, SMW_MAX_PITCH);
   for (unsigned passo = 0; passo < 1800; ++passo) quadro(entrada_no_passo(passo));
   if (misc_game_mode != 0x14) {
     fprintf(stderr, "O roteiro inicial não chegou numa fase (modo %02x).\n", misc_game_mode);

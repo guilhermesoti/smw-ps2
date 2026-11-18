@@ -25,4 +25,14 @@ void LargoAtualiza(void);
 static inline bool LargoNaTela(int dx, int largura) {
   return dx > -largura - (int)g_largo && dx < 256 + (int)g_largo;
 }
+/* x de um objeto (byte alto/baixo) relativo à câmera da camada 1.
+   Só nos arquivos que incluem variables.h. */
+#define LARGO_DX(hi, lo) ((int)(int16)(PAIR16((hi), (lo)) - mirror_current_layer1_xpos))
+/* Bit 9 de X na OAM para dx (para o byte de tamanho/X alto). */
+static inline uint8 LargoBitX(int dx) { return (dx >> 8) & 1; }
+/* Posição de criação na borda da tela (geradores): afasta g_largo para
+   fora as posições à esquerda (< 0) e à direita (>= 0xF0) da tela. */
+static inline int LargoBorda(int dx) {
+  return dx < 0 ? dx - g_largo : dx >= 0xF0 ? dx + g_largo : dx;
+}
 #endif

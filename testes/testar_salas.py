@@ -60,6 +60,7 @@ def main():
     p.add_argument("--processos", type=int, default=os.cpu_count() or 2)
     p.add_argument("--sem-sanitizar", action="store_true")
     p.add_argument("--ingles", action="store_true", help="Textos originais em inglês")
+    p.add_argument("--largo", action="store_true", help="Tela larga 16:9")
     p.add_argument("--so", help="Lista de salas (ex.: 0x105,0x106)")
     p.add_argument("--relatorio", type=Path, help="Grava o resultado em JSON")
     a = p.parse_args()
@@ -77,6 +78,8 @@ def main():
     env["UBSAN_OPTIONS"] = "print_stacktrace=1:halt_on_error=0"
     if a.ingles:
         env["SMW_INGLES"] = "1"
+    if a.largo:
+        env["SMW_LARGO"] = "1"
 
     with TemporaryDirectory(prefix="smw-salas-") as temp:
         pasta = Path(temp)

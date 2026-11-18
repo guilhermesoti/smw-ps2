@@ -2529,7 +2529,9 @@ void ExtSpr05_MarioFireball_02A04F(uint8 k) {  // 02a04f
 
   uint8 v1 = kExtSpr05_MarioFireball_DATA_029FA2[k + 3];
   uint8 r0 = (uint8)(ext_spr_xspeed[k] & 0x80) >> 1;
-  if ((uint8)(ext_spr_xpos_lo[k] - mirror_current_layer1_xpos) >= 0xF8 ||
+  int dx = LARGO_DX(ext_spr_xpos_hi[k], ext_spr_xpos_lo[k]);
+  if ((g_largo ? dx < -(int)g_largo || dx >= 256 + g_largo - 8
+               : (uint8)(ext_spr_xpos_lo[k] - mirror_current_layer1_xpos) >= 0xF8) ||
       (oam = get_OamEnt(oam_buf, v1), oam[64].xpos = ext_spr_xpos_lo[k] - mirror_current_layer1_xpos,
        (uint8)(ext_spr_ypos_lo[k] - mirror_current_layer1_ypos) >= 0xF0)) {
     EraseExtSprite(k);
@@ -2542,7 +2544,7 @@ void ExtSpr05_MarioFireball_02A04F(uint8 k) {  // 02a04f
     oam[64].flags = v4;
     if (r1)
       oam[64].flags = v4 & 0xCF | 0x10;
-    sprites_oamtile_size_buffer[(v1 >> 2) + 64] = 0;
+    sprites_oamtile_size_buffer[(v1 >> 2) + 64] = g_largo ? LargoBitX(dx) : 0;
   }
 }
 
@@ -2621,7 +2623,9 @@ uint8 GenericExtendedSpriteGFXRt_FireballEntry(uint8 k, uint8 j) {  // 02a1a7
   uint8 r0 = (uint8)(ext_spr_xspeed[k] & 0x80 ^ 0x80) >> 1;
   uint8 v2 = ext_spr_xpos_lo[k];
   uint8 r1 = v2 - mirror_current_layer1_xpos;
-  if (ext_spr_xpos_hi[k] == (uint8)((v2 < (uint8)mirror_current_layer1_xpos) + HIBYTE(mirror_current_layer1_xpos)) &&
+  int dx = LARGO_DX(ext_spr_xpos_hi[k], v2);
+  if ((g_largo ? LargoNaTela(dx, 8) :
+       ext_spr_xpos_hi[k] == (uint8)((v2 < (uint8)mirror_current_layer1_xpos) + HIBYTE(mirror_current_layer1_xpos))) &&
       (v3 = ext_spr_ypos_lo[k], r2 = v3 - mirror_current_layer1_ypos,
        ext_spr_ypos_hi[k] == (uint8)((v3 < (uint8)mirror_current_layer1_ypos) + HIBYTE(mirror_current_layer1_ypos))) &&
       r2 < 0xF0) {
@@ -2635,7 +2639,7 @@ uint8 GenericExtendedSpriteGFXRt_FireballEntry(uint8 k, uint8 j) {  // 02a1a7
     oam->flags = v6;
     if (r1)
       oam->flags = v6 & 0xCF | 0x10;
-    sprites_oamtile_size_buffer[j >> 2] = 0;
+    sprites_oamtile_size_buffer[j >> 2] = g_largo ? LargoBitX(dx) : 0;
   } else {
     EraseExtSprite(k);
   }
@@ -2728,7 +2732,7 @@ uint8 ExtSpr04_Hammer_ThrownBoneEntry(uint8 k) {  // 02a317
   OamEnt *oam = get_OamEnt(oam_buf, result);
   oam->charnum = kExtSpr04_Hammer_Tiles[v2];
   oam->flags = sprites_tile_priority | r0 ^ kExtSpr04_Hammer_Prop[v2] ^ 0x40;
-  sprites_oamtile_size_buffer[result >> 2] = 2;
+  sprites_oamtile_size_buffer[result >> 2] = 2 | (g_largo ? LargoBitX(LARGO_DX(ext_spr_xpos_hi[k], ext_spr_xpos_lo[k])) : 0);
   return result;
 }
 
@@ -3421,7 +3425,9 @@ LABEL_15:;
   uint16 r4w = *(ram_u16 *)((char *)&mirror_current_layer1_xpos + v10);
   uint16 xpos = PAIR16(score_spr_xpos_hi[k], score_spr_xpos_lo[k]) - r4w;
   uint16 ypos = PAIR16(score_spr_ypos_hi[k], score_spr_ypos_lo[k]) - r2w;
-  if (!((uint16)(xpos + 12) >> 8) && !(xpos >> 8) && !(ypos >> 8)) {
+  /* Tela larga: os pontos também aparecem nas colunas extras. */
+  if ((g_largo ? LargoNaTela((int16)xpos, 16) && (int16)xpos < 244 + g_largo
+               : !((uint16)(xpos + 12) >> 8) && !(xpos >> 8)) && !(ypos >> 8)) {
     uint8 v11 = kProcessScoreSprites_OAMIndex[k];
     if ((misc_nmito_use_flag & 0x40) != 0)
       v11 = 4;
@@ -3447,8 +3453,8 @@ LABEL_15:;
     v20->flags = v19;
     v20[1].flags = v19;
     uint8 v21 = v24 >> 2;
-    sprites_oamtile_size_buffer[v21] = 0;
-    sprites_oamtile_size_buffer[v21 + 1] = 0;
+    sprites_oamtile_size_buffer[v21] = g_largo ? LargoBitX((int16)xpos) : 0;
+    sprites_oamtile_size_buffer[v21 + 1] = g_largo ? LargoBitX((int16)xpos + 8) : 0;
     if (score_spr_spriteid[v16] >= 0x11) {
       OamEnt *v22 = get_OamEnt(oam_buf, 0x4C);
       v22->xpos = score_spr_xpos_lo[v16] - r4w - 8;
@@ -3528,7 +3534,7 @@ void GenSpr0E_GenerateFire() {  // 02b036
       InitializeNormalSpriteRAMTables(j);
       uint8 r = GetRand();
       SetSprYPos(j, (mirror_current_layer1_ypos + (r & 0x7F) + 32) & ~0xf);
-      SetSprXPos(j, mirror_current_layer1_xpos + 255);
+      SetSprXPos(j, mirror_current_layer1_xpos + LargoBorda(255));
       ++spr_table157c[j];
     }
   }
@@ -3544,7 +3550,7 @@ void GenSpr0B_GenerateBullet() {  // 02b07c
       InitializeNormalSpriteRAMTables(j);
       uint8 r = GetRand();
       SetSprYPos(j, (mirror_current_layer1_ypos + (r & 0x7F) + 32) & ~0xf);
-      SetSprXPos(j, mirror_current_layer1_xpos + PAIR16(kGenSpr09_GenerateSuperKoopa_InitialXHi[r & 1], kGenSpr09_GenerateSuperKoopa_InitialXLo[r & 1]));
+      SetSprXPos(j, mirror_current_layer1_xpos + LargoBorda((int16)PAIR16(kGenSpr09_GenerateSuperKoopa_InitialXHi[r & 1], kGenSpr09_GenerateSuperKoopa_InitialXLo[r & 1])));
       spr_table00c2[j] = r & 1;
     }
   }
@@ -3612,7 +3618,7 @@ void GenSpr09_GenerateSuperKoopa() {  // 02b1bc
       uint8 v1 = (r & 0x3F) + 32;
       SetSprYPos(j, mirror_current_layer1_ypos + v1);
       spr_yspeed[j] = 40;
-      SetSprXPos(j, mirror_current_layer1_xpos + PAIR16(kGenSpr09_GenerateSuperKoopa_InitialXHi[r & 1], kGenSpr09_GenerateSuperKoopa_InitialXLo[r & 1]));
+      SetSprXPos(j, mirror_current_layer1_xpos + LargoBorda((int16)PAIR16(kGenSpr09_GenerateSuperKoopa_InitialXHi[r & 1], kGenSpr09_GenerateSuperKoopa_InitialXLo[r & 1])));
       spr_table157c[j] = r & 1;
     }
   }
@@ -3628,7 +3634,7 @@ void GenSpr0A_GenerateBubbles() {  // 02b207
       uint8 r = GetRand();
       uint8 v1 = (r & 0x3F) + 32;
       SetSprYPos(j, mirror_current_layer1_ypos + v1);
-      SetSprXPos(j, mirror_current_layer1_xpos + PAIR16(kGenSpr09_GenerateSuperKoopa_InitialXHi[r & 1], kGenSpr09_GenerateSuperKoopa_InitialXLo[r & 1]));
+      SetSprXPos(j, mirror_current_layer1_xpos + LargoBorda((int16)PAIR16(kGenSpr09_GenerateSuperKoopa_InitialXHi[r & 1], kGenSpr09_GenerateSuperKoopa_InitialXLo[r & 1])));
       spr_table157c[j] = r & 1;
       spr_table00c2[j] = kGenSpr0A_GenerateBubbles_DATA_02B25A[GetRand() & 3];
     }
@@ -3650,7 +3656,7 @@ void GenSprXX_GenerateDolphins() {  // 02b26c
     uint8 v1 = (GetRand() & 0x7F) + 64;
     SetSprYPos(j, mirror_current_layer1_ypos + v1);
     spr_yspeed[j] = kGenSprXX_GenerateDolphins_InitialYSpeed[GetRand() & 3];
-    SetSprXPos(j, mirror_current_layer1_xpos + PAIR16(kGenSprXX_GenerateDolphins_InitialXHi[v5 - 5], kGenSprXX_GenerateDolphins_InitialXLo[v5 - 5]));
+    SetSprXPos(j, mirror_current_layer1_xpos + LargoBorda((int16)PAIR16(kGenSprXX_GenerateDolphins_InitialXHi[v5 - 5], kGenSprXX_GenerateDolphins_InitialXLo[v5 - 5])));
     spr_xspeed[j] = kGenSprXX_GenerateDolphins_InitialXSpeed[v5 - 5];
     ++spr_table151c[j];
   }
@@ -3666,7 +3672,7 @@ void GenSpr01_GenerateEerie() {  // 02b2d6
       uint8 v1 = (GetRand() & 0x7F) + 64;
       SetSprYPos(j, mirror_current_layer1_ypos + v1);
       uint8 v6 = misc_random_byte2 & 1;
-      SetSprXPos(j, mirror_current_layer1_xpos + PAIR16(kGenSpr01_GenerateEerie_InitialXHi[v6], kGenSpr01_GenerateEerie_InitialXLo[v6]));
+      SetSprXPos(j, mirror_current_layer1_xpos + LargoBorda((int16)PAIR16(kGenSpr01_GenerateEerie_InitialXHi[v6], kGenSpr01_GenerateEerie_InitialXLo[v6])));
       spr_xspeed[j] = kGenSpr01_GenerateEerie_InitialXSpeed[v6];
     }
   }

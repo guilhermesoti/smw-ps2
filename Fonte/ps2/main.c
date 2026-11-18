@@ -31,7 +31,9 @@ DECLARE_DRIVER(audsrv);
 DECLARE_DRIVER(freesd);
 
 static unsigned char pad_buf[2][256] __attribute__((aligned(64)));
-static uint32_t pixels[SMW_WIDTH * SMW_HEIGHT] __attribute__((aligned(64)));
+/* Room for the 16:9 image: 342 columns in 384-pixel rows (GS buffer width
+   must be a multiple of 64). In 4:3 the rows are 256 pixels. */
+static uint32_t pixels[SMW_MAX_PITCH * SMW_HEIGHT] __attribute__((aligned(64)));
 static int16_t stereo[SMW_MAX_SAMPLES * 2] __attribute__((aligned(64)));
 static GSGLOBAL *gs;
 static GSTEXTURE texture;
@@ -44,7 +46,9 @@ static const char *card_drivers = "nenhum";
    most HDMI adapters). 480p needs component or an HDMI adapter; there each
    SNES line becomes two TV lines, and optional scanlines darken every
    second line like a CRT fed with RGB. */
-static struct { bool p480, scanlines, smooth; } video = {false, true, false};
+static struct { bool p480, scanlines, smooth, wide; } video = {false, true, false, false};
+/* Image columns and row length in pixels: 256/256 (4:3) or 342/384 (16:9). */
+static unsigned screen_w = SMW_WIDTH, screen_pitch = SMW_WIDTH;
 
 /* L2+R2 + Triangle: performance meter. Every 60 game frames it shows how
    many were drawn and the average EE time of a frame with and without
@@ -203,13 +207,14 @@ static void start_video(void) {
   /* Scanlines: dest + (black - dest) * alpha / 128 */
   gsKit_set_primalpha(gs, GS_SETREG_ALPHA(0, 1, 0, 1, 0), 0);
 
-  texture.Width = SMW_WIDTH;
+  texture.Width = screen_pitch;
   texture.Height = SMW_HEIGHT;
   texture.PSM = GS_PSM_CT32;
   texture.Filter = GS_FILTER_NEAREST;
-  texture.TBW = SMW_WIDTH / 64;
+  texture.TBW = screen_pitch / 64;
   texture.Mem = (u32 *)pixels;
-  texture.Vram = gsKit_vram_alloc(gs, gsKit_texture_size(texture.Width, texture.Height, texture.PSM),
+  /* Allocated for the widest image so 4:3/16:9 can be switched in game. */
+  texture.Vram = gsKit_vram_alloc(gs, gsKit_texture_size(SMW_MAX_PITCH, SMW_HEIGHT, texture.PSM),
                                    GSKIT_ALLOC_USERBUFFER);
   if (texture.Vram == GSKIT_ALLOC_ERROR) {
     init_scr();
@@ -231,17 +236,17 @@ static void draw_text(unsigned x, unsigned y, const char *msg, uint32_t bg) {
     {0,0,7,0,0},{0,2,0,2,0},{0,0,0,0,2}
   };
   unsigned width = (unsigned)strlen(msg) * 4 + 2;
-  if (x + width > SMW_WIDTH) width = SMW_WIDTH - x;
+  if (x + width > screen_w) width = screen_w - x;
   for (unsigned row = 0; row < 7; ++row)
     for (unsigned col = 0; col < width; ++col)
-      pixels[(y + row) * SMW_WIDTH + x + col] = bg;
-  for (unsigned i = 0; msg[i] && x + 1 + i*4 + 3 <= SMW_WIDTH; ++i) {
+      pixels[(y + row) * screen_pitch + x + col] = bg;
+  for (unsigned i = 0; msg[i] && x + 1 + i*4 + 3 <= screen_w; ++i) {
     const char *at = msg[i] == ' ' ? NULL : strchr(letters, msg[i]);
     if (!at) continue;  /* unknown characters are left blank */
     const unsigned char *g = glyph[at - letters];
     for (unsigned row = 0; row < 5; ++row)
       for (unsigned col = 0; col < 3; ++col)
-        if (g[row] & (4 >> col)) pixels[(y + 1 + row) * SMW_WIDTH + x + 1 + i*4 + col] = 0x00ffffff;
+        if (g[row] & (4 >> col)) pixels[(y + 1 + row) * screen_pitch + x + 1 + i*4 + col] = 0x00ffffff;
   }
 }
 
@@ -265,7 +270,7 @@ static void present(void) {
   }
   draw_notice();
   if (perf.on && perf.text[0]) draw_text(8, SMW_HEIGHT - 26, perf.text, 0x00402000);
-  SyncDCache(pixels, pixels + SMW_WIDTH * SMW_HEIGHT);
+  SyncDCache(pixels, pixels + screen_pitch * SMW_HEIGHT);
   gs->PrimAlphaEnable = GS_SETTING_OFF;
   gsKit_clear(gs, GS_SETREG_RGBAQ(0, 0, 0, 0, 0));
   gsKit_texture_send_inline(gs, texture.Mem, texture.Width, texture.Height,
@@ -274,8 +279,10 @@ static void present(void) {
   /* 480p: 224 SNES lines -> 448 TV lines, centred in the 480 visible. */
   float top = video.p480 ? 16.0f : 0.0f;
   float height = video.p480 ? 2.0f * SMW_HEIGHT : (float)gs->Height;
+  /* 16:9: 342 columns in the same 4:3 picture; a TV in wide mode stretches
+     it back to the right proportions. */
   gsKit_prim_sprite_texture(gs, &texture, 0, top, 0, 0, gs->Width, top + height,
-                            SMW_WIDTH, SMW_HEIGHT, 1, GS_SETREG_RGBAQ(128,128,128,128,0));
+                            screen_w, SMW_HEIGHT, 1, GS_SETREG_RGBAQ(128,128,128,128,0));
   if (video.p480 && video.scanlines) {
     gs->PrimAlphaEnable = GS_SETTING_ON;
     for (int line = 0; line < SMW_HEIGHT; ++line)
@@ -303,8 +310,19 @@ static int samples_for_next_frame(void) {
   return n;
 }
 
+/* 4:3 (256 columns) or 16:9 (342 columns, for a TV set to wide mode). */
+static void set_aspect(bool wide) {
+  video.wide = wide;
+  screen_w = wide ? SMW_WIDE_WIDTH : SMW_WIDTH;
+  screen_pitch = wide ? SMW_MAX_PITCH : SMW_WIDTH;
+  memset(pixels, 0, sizeof(pixels));
+  smw_set_widescreen(wide, pixels, screen_pitch);
+  texture.Width = screen_pitch;
+  texture.TBW = screen_pitch / 64;
+}
+
 /* L2+R2 + Square: scanlines on/off (480p). L2+R2 + Circle: smoothing.
-   L2+R2 + Triangle: performance meter. While
+   L2+R2 + Triangle: performance meter. L2+R2 + Cross: 4:3 / 16:9. While
    L2+R2 are held the pad sends nothing to the game. */
 static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
   uint16_t pressed = raw & ~*previous;
@@ -313,6 +331,7 @@ static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
   if (pressed & PAD_SQUARE) video.scanlines = !video.scanlines;
   if (pressed & PAD_CIRCLE) video.smooth = !video.smooth;
   if (pressed & PAD_TRIANGLE) perf.on = !perf.on, perf.text[0] = 0;
+  if (pressed & PAD_CROSS) set_aspect(!video.wide);
   return 0;
 }
 
@@ -368,7 +387,7 @@ int main(int argc, char **argv) {
   if (argc && argv && argv[0]) smw_boot_folder(argv[0], folder);
   bool from_disc = smw_path_is_disc(folder);
   init_scr();
-  scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v0.9\n\n");
+  scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v0.10\n\n");
   scr_printf(from_disc ? "Iniciando controles e Memory Card...\n"
                        : "Iniciando USB, controles e Memory Card...\n");
   start_drivers(from_disc);
@@ -403,21 +422,25 @@ int main(int argc, char **argv) {
   /* Three seconds to read the above and pick the video mode. */
   scr_printf("\nVIDEO: aperte TRIANGULO para 480p (adaptador HDMI ou componente)\n"
              "       ou CIRCULO para 240p (cabo AV). Sem apertar: 240p.\n"
+             "TELA: aperte QUADRADO antes para 16:9 (TV no modo widescreen).\n"
              "IDIOMA: portugues. Segure SELECT para jogar em ingles.\n");
   for (int i = 0; i < 60; ++i) {
     unsigned connected = 0;
     uint16_t a = read_pad(0, &connected, NULL) | read_pad(1, &connected, NULL);
     if (a & (1u << 2)) g_ptbr = false;                  /* Select */
+    if (a & (1u << 1)) video.wide = true;               /* Square = SNES Y */
     if (a & (1u << 9)) { video.p480 = true; break; }   /* Triangle = SNES X */
     if (a & (1u << 8)) break;                           /* Circle = SNES A */
     usleep(50000);
   }
-  scr_printf("Video: %s | Idioma: %s\n", video.p480 ? "480p (sem imagem? reinicie sem apertar nada)" : "240p",
-             g_ptbr ? "portugues" : "ingles");
+  scr_printf("Video: %s | Tela: %s | Idioma: %s\n",
+             video.p480 ? "480p (sem imagem? reinicie sem apertar nada)" : "240p",
+             video.wide ? "16:9" : "4:3", g_ptbr ? "portugues" : "ingles");
   sleep(1);
 
   start_video();
-  smw_intro(gs, video.p480, sound, "0.9");
+  set_aspect(video.wide);
+  smw_intro(gs, video.p480, sound, "0.10");
   const uint32_t field = measure_field();
   uint32_t last = cpu_ticks();
   int pending = 0, debt = 0;
