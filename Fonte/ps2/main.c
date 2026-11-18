@@ -93,7 +93,7 @@ static bool start_audio(void) {
 
 static void start_drivers(bool from_disc) {
   SifInitRpc(0);
-  while (!SifIopReset(NULL, 0)) {}
+  while (!SifIopReset("", 0)) {}
   while (!SifIopSync()) {}
   SifInitRpc(0);
   sbv_patch_enable_lmb();
@@ -390,7 +390,7 @@ int main(int argc, char **argv) {
   if (argc && argv && argv[0]) smw_boot_folder(argv[0], folder);
   bool from_disc = smw_path_is_disc(folder);
   init_scr();
-  scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v0.11\n\n");
+  scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v0.12\n\n");
   scr_printf(from_disc ? "Iniciando controles e Memory Card...\n"
                        : "Iniciando USB, controles e Memory Card...\n");
   start_drivers(from_disc);
@@ -455,7 +455,7 @@ int main(int argc, char **argv) {
 
   start_video();
   /* Na primeira vez (tela ainda nao escolhida) a abertura pergunta. */
-  if (smw_intro(gs, video.p480, sound, "0.11", &tela)) smw_save_tela(tela);
+  if (smw_intro(gs, video.p480, sound, "0.12", &tela)) smw_save_tela(tela);
   set_aspect(tela == 1);
   const uint32_t field = measure_field();
   uint32_t last = cpu_ticks();

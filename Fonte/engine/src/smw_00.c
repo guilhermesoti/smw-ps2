@@ -3,6 +3,7 @@
 #include "funcs.h"
 #include "smw_rtl.h"
 #include "variables.h"
+#include "largo.h"
 
 static FuncV *const kInitAndMainLoop_GameModePtrs[42] = {
     &GameMode00_LoadNintendoPresents,
@@ -6386,6 +6387,8 @@ LABEL_11:
   smoke_spr_ypos_lo[v4] = spr_ypos_lo[j];
   smoke_spr_xpos_lo[v4] = spr_xpos_lo[j];
   smoke_spr_timer[v4] = 27;
+  if (g_largo)
+    LargoFumacaNova(v4, LARGO_SPR_DX(j));
 }
 
 void SprStatus06_GoalCoins(uint8 k) {  // 00fbb4

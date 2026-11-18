@@ -2,7 +2,7 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.11 (beta) · NTSC 240p/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
+**Versão 0.12 (beta) · NTSC 240p/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
 - Vídeo 240p progressivo (cabo AV e a maioria dos adaptadores HDMI) ou 480p com scanlines (componente/HDMI).
@@ -30,7 +30,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.11 obtido com o ps2dev v2.0.0 foi `0f182dfbf491e8550f0b86985490e624a070f5c9ae5c3157e63cbabc427a8be7`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.12 obtido com o ps2dev v2.0.0 foi `2c3d9253c7b1c82c6fe4310f4e4dba04db829d600d10db4fa680e880b256abd7`.
 
 ## Gravador SMW PS2 (programa no PC)
 

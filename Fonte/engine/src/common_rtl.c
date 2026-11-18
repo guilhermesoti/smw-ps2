@@ -27,7 +27,11 @@ uint32 Load24(const LongPtr *src) {
 
 bool Unreachable(void) {
   printf("Unreachable!\n");
+#ifndef _EE
   assert(0);
+#endif
+  /* No PS2 o jogo segue: todos os pontos que chamam Unreachable() saem da
+     rotina logo depois (no cartucho esses caminhos são saltos inválidos). */
   g_ram[0x1ffff] = 1;
   return false;
 }

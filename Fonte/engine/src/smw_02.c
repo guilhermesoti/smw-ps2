@@ -758,7 +758,7 @@ void SpawnWaterSplash_0284C2(uint8 k, uint8 a) {  // 0284c2
 }
 
 void SpawnWaterSplash_0284D8(uint8 k, uint8 r0, uint8 r2) {  // 0284d8
-  if (!CheckIfNormalSpriteOffScreen(k)) {
+  if (!LargoSpriteFora(k)) {
     uint8 j = 11;
     while (mextspr_spriteid[j]) {
       if ((--j & 0x80) != 0)
@@ -820,18 +820,26 @@ void SpawnSparkles(uint8 r0, uint8 r2) {  // 0285ba
 }
 
 void Spr033_Podoboo_SpawnPodobooFire(uint8 k) {  // 0285df
-  if (!CheckIfNormalSpriteOffScreen(k)) {
+  if (!LargoSpriteFora(k)) {
     uint8 j = 11;
     while (mextspr_spriteid[j]) {
       if ((--j & 0x80) != 0)
         return;
     }
+    /* Tela larga: nas colunas extras (onde o original não cria o fogo) o
+       sorteio é desfeito depois, para o jogo seguir com os mesmos números. */
+    bool so_largo = g_largo && CheckIfNormalSpriteOffScreen(k);
+    uint8 rng[4] = { misc_rngroutine_scratchram148b, misc_rngroutine_scratchram148c, misc_random_byte1, misc_random_byte2 };
     GetRand();
     mextspr_spriteid[j] = 4;
     mextspr_yspeed[j] = 0;
     SetHiLo(&mextspr_xpos_hi[j], &mextspr_xpos_lo[j], GetSprXPos(k) + (uint8)((misc_random_byte1 & 0xF) - 3));
     SetHiLo(&mextspr_ypos_hi[j], &mextspr_ypos_lo[j], GetSprYPos(k) + (uint8)((misc_random_byte2 & 7) + 7));
     mextspr_timer[j] = 23;
+    if (so_largo) {
+      misc_rngroutine_scratchram148b = rng[0], misc_rngroutine_scratchram148c = rng[1];
+      misc_random_byte1 = rng[2], misc_random_byte2 = rng[3];
+    }
   }
 }
 
@@ -1274,7 +1282,8 @@ void MExtSpr0A_BooStream(uint8 k) {  // 028cc4
   uint8 v4 = kMinorExtendedSpriteOAMIndexes[k];
   uint8 v5 = mextspr_xpos_lo[k];
   uint8 r0 = v5 - mirror_current_layer1_xpos;
-  if (mextspr_xpos_hi[k] != (uint8)((v5 < (uint8)mirror_current_layer1_xpos) + HIBYTE(mirror_current_layer1_xpos)))
+  int dx = LARGO_DX(mextspr_xpos_hi[k], v5);
+  if (g_largo ? !LargoOrigemNaTela(dx) : mextspr_xpos_hi[k] != (uint8)((v5 < (uint8)mirror_current_layer1_xpos) + HIBYTE(mirror_current_layer1_xpos)))
     return;
   OamEnt *oam = get_OamEnt(oam_buf, v4);
   oam->xpos = r0;
@@ -1286,13 +1295,14 @@ LABEL_9:
   oam->ypos = mextspr_ypos_lo[k] - mirror_current_layer1_ypos;
   oam->charnum = kMExtSpr0A_BooStream_Tiles[k];
   oam->flags = sprites_tile_priority | (mextspr_xspeed[k] >> 1) & 0x40 ^ 0x40 | 0xF;
-  sprites_oamtile_size_buffer[v4 >> 2] = 2;
+  sprites_oamtile_size_buffer[v4 >> 2] = 2 | (g_largo ? LargoBitX(dx) : 0);
 }
 
 void MExtSpr07_WaterSplash(uint8 k) {  // 028d4f
   OamEnt *oam;
 
-  if (mextspr_xpos_hi[k] != (uint8)((mextspr_xpos_lo[k] < (uint8)mirror_current_layer1_xpos) + HIBYTE(mirror_current_layer1_xpos)))
+  int dx = LARGO_DX(mextspr_xpos_hi[k], mextspr_xpos_lo[k]);
+  if (g_largo ? !LargoOrigemNaTela(dx) : mextspr_xpos_hi[k] != (uint8)((mextspr_xpos_lo[k] < (uint8)mirror_current_layer1_xpos) + HIBYTE(mirror_current_layer1_xpos)))
     goto LABEL_3;
   uint8 v1 = mextspr_timer[k];
   if (v1 == 32)
@@ -1305,7 +1315,7 @@ void MExtSpr07_WaterSplash(uint8 k) {  // 028d4f
     r0 = (counter_global_frames & 1) ? -r2 : r2;
   }
   uint8 v3 = kMinorExtendedSpriteOAMIndexes[k];
-  if ((uint8)(r0 + mextspr_xpos_lo[k] - mirror_current_layer1_xpos) >= 0xF0 ||
+  if ((g_largo ? LargoForaDe(dx + (int8)r0, 0xF0) : (uint8)(r0 + mextspr_xpos_lo[k] - mirror_current_layer1_xpos) >= 0xF0) ||
       (oam = get_OamEnt(oam_buf, v3), oam->xpos = r0 + mextspr_xpos_lo[k] - mirror_current_layer1_xpos,
        (uint8)(mextspr_ypos_lo[k] - mirror_current_layer1_ypos) >= 0xE8)) {
 LABEL_3:
@@ -1315,7 +1325,7 @@ LABEL_3:
     uint8 v5 = mextspr_timer[k] >> 1;
     oam->charnum = kMExtSpr07_WaterSplash_Tiles[(v5 >= 12) ? 12 : v5];
     oam->flags = sprites_tile_priority | 2;
-    sprites_oamtile_size_buffer[v3 >> 2] = 2;
+    sprites_oamtile_size_buffer[v3 >> 2] = 2 | (g_largo ? LargoBitX(dx + (int8)r0) : 0);
     if (!flag_sprites_locked)
       ++mextspr_timer[k];
   }
@@ -1399,7 +1409,8 @@ LABEL_2:
 }
 
 void MExtSpr04_PodobooFire(uint8 k) {  // 028f2f
-  if (mextspr_xpos_hi[k] != (uint8)((mextspr_xpos_lo[k] < (uint8)mirror_current_layer1_xpos) + HIBYTE(mirror_current_layer1_xpos)) ||
+  int dx = LARGO_DX(mextspr_xpos_hi[k], mextspr_xpos_lo[k]);
+  if ((g_largo ? !LargoOrigemNaTela(dx) : mextspr_xpos_hi[k] != (uint8)((mextspr_xpos_lo[k] < (uint8)mirror_current_layer1_xpos) + HIBYTE(mirror_current_layer1_xpos))) ||
       !mextspr_timer[k]) {
     goto LABEL_7;
   }
@@ -1415,7 +1426,7 @@ void MExtSpr04_PodobooFire(uint8 k) {  // 028f2f
     oam->ypos = mextspr_ypos_lo[k] - mirror_current_layer1_ypos;
     oam->charnum = kMExtSpr04_PodobooFire_Tiles[mextspr_timer[k] >> 3];
     oam->flags = sprites_tile_priority | 5;
-    sprites_oamtile_size_buffer[v1 >> 2] = 0;
+    sprites_oamtile_size_buffer[v1 >> 2] = g_largo ? LargoBitX(dx) : 0;
   } else {
 LABEL_7:
     MExtSpr_Delete(k);
@@ -1447,7 +1458,7 @@ void MExtSpr01_BrickPiece(uint8 k) {  // 028f8b
 
   uint16 tx = PAIR16(mextspr_xpos_hi[k], mextspr_xpos_lo[k]) - mirror_current_layer1_xpos;
   uint8 r1 = tx;
-  if ((tx >> 8) || (oam = get_OamEnt(oam_buf, v8), oam->xpos = tx, r0 >= 0xF0)) {
+  if ((g_largo ? !LargoOrigemNaTela((int16)tx) : (tx >> 8) != 0) || (oam = get_OamEnt(oam_buf, v8), oam->xpos = tx, r0 >= 0xF0)) {
 LABEL_15:
     MExtSpr_Delete(k);
     return;
@@ -1460,7 +1471,7 @@ LABEL_15:
   if (v13)
     v12 = counter_global_frames & 0xE;
   oam->flags = sprites_tile_priority | kMExtSpr01_BrickPiece_Flip[v11] ^ v12;
-  sprites_oamtile_size_buffer[v8 >> 2] = 0;
+  sprites_oamtile_size_buffer[v8 >> 2] = g_largo ? LargoBitX((int16)tx) : 0;
 }
 
 void ProcessBounceAndSmokeSprites() {  // 02902d
@@ -1898,19 +1909,23 @@ void ProcessBounceAndSmokeSprites_Return0296D7(uint8 k) {  // 0296d7
 
 void EraseSmokeSprite(uint8 k) {  // 0296df
   smoke_spr_spriteid[k] = 0;
+  LargoFumacaApaga(k);
 }
 
 void SmokeSpr01_PuffOfSmoke(uint8 k) {  // 0296e3
   OamEnt *v2;
   OamEnt *oam;
+  int dx = 0;
 
   if (!smoke_spr_timer[k])
     goto LABEL_10;
   if ((smoke_spr_spriteid[k] & 0x80) != 0 || !flag_sprites_locked)
     --smoke_spr_timer[k];
+  if (g_largo)
+    dx = LargoFumacaDx(k);
   if (spr_spriteid[7] == 0xA9 || (misc_nmito_use_flag & 0x40) == 0) {
     uint8 v3 = kSmokeSpriteOAMIndexes_One[k];
-    if ((uint8)(smoke_spr_xpos_lo[k] - mirror_current_layer1_xpos) >= 0xF4 ||
+    if ((g_largo ? LargoForaDe(dx, 0xF4) : (uint8)(smoke_spr_xpos_lo[k] - mirror_current_layer1_xpos) >= 0xF4) ||
         (oam = get_OamEnt(oam_buf, v3), oam->xpos = smoke_spr_xpos_lo[k] - mirror_current_layer1_xpos,
          (uint8)(smoke_spr_ypos_lo[k] - mirror_current_layer1_ypos) >= 0xE0)) {
       EraseSmokeSprite(k);
@@ -1918,11 +1933,11 @@ void SmokeSpr01_PuffOfSmoke(uint8 k) {  // 0296e3
       oam->ypos = smoke_spr_ypos_lo[k] - mirror_current_layer1_ypos;
       oam->flags = sprites_tile_priority;
       get_OamEnt(oam_buf, v3)->charnum = kSmokeSpr01_PuffOfSmoke_Tiles[smoke_spr_timer[k] >> 2];
-      sprites_oamtile_size_buffer[v3 >> 2] = 2;
+      sprites_oamtile_size_buffer[v3 >> 2] = 2 | (g_largo ? LargoBitX(dx) : 0);
     }
   } else {
     uint8 v1 = kSmokeSpriteOAMIndexes_Two[k];
-    if ((uint8)(smoke_spr_xpos_lo[k] - mirror_current_layer1_xpos) >= 0xF4 ||
+    if ((g_largo ? LargoForaDe(dx, 0xF4) : (uint8)(smoke_spr_xpos_lo[k] - mirror_current_layer1_xpos) >= 0xF4) ||
         (v2 = get_OamEnt(oam_buf, v1), v2[64].xpos = smoke_spr_xpos_lo[k] - mirror_current_layer1_xpos,
          (uint8)(smoke_spr_ypos_lo[k] - mirror_current_layer1_ypos) >= 0xE0)) {
 LABEL_10:
@@ -1932,18 +1947,21 @@ LABEL_10:
     v2[64].ypos = smoke_spr_ypos_lo[k] - mirror_current_layer1_ypos;
     v2[64].flags = sprites_tile_priority;
     get_OamEnt(oam_buf, v1)[64].charnum = kSmokeSpr01_PuffOfSmoke_Tiles[smoke_spr_timer[k] >> 2];
-    sprites_oamtile_size_buffer[(v1 >> 2) + 64] = 2;
+    sprites_oamtile_size_buffer[(v1 >> 2) + 64] = 2 | (g_largo ? LargoBitX(dx) : 0);
   }
 }
 
 void SmokeSpr02_ContactEffect(uint8 k) {  // 029797
+  int dx = 0;
   if (!smoke_spr_timer[k])
     goto LABEL_2;
   if (!flag_sprites_locked)
     --smoke_spr_timer[k];
+  if (g_largo)
+    dx = LargoFumacaDx(k);
   if ((misc_nmito_use_flag & 0x40) != 0 && misc_nmito_use_flag != 0xC1) {
     int8 v6 = smoke_spr_xpos_lo[k] - mirror_current_layer1_xpos;
-    if ((uint8)v6 < 0xF0) {
+    if (g_largo ? !LargoForaDe(dx, 0xF0) : (uint8)v6 < 0xF0) {
       OamEnt *oam = get_OamEnt(oam_buf, 0x90);
       oam[64].xpos = v6;
       oam[66].xpos = v6;
@@ -1973,16 +1991,16 @@ void SmokeSpr02_ContactEffect(uint8 k) {  // 029797
         oam[65].charnum = 125;
         oam[66].charnum = 125;
       }
-      sprites_oamtile_size_buffer[100] = 0;
-      sprites_oamtile_size_buffer[101] = 0;
-      sprites_oamtile_size_buffer[102] = 0;
-      sprites_oamtile_size_buffer[103] = 0;
+      sprites_oamtile_size_buffer[100] = g_largo ? LargoBitX(dx) : 0;
+      sprites_oamtile_size_buffer[101] = g_largo ? LargoBitX(dx + 8) : 0;
+      sprites_oamtile_size_buffer[102] = g_largo ? LargoBitX(dx) : 0;
+      sprites_oamtile_size_buffer[103] = g_largo ? LargoBitX(dx + 8) : 0;
     } else {
       EraseSmokeSprite(k);
     }
   } else {
     int8 v1 = smoke_spr_xpos_lo[k] - mirror_current_layer1_xpos;
-    if ((uint8)v1 >= 0xF0) {
+    if (g_largo ? LargoForaDe(dx, 0xF0) : (uint8)v1 >= 0xF0) {
 LABEL_2:
       EraseSmokeSprite(k);
       return;
@@ -2016,10 +2034,10 @@ LABEL_2:
       v2[1].charnum = 125;
       v2[2].charnum = 125;
     }
-    sprites_oamtile_size_buffer[60] = 0;
-    sprites_oamtile_size_buffer[61] = 0;
-    sprites_oamtile_size_buffer[62] = 0;
-    sprites_oamtile_size_buffer[63] = 0;
+    sprites_oamtile_size_buffer[60] = g_largo ? LargoBitX(dx) : 0;
+    sprites_oamtile_size_buffer[61] = g_largo ? LargoBitX(dx + 8) : 0;
+    sprites_oamtile_size_buffer[62] = g_largo ? LargoBitX(dx) : 0;
+    sprites_oamtile_size_buffer[63] = g_largo ? LargoBitX(dx + 8) : 0;
   }
 }
 
@@ -2060,6 +2078,7 @@ void SmokeSpr03_TurnAroundSmoke(uint8 k) {  // 029927
       if ((v1 & 7) == 0)
         --smoke_spr_ypos_lo[k];
     }
+    int dx = g_largo ? LargoFumacaDx(k) : 0;
     uint8 v2;
     if (spr_spriteid[7] == 0xA9 || flag_reznor_room_oamindex_timer || (misc_nmito_use_flag & 0x80) == 0) {
       v2 = kSmokeSpriteOAMIndexes_One[k];
@@ -2071,7 +2090,7 @@ void SmokeSpr03_TurnAroundSmoke(uint8 k) {  // 029927
         oam[64].ypos = smoke_spr_ypos_lo[k] - mirror_current_layer1_ypos;
         oam[64].flags = sprites_tile_priority;
         oam[64].charnum = kSmokeSpr03_TurnAroundSmoke_Tiles[smoke_spr_timer[k] >> 2];
-        sprites_oamtile_size_buffer[(v4 >> 2) + 64] = 0;
+        sprites_oamtile_size_buffer[(v4 >> 2) + 64] = g_largo ? LargoBitX(dx) : 0;
         return;
       }
       v2 = kSmokeSpriteOAMIndexes_Two[k];
@@ -2081,7 +2100,7 @@ void SmokeSpr03_TurnAroundSmoke(uint8 k) {  // 029927
     v3->ypos = smoke_spr_ypos_lo[k] - mirror_current_layer1_ypos;
     v3->flags = sprites_tile_priority;
     v3->charnum = kSmokeSpr03_TurnAroundSmoke_Tiles[smoke_spr_timer[k] >> 2];
-    sprites_oamtile_size_buffer[v2 >> 2] = 0;
+    sprites_oamtile_size_buffer[v2 >> 2] = g_largo ? LargoBitX(dx) : 0;
     return;
   }
   if ((misc_nmito_use_flag & 0x40) != 0 && !flag_reznor_room_oamindex_timer)
@@ -4063,11 +4082,13 @@ void Spr044_TorpedoTed_SpawnSmokePuffTrail(uint8 k) {  // 02b952
   uint8 v2 = spr_table157c[k];
   uint16 t1 = GetSprXPos(k) + PAIR16(kSpr044_TorpedoTed_DATA_02B950[v2], kSpr044_TorpedoTed_DATA_02B94E[v2]);
   uint16 t = t1 - mirror_current_layer1_xpos;
-  if (t < 256) {
+  if (g_largo ? LargoOrigemNaTela((int16)t) : t < 256) {
     smoke_spr_spriteid[j] = 1;
     smoke_spr_xpos_lo[j] = t1;
     smoke_spr_ypos_lo[j] = spr_ypos_lo[k];
     smoke_spr_timer[j] = 15;
+    if (g_largo)
+      LargoFumacaNova(j, (int16)t);
   }
 }
 
@@ -4134,18 +4155,18 @@ void CheckBerryTileCollisionWithYoshiTongue(CollInfo *ci) {  // 02b9fa
 
 void Spr035_Yoshi_DrawYoshisWings(uint8 k, uint8 a) {  // 02bb23
   uint8 r2 = a;
-  if (!CheckIfNormalSpriteOffScreen(k)) {
+  if (!LargoSpriteFora(k)) {
     OamEnt *oam = get_OamEnt(oam_buf, 0xF8);
     uint16 xpos = GetSprXPos(k);
     uint8 r1 = spr_ypos_lo[k];
     uint8 v2 = r2 + 2 * spr_table157c[k];
     uint16 t = xpos + PAIR16(kSpr035_Yoshi_DATA_02BB0F[v2], kSpr035_Yoshi_DATA_02BB0B[v2]) - mirror_current_layer1_xpos;
     oam->xpos = t;
-    if (t < 256) {
+    if (g_largo ? LargoOrigemNaTela((int16)t) : t < 256) {
       oam->ypos = kSpr035_Yoshi_DATA_02BB13[v2] + r1 - mirror_current_layer1_ypos;
       oam->charnum = kSpr035_Yoshi_Tiles[v2];
       oam->flags = kSpr035_Yoshi_Prop[v2] | sprites_tile_priority;
-      sprites_oamtile_size_buffer[0xF8 >> 2] = kSpr035_Yoshi_TileSize[v2];
+      sprites_oamtile_size_buffer[0xF8 >> 2] = kSpr035_Yoshi_TileSize[v2] | (g_largo ? LargoBitX((int16)t) : 0);
     }
   }
 }

@@ -758,7 +758,7 @@ void SpawnNormalSpriteTurnAroundSmoke(uint8 k) {  // 01804e
 }
 
 void SpawnNormalSpriteTurnAroundSmoke_Entry2(uint8 k, uint8 r0, uint8 r1) {  // 018063
-  if (!CheckIfNormalSpriteOffScreen(k)) {
+  if (!LargoSpriteFora(k)) {
     uint8 j = 3;
     while (smoke_spr_spriteid[j]) {
       if ((--j & 0x80) != 0)
@@ -768,6 +768,8 @@ void SpawnNormalSpriteTurnAroundSmoke_Entry2(uint8 k, uint8 r0, uint8 r1) {  // 
     smoke_spr_xpos_lo[j] = r0 + spr_xpos_lo[k];
     smoke_spr_ypos_lo[j] = r1 + spr_ypos_lo[k];
     smoke_spr_timer[j] = 19;
+    if (g_largo)
+      LargoFumacaNova(j, LARGO_SPR_DX(k) + (int8)r0);
   }
 }
 
@@ -2290,9 +2292,14 @@ LABEL_8:;
       if (xpos < 256)
         oam[66].xpos = xpos;
     }
-    if (spr_spriteid[k] != 17 && !CheckIfNormalSpriteOffScreen(k)) {
+    if (spr_spriteid[k] != 17 && !LargoSpriteFora(k)) {
       uint8 r0 = __CFSHL__(spr_table15f6[k], 1) ? 0 : 8;
       OamEnt *v9 = get_OamEnt(oam_buf, v3);
+      int ex = 0;  /* tela larga: x dos olhos (o casco está em v9[66]) */
+      if (g_largo) {
+        int dsx = LARGO_SPR_DX(k);
+        ex = dsx + (int8)(uint8)(v9[66].xpos - (uint8)dsx) + 2;
+      }
       uint8 v10 = v9[66].xpos + 2;
       v9[64].xpos = v10;
       v9[65].xpos = v10 + 4;
@@ -2308,8 +2315,8 @@ LABEL_8:;
       v13[64].flags = sprites_tile_priority;
       v13[65].flags = v14;
       uint8 v15 = v17 >> 2;
-      sprites_oamtile_size_buffer[v15 + 64] = 0;
-      sprites_oamtile_size_buffer[v15 + 65] = 0;
+      sprites_oamtile_size_buffer[v15 + 64] = g_largo ? LargoBitX(ex) : 0;
+      sprites_oamtile_size_buffer[v15 + 65] = g_largo ? LargoBitX(ex + 4) : 0;
     }
   }
 }
@@ -3624,7 +3631,7 @@ void SpawnContactEffectFromSide(uint8 k) {  // 01ab6f
 }
 
 void SpawnContactEffectFromSide_NoKickSound(uint8 k) {  // 01ab72
-  if (!CheckIfNormalSpriteOffScreen(k)) {
+  if (!LargoSpriteFora(k)) {
     uint8 j = 3;
     while (smoke_spr_spriteid[j]) {
       if ((--j & 0x80) != 0) {
@@ -3636,11 +3643,13 @@ void SpawnContactEffectFromSide_NoKickSound(uint8 k) {  // 01ab72
     smoke_spr_xpos_lo[j] = spr_xpos_lo[k];
     smoke_spr_ypos_lo[j] = spr_ypos_lo[k];
     smoke_spr_timer[j] = 8;
+    if (g_largo)
+      LargoFumacaNova(j, LARGO_SPR_DX(k));
   }
 }
 
 void SpawnContactEffectFromAbove(uint8 k) {  // 01ab99
-  if (!CheckIfNormalSpriteOffScreen(k)) {
+  if (!LargoSpriteFora(k)) {
     uint8 j = 3;
     while (smoke_spr_spriteid[j]) {
       if ((--j & 0x80) != 0) {
@@ -3652,6 +3661,8 @@ void SpawnContactEffectFromAbove(uint8 k) {  // 01ab99
     smoke_spr_xpos_lo[j] = player_xpos;
     smoke_spr_ypos_lo[j] = player_ypos + (player_riding_yoshi_flag ? 30 : 20);
     smoke_spr_timer[j] = 8;
+    if (g_largo)
+      LargoFumacaNova(j, (int16)(player_xpos - mirror_current_layer1_xpos));
   }
 }
 
@@ -4911,6 +4922,8 @@ void Spr020_Magic_01BD98(uint8 k) {  // 01bd98
   smoke_spr_xpos_lo[v1] = spr_xpos_lo[k];
   smoke_spr_ypos_lo[v1] = spr_ypos_lo[k];
   smoke_spr_timer[v1] = 27;
+  if (g_largo)
+    LargoFumacaNova(v1, LARGO_SPR_DX(k));
 }
 
 void Spr01F_MagiKoopa_Init(uint8 k) {  // 01bdb8
@@ -7522,7 +7535,7 @@ void GenericSmushedSpriteDraw(uint8 k) {  // 01e700
 
   if ((drt = GetDrawInfo_Bank01_ReturnsTwice(k)).idx == 0xff)
     return;
-  if (!CheckIfNormalSpriteOffScreen(k)) {
+  if (!LargoSpriteFora(k)) {
     uint8 v2 = drt.x;
     OamEnt *oam = get_OamEnt(oam_buf, drt.idx);
     oam[64].xpos = drt.x;
@@ -7546,8 +7559,8 @@ void GenericSmushedSpriteDraw(uint8 k) {  // 01e700
     oam[64].flags = v7;
     oam[65].flags = v7 | 0x40;
     uint8 v8 = drt.idx >> 2;
-    sprites_oamtile_size_buffer[v8 + 64] = 0;
-    sprites_oamtile_size_buffer[v8 + 65] = 0;
+    sprites_oamtile_size_buffer[v8 + 64] = g_largo ? LargoBitX(LARGO_SPR_DX(k)) : 0;
+    sprites_oamtile_size_buffer[v8 + 65] = g_largo ? LargoBitX(LARGO_SPR_DX(k) + 8) : 0;
   }
 }
 
@@ -7655,13 +7668,13 @@ void Spr087_LakituCloud_Draw(uint8 k) {  // 01e8ca
     FinishOAMWrite(v6, 2, 1);
     spr_oamindex[v6] = misc_scratch7e18b6;
     FinishOAMWrite(v6, 2, 1);
-    if (!spr_xoffscreen_flag[v6]) {
+    if (!spr_xoffscreen_flag[v6] || LargoNaColunaExtra(LARGO_SPR_DX(v6))) {
       OamEnt *v7 = get_OamEnt(oam_buf, 0);
       v7[2].xpos = temp14b0 + 4;
       v7[2].ypos = temp14b2 + 7;
       v7[2].charnum = 77;
       v7[2].flags = 57;
-      sprites_oamtile_size_buffer[2] = 0;
+      sprites_oamtile_size_buffer[2] = g_largo ? LargoBitX(LARGO_SPR_DX(v6) + 4) : 0;
     }
   }
 }
@@ -8084,7 +8097,7 @@ LABEL_34:
     if (spr_table1602[k] == 10)
       v12 += 20;
     uint8 r2 = v12;
-    if (!CheckIfNormalSpriteOffScreen(k)) {
+    if (!LargoSpriteFora(k)) {
       uint8 r0 = spr_xpos_lo[k] - mirror_current_layer1_xpos;
       uint8 r1 = spr_ypos_lo[k] - mirror_current_layer1_ypos;
       OamEnt *v14 = get_OamEnt(oam_buf, 0);
@@ -8092,7 +8105,8 @@ LABEL_34:
       v14[64].ypos = kSpr035_Yoshi_YoshiThroatYDisp[r2] + r1;
       v14[64].charnum = 63;
       v14[64].flags = get_OamEnt(oam_buf, spr_oamindex[k])[64].flags | 1;
-      sprites_oamtile_size_buffer[64] = 0;
+      sprites_oamtile_size_buffer[64] =
+          g_largo ? LargoBitX(LARGO_SPR_DX(k) + (int8)kSpr035_Yoshi_YoshiThroatXDisp[r2]) : 0;
     }
   }
   return r14;

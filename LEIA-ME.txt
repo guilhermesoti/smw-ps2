@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.11 (beta) | NTSC 240p/480p | 4:3 ou 16:9 | Português
+Retrogames Patos de Minas | v0.12 (beta) | NTSC 240p/480p | 4:3 ou 16:9 | Português
 
 O QUE VOCÊ PRECISA
 
@@ -207,6 +207,21 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.12 (beta):
+- Tela 16:9: efeitos que sumiam nas 43 colunas extras de cada lado agora
+  aparecem lá também: rosto da nuvem do Lakitu, inimigo amassado, olhos
+  do Koopa dentro do casco, asas e garganta do Yoshi, fumaças, estrelas
+  de batida, respingo d'água, fogo do Podoboo, rastro da fila de Boos,
+  pedaços de bloco e a fumaça do Torpedo Ted. A fumaça de um inimigo na
+  borda direita não aparece mais do lado esquerdo da tela.
+- Só os desenhos mudaram: o jogo (inimigos, sorteios, posição do Mario)
+  segue igual ao da v0.11. Conferido no PC em 95 fases, 900 quadros em
+  cada, com o mesmo controle automático.
+- Em 4:3 nada muda: a imagem é idêntica à da v0.11, quadro a quadro.
+- Um caminho "impossível" do motor (que não existe no cartucho) não
+  trava mais o jogo: ele segue. Ajuste interno na reinicialização do
+  IOP, na forma oficial do PS2SDK.
 
 Mudanças da v0.11 (beta):
 - Gravador SMW PS2 (Gravador_SMW_PS2.html): programa no navegador que

@@ -35,4 +35,44 @@ static inline uint8 LargoBitX(int dx) { return (dx >> 8) & 1; }
 static inline int LargoBorda(int dx) {
   return dx < 0 ? dx - g_largo : dx >= 0xF0 ? dx + g_largo : dx;
 }
+
+/* ---- Efeitos visuais na tela larga (v0.12) ----
+   O jogo decide se desenha alguns efeitos olhando se o objeto está nos 256
+   pixels da tela original. Na tela larga esses efeitos passam a valer na
+   área visível maior. Só os desenhos mudam: a lógica do jogo (IA, colisão)
+   continua com a tela original. Com g_largo = 0 o código original é usado. */
+
+/* Origem do objeto (dx relativo à câmera) na área visível larga. É o mesmo
+   teste "na tela" do original (0 <= dx < 256) com as colunas extras. */
+static inline bool LargoOrigemNaTela(int dx) {
+  return dx >= -(int)g_largo && dx < 256 + (int)g_largo;
+}
+/* Tela larga: dx fora de [-g_largo, limite + g_largo). Com limite = 256 é o
+   contrário de LargoOrigemNaTela; o original usa limites menores (0xF0,
+   0xF4) para não desenhar peças cortadas na borda direita. */
+static inline bool LargoForaDe(int dx, int limite) {
+  return dx < -(int)g_largo || dx >= limite + (int)g_largo;
+}
+/* dx de um sprite normal. Só nos arquivos que incluem variables.h. */
+#define LARGO_SPR_DX(k) LARGO_DX(spr_xpos_hi[k], spr_xpos_lo[k])
+/* dx numa das colunas extras (fora dos 256 pixels originais e dentro da
+   área visível larga). Com g_largo = 0 nunca. */
+static inline bool LargoNaColunaExtra(int dx) {
+  return dx < 0 ? dx >= -(int)g_largo : dx >= 256 && dx < 256 + (int)g_largo;
+}
+/* CheckIfNormalSpriteOffScreen para efeitos visuais. Vale o resultado do
+   original (as marcas de "fora da tela" do jogo) e, na tela larga, o sprite
+   nas colunas extras também conta como na tela. Só nos arquivos que incluem
+   variables.h. */
+#define LargoSpriteFora(k) \
+  (CheckIfNormalSpriteOffScreen(k) != 0 && \
+   !(spr_yoffscreen_flag[k] == 0 && LargoNaColunaExtra(LARGO_SPR_DX(k))))
+
+/* As fumaças (smoke_spr_*, 4 espaços) só guardam o byte baixo de X. Na tela
+   larga o port acompanha o x de cada uma relativo à câmera: quem cria a
+   fumaça informa o dx (LargoFumacaNova) e, quadro a quadro, vale o valor
+   mais perto do anterior. Sem informação, vale o do original (0..255). */
+void LargoFumacaNova(uint8 k, int dx);
+int LargoFumacaDx(uint8 k);
+void LargoFumacaApaga(uint8 k);
 #endif

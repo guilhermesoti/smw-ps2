@@ -1020,7 +1020,7 @@ void Spr0BD_SlidingNakedBlueKoopa_0389FF(uint8 k) {  // 0389ff
     if ((counter_global_frames & 3) == 0) {
       uint8 r0 = 4;
       uint8 r1 = 10;
-      if (!CheckIfNormalSpriteOffScreen(k)) {
+      if (!LargoSpriteFora(k)) {
         uint8 v1 = 3;
         while (smoke_spr_spriteid[v1]) {
           if ((--v1 & 0x80) != 0)
@@ -1030,6 +1030,8 @@ void Spr0BD_SlidingNakedBlueKoopa_0389FF(uint8 k) {  // 0389ff
         smoke_spr_xpos_lo[v1] = r0 + spr_xpos_lo[k];
         smoke_spr_ypos_lo[v1] = r1 + spr_ypos_lo[k];
         smoke_spr_timer[v1] = 19;
+        if (g_largo)
+          LargoFumacaNova(v1, LARGO_SPR_DX(k) + (int8)r0);
       }
     }
   }
