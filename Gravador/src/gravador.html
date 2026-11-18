@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gravador SMW PS2 · Retrogames</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Crect width='26' height='26' fill='%23070b22'/%3E%3Cg fill='none' stroke='%23f2c14e' stroke-width='2'%3E%3Cpath d='M4 8 L14 4 L22 8 L22 19 L12 23 L4 19 Z'/%3E%3Cpath d='M4 8 L12 12 L22 8 M12 12 L12 23'/%3E%3C/g%3E%3C/svg%3E">
+<style>
+/*@@FONTES@@*/
+/*@@CSS@@*/
+</style>
+</head>
+<body>
+<div class="janela">
+  <header class="titulo">
+    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><g fill="none" stroke="#f2c14e" stroke-width="2"><path d="M4 8 L14 4 L22 8 L22 19 L12 23 L4 19 Z"/><path d="M4 8 L12 12 L22 8 M12 12 L12 23"/></g></svg>
+    <span class="px nome">GRAVADOR SMW PS2</span>
+    <span class="loja">Retrogames Patos de Minas</span>
+    <span class="versao">jogo v@@VERSAO@@</span>
+  </header>
+
+  <ol class="passos" id="passos" aria-label="Passos">
+    <li><button type="button" data-ir="1"><span class="num">1</span><span class="txt">CARTUCHO</span></button></li>
+    <li><button type="button" data-ir="2"><span class="num">2</span><span class="txt">FORMATO</span></button></li>
+    <li><button type="button" data-ir="3"><span class="num">3</span><span class="txt">AJUSTES</span></button></li>
+    <li><button type="button" data-ir="4"><span class="num">4</span><span class="txt">DESTINO</span></button></li>
+    <li><button type="button" data-ir="5"><span class="num">5</span><span class="txt">GRAVAR</span></button></li>
+  </ol>
+
+  <main class="ceu">
+    <!-- 1. cartucho -->
+    <section class="tela" id="p1" aria-labelledby="t1">
+      <button type="button" class="console" id="console" aria-label="Arraste a ROM aqui ou clique para escolher o arquivo">
+        <svg viewBox="0 0 380 340" aria-hidden="true">
+          <g class="fantasma">
+            <g transform="translate(90,6)" fill="none" stroke="#a9c8ff" stroke-width="2" stroke-dasharray="8 6">
+              <path d="M10 0 H190 L200 12 V200 H0 V12 Z"/><rect x="30" y="34" width="140" height="110"/>
+            </g>
+            <text x="190" y="88" text-anchor="middle" font-family="'Press Start 2P', monospace" font-size="11" fill="#a9c8ff">ARRASTE</text>
+            <text x="190" y="110" text-anchor="middle" font-family="'Press Start 2P', monospace" font-size="11" fill="#a9c8ff">A ROM</text>
+            <text x="190" y="132" text-anchor="middle" font-family="'Press Start 2P', monospace" font-size="11" fill="#a9c8ff">AQUI</text>
+            <path d="M190 168 V196 M180 186 L190 196 L200 186" fill="none" stroke="#f2c14e" stroke-width="3"/>
+          </g>
+          <path d="M30 226 H350 L370 246 H10 Z" fill="#4c5260"/>
+          <rect x="84" y="232" width="212" height="10" fill="#0a0c14"/>
+          <g class="cartucho"><g transform="translate(90,30)">
+            <path d="M10 0 H190 L200 12 V210 H0 V12 Z" fill="#9aa0ab" stroke="#3a3f4a" stroke-width="3"/>
+            <rect x="2" y="12" width="196" height="8" fill="#b9bec7"/>
+            <g fill="#737985"><rect x="8" y="44" width="12" height="5"/><rect x="8" y="58" width="12" height="5"/><rect x="8" y="72" width="12" height="5"/><rect x="8" y="86" width="12" height="5"/><rect x="8" y="100" width="12" height="5"/><rect x="180" y="44" width="12" height="5"/><rect x="180" y="58" width="12" height="5"/><rect x="180" y="72" width="12" height="5"/><rect x="180" y="86" width="12" height="5"/><rect x="180" y="100" width="12" height="5"/></g>
+            <rect x="30" y="34" width="140" height="116" fill="#121a44" stroke="#3a3f4a" stroke-width="3"/>
+            <g class="rotulo-ok">
+              <rect x="37" y="41" width="126" height="102" fill="none" stroke="#c9a33a" stroke-width="2"/>
+              <text x="100" y="92" text-anchor="middle" font-family="'Press Start 2P', monospace" font-size="24" fill="#f2c14e">SMW</text>
+              <text x="100" y="126" text-anchor="middle" font-family="'Press Start 2P', monospace" font-size="16" fill="#a9c8ff">PS2</text>
+            </g>
+            <g class="rotulo-erro">
+              <rect x="37" y="41" width="126" height="102" fill="none" stroke="#ffa94d" stroke-width="2" stroke-dasharray="6 4"/>
+              <text x="100" y="104" text-anchor="middle" font-family="'Press Start 2P', monospace" font-size="28" fill="#ffa94d">???</text>
+            </g>
+            <rect x="50" y="166" width="100" height="8" fill="#737985"/>
+          </g></g>
+          <rect x="84" y="237" width="212" height="9" fill="#4c5260"/>
+          <path d="M10 246 H370 V330 H10 Z" fill="#3a3f4a"/>
+          <path d="M24 268 H260 M24 280 H260" stroke="#2c3038" stroke-width="3"/>
+          <circle class="brilho" cx="330" cy="290" r="16"/>
+          <circle class="led" cx="330" cy="290" r="7" stroke="#1a1810" stroke-width="2"/>
+        </svg>
+      </button>
+      <input type="file" id="arquivo" accept=".zip,.sfc,.smc,application/zip" hidden>
+
+      <div class="texto" id="c-vazio">
+        <h1 id="t1" tabindex="-1">INSIRA O CARTUCHO</h1>
+        <p>Escolha o backup da ROM do seu cartucho de Super Mario World, versão americana (USA). Vale .zip, .sfc ou .smc.</p>
+        <div><button type="button" class="btn" id="escolher">ESCOLHER ARQUIVO...</button></div>
+        <p class="sub">Ou arraste o arquivo até o cartucho ao lado.</p>
+        <p class="caixa dim">O Gravador não traz o jogo: ele usa a cópia do seu cartucho, e nada sai do seu computador.</p>
+      </div>
+      <div class="texto" id="c-lendo" hidden>
+        <h1 tabindex="-1">CONFERINDO...</h1>
+        <p class="sub" id="c-lendo-nome"></p>
+      </div>
+      <div class="texto" id="c-ok" hidden>
+        <h1 tabindex="-1">CARTUCHO CONFERIDO</h1>
+        <div class="caixa">
+          <span class="ok">✓ Super Mario World (USA)</span>
+          <span class="ok">✓ CRC32 B19ED489, igual ao cartucho original</span>
+          <span class="ok" id="c-ok-cab">✓ Tamanho certo: 512 KB</span>
+          <span class="dim" id="c-ok-arq"></span>
+        </div>
+        <p class="sub">Pode seguir: esse é o cartucho que o port precisa.</p>
+        <div><button type="button" class="btn2" id="trocar">TROCAR ARQUIVO</button></div>
+      </div>
+      <div class="texto" id="c-erro" hidden>
+        <h1 class="aviso" tabindex="-1">ESSE CARTUCHO NÃO SERVE</h1>
+        <p id="c-erro-msg"></p>
+        <div class="caixa laranja" id="c-erro-caixa"></div>
+        <p class="sub" id="c-erro-dica">Versões europeia e japonesa, hacks e traduções não funcionam. O port já vem em português.</p>
+        <div><button type="button" class="btn" id="outro">ESCOLHER OUTRO ARQUIVO</button></div>
+      </div>
+    </section>
+
+    <!-- 2. formato -->
+    <section class="tela coluna" id="p2" aria-labelledby="t2" hidden>
+      <div class="texto" style="max-width: none; flex: none">
+        <h1 id="t2" tabindex="-1">COMO VOCÊ VAI JOGAR?</h1>
+        <p class="sub">As duas formas rodam pelo OPL. A diferença é onde o jogo aparece e onde o progresso fica salvo.</p>
+      </div>
+      <div class="cartoes" role="group" aria-label="Formato">
+        <button type="button" class="opcao" data-modo="app" aria-pressed="true">
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke-width="3" aria-hidden="true"><rect x="14" y="16" width="20" height="28" rx="2"/><path d="M18 16 V5 H30 V16"/><path d="M21 10 H23 M25 10 H27"/></svg>
+          <span class="nome">PENDRIVE</span>
+          <span class="sub">Aplicativo (ELF)</span>
+          <span>Abre em Aplicativos no OPL ou pelo wLaunchELF. O progresso fica no pendrive.</span>
+          <span class="caminho">APPS/SMW/</span>
+        </button>
+        <button type="button" class="opcao" data-modo="iso" aria-pressed="false">
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke-width="3" aria-hidden="true"><circle cx="24" cy="24" r="19"/><circle cx="24" cy="24" r="5"/><path d="M24 10 A14 14 0 0 1 38 24" stroke-width="2"/></svg>
+          <span class="nome">LISTA DE JOGOS</span>
+          <span class="sub">Imagem ISO</span>
+          <span>Aparece junto dos outros jogos no OPL. O progresso fica no Memory Card.</span>
+          <span class="caminho">CD/SMWG_000.01.Super Mario World.iso</span>
+        </button>
+        <button type="button" class="opcao" data-modo="dois" aria-pressed="false">
+          <svg width="72" height="48" viewBox="0 0 72 48" fill="none" stroke-width="3" aria-hidden="true"><rect x="6" y="16" width="18" height="26" rx="2"/><path d="M10 16 V6 H20 V16"/><circle cx="50" cy="26" r="17"/><circle cx="50" cy="26" r="4"/></svg>
+          <span class="nome">OS DOIS</span>
+          <span class="sub">Aplicativo e ISO</span>
+          <span>Grava as duas formas de uma vez, no mesmo pendrive ou pasta.</span>
+          <span class="caminho">APPS/SMW/ e CD/</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 3. ajustes -->
+    <section class="tela coluna" id="p3" aria-labelledby="t3" hidden>
+      <div class="texto" style="max-width: none; flex: none">
+        <h1 id="t3" tabindex="-1">COMO O JOGO ABRE</h1>
+        <p class="sub">Opcional. Tudo pode ser trocado depois, no próprio PS2.</p>
+      </div>
+      <div class="ajustes">
+        <div class="linhas">
+          <fieldset class="grupo" data-ajuste="tela">
+            <legend class="rotulo">TELA</legend>
+            <button type="button" class="seg" data-valor="perguntar" aria-pressed="true">Perguntar ao abrir</button>
+            <button type="button" class="seg" data-valor="4:3" aria-pressed="false">4:3 normal</button>
+            <button type="button" class="seg" data-valor="16:9" aria-pressed="false">16:9 tela larga</button>
+          </fieldset>
+          <fieldset class="grupo" data-ajuste="video">
+            <legend class="rotulo">VÍDEO</legend>
+            <button type="button" class="seg" data-valor="perguntar" aria-pressed="true">Perguntar ao abrir</button>
+            <button type="button" class="seg" data-valor="240p" aria-pressed="false">240p · cabo AV</button>
+            <button type="button" class="seg" data-valor="480p" aria-pressed="false">480p · HDMI ou componente</button>
+          </fieldset>
+          <fieldset class="grupo" data-ajuste="idioma">
+            <legend class="rotulo">IDIOMA</legend>
+            <button type="button" class="seg" data-valor="pt" aria-pressed="true">Português</button>
+            <button type="button" class="seg" data-valor="en" aria-pressed="false">English</button>
+          </fieldset>
+        </div>
+        <div class="caixa resumo">
+          <span class="rotulo" style="color: var(--ouro)">AO LIGAR O PS2</span>
+          <ol id="resumo"></ol>
+          <span class="dim" style="border-top: 2px dashed var(--linha); padding-top: 10px">Fica salvo no SMW.CFG, junto do jogo.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. destino -->
+    <section class="tela" id="p4" aria-labelledby="t4" hidden style="align-items: flex-start">
+      <div class="texto" style="max-width: 480px">
+        <h1 id="t4" tabindex="-1">ONDE SALVAR?</h1>
+        <div id="d-pasta">
+          <p>Escolha a raiz do pendrive do PS2 (por exemplo E:\). O Gravador cria as pastas sozinho.</p>
+          <div style="margin-top: 14px"><button type="button" class="btn" id="escolher-pasta">ESCOLHER O PENDRIVE...</button></div>
+        </div>
+        <div id="d-baixar" hidden>
+          <p>Este navegador não grava direto no pendrive. O Gravador vai <span class="ok">baixar</span> o resultado para você copiar:</p>
+          <div class="caixa" id="d-baixar-lista" style="margin-top: 10px"></div>
+          <p class="dim" style="margin-top: 10px">No Chrome ou no Edge ele grava direto no pendrive.</p>
+        </div>
+        <div class="caixa" id="d-info" hidden></div>
+        <p class="dim">O pendrive precisa estar em FAT32. Em exFAT o jogo não consegue salvar o progresso nele.</p>
+      </div>
+      <div class="caixa" style="flex: 1 1 300px">
+        <span class="rotulo" style="color: var(--ouro)">VAI SER CRIADO</span>
+        <div class="arvore" id="arvore"></div>
+      </div>
+    </section>
+
+    <!-- 5. gravando -->
+    <section class="tela coluna" id="p5" aria-labelledby="t5" hidden style="align-items: center; justify-content: center">
+      <div style="display: flex; align-items: center; gap: 28px">
+        <div class="cena" aria-hidden="true"><div class="cubo"><div class="face f1"></div><div class="face f2"></div><div class="face f3"></div><div class="face f4"></div><div class="face f5"></div><div class="face f6"></div></div></div>
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <h1 id="t5" tabindex="-1">GRAVANDO...</h1>
+          <span class="sub" id="g-sub">Não tire o pendrive agora.</span>
+        </div>
+      </div>
+      <div class="progresso">
+        <div class="blocos" id="blocos" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Progresso da gravação"></div>
+        <span class="px" style="font-size: 14px; color: var(--ouro); width: 64px" id="pct">0%</span>
+      </div>
+      <div class="caixa registro"><ul id="registro"></ul></div>
+    </section>
+
+    <!-- 6. pronto -->
+    <section class="tela" id="p6" aria-labelledby="t6" hidden>
+      <svg width="260" height="300" viewBox="0 20 300 300" aria-hidden="true" style="flex: none; max-width: 100%">
+        <g fill="none" stroke="#f2c14e" stroke-width="3"><path d="M44 28 V60 M28 44 H60"/><path d="M254 58 V90 M238 74 H270"/></g>
+        <g fill="#f2c14e"><rect x="62" y="230" width="6" height="6"/><rect x="236" y="250" width="6" height="6"/></g>
+        <rect x="100" y="120" width="100" height="170" rx="8" fill="#9aa0ab" stroke="#3a3f4a" stroke-width="4"/>
+        <path d="M118 120 V54 H182 V120" fill="#c3c8d0" stroke="#3a3f4a" stroke-width="4"/>
+        <rect x="134" y="72" width="10" height="10" fill="#3a3f4a"/><rect x="156" y="72" width="10" height="10" fill="#3a3f4a"/>
+        <rect x="114" y="150" width="72" height="90" fill="#121a44" stroke="#c9a33a" stroke-width="3"/>
+        <text x="150" y="190" text-anchor="middle" font-family="'Press Start 2P', monospace" font-size="16" fill="#f2c14e">SMW</text>
+        <text x="150" y="220" text-anchor="middle" font-family="'Press Start 2P', monospace" font-size="12" fill="#a9c8ff">PS2</text>
+        <circle cx="150" cy="268" r="12" fill="#6fdc8c" fill-opacity="0.25"/><circle cx="150" cy="268" r="5" fill="#6fdc8c"/>
+      </svg>
+      <div class="texto" style="max-width: 500px">
+        <h1 id="t6" tabindex="-1">PRONTO PARA JOGAR!</h1>
+        <span class="rotulo" id="r-onde">NO PS2</span>
+        <div id="r-passos" style="display: flex; flex-direction: column; gap: 12px"></div>
+        <p class="caixa laranja atencao" style="display: block" id="r-aviso"></p>
+        <p class="sub">Gostou? Apoie os próximos ports: <a href="https://ko-fi.com/guilhermesoti" target="_blank" rel="noopener">ko-fi.com/guilhermesoti</a> ou o Pix na tela do jogo.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="rodape">
+    <span class="dim" title="SHA-256 do SMW.ELF: @@ELF_SHA@@">v@@VERSAO@@ · gratuito, feito por fã · nada sai do seu computador</span>
+    <div class="acoes">
+      <button type="button" class="btn2" id="voltar">◀ VOLTAR</button>
+      <button type="button" class="btn" id="avancar">CONTINUAR ▶</button>
+    </div>
+  </footer>
+</div>
+<div class="sr" id="anuncio" role="status" aria-live="polite"></div>
+
+<script type="application/octet-stream" id="elf" data-sha256="@@ELF_SHA@@">@@ELF_B64@@</script>
+<script>
+/*@@NUCLEO@@*/
+</script>
+<script>
+/*@@TELA@@*/
+</script>
+</body>
+</html>
