@@ -19,3 +19,7 @@
 .venv/
 __pycache__/
 *.pyc
+
+# Gravador gerado (tem o SMW.ELF dentro)
+/Gravador_SMW_PS2.html
+node_modules/

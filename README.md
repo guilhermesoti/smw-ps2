@@ -2,11 +2,12 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.10 (beta) · NTSC 240p/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
+**Versão 0.11 (beta) · NTSC 240p/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
 - Vídeo 240p progressivo (cabo AV e a maioria dos adaptadores HDMI) ou 480p com scanlines (componente/HDMI).
-- Tela 16:9 opcional (beta): nas fases mostra 43 colunas a mais de cada lado, para TV no modo widescreen. QUADRADO na abertura ou L2 + R2 + CRUZ no jogo.
+- Tela 16:9 opcional (beta): nas fases mostra 43 colunas a mais de cada lado, para TV no modo widescreen. O jogo pergunta na primeira vez (tela FORMATO DA TELA) e L2 + R2 + CRUZ troca no jogo.
+- **Gravador SMW PS2**: um HTML que abre em qualquer navegador, confere a cópia do jogo e grava o aplicativo, a ISO ou os dois no pendrive.
 - Em português do Brasil: mensagens, nomes das fases e textos dos castelos. Segure SELECT na abertura para jogar em inglês.
 - Grava no pendrive ou no Memory Card (pasta `SMWPS2`, com ícone 3D no navegador do PS2).
 - Abre pelo OPL como aplicativo (ELF) ou como ISO na lista de jogos.
@@ -29,7 +30,31 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.10 obtido com o ps2dev v2.0.0 foi `8c7fb55ee1e51881a3c4a3f5d4393722f402eebb9a84a9dc0ee45d4bbdebfd1a`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.11 obtido com o ps2dev v2.0.0 foi `0f182dfbf491e8550f0b86985490e624a070f5c9ae5c3157e63cbabc427a8be7`.
+
+## Gravador SMW PS2 (programa no PC)
+
+`Gravador_SMW_PS2.html` é um arquivo só, com as telas, as fontes e o `SMW.ELF` dentro. Abre no navegador
+(Windows, Linux ou Mac), sem instalar nada e sem internet. Ele confere a cópia do jogo (ZIP, SFC ou SMC, com
+ou sem cabeçalho de copiador, CRC32 `B19ED489`), pergunta pendrive, ISO ou os dois, os ajustes de abertura e o
+destino. No Chrome e no Edge grava direto no pendrive (File System Access) e confere o que gravou, sem tocar no
+save; nos outros navegadores baixa um ZIP (ou a ISO). A ISO sai byte a byte igual à do `Fonte/gerar_iso.py`
+(pycdlib). Nada é enviado para a internet.
+
+Para gerar, depois de compilar o ELF:
+
+```sh
+python3 Gravador/gerar_gravador.py            # cria Gravador_SMW_PS2.html na raiz
+```
+
+O código fica em `Gravador/src/` (`nucleo.js`: ROM, ISO, ZIP e SMW.CFG; `tela.js`: os passos;
+`gravador.html` e `gravador.css`). As fontes Press Start 2P e VT323 (SIL OFL 1.1) estão em `Gravador/fontes/`.
+
+### Ajustes de abertura
+
+O Gravador grava `SMW.CFG` ao lado do jogo (ou dentro da ISO), texto com `tela=perguntar|4:3|16:9`,
+`video=perguntar|240p|480p` e `idioma=pt|en`. A tela escolhida no PS2 fica em `SMW.OPT`, no lugar do save, e
+vale mais que a do `SMW.CFG`. Sem os dois, o jogo abre como antes.
 
 ## Jogar por USB
 
@@ -74,6 +99,23 @@ python3 testes/testar_percurso.py --sanitizar "/caminho/Super Mario World (USA).
 ```
 
 O teste compila o motor para o PC, joga o mesmo percurso duas vezes em pastas temporárias e verifica a fase, o salto, o áudio e o CRC da imagem final.
+
+Ajustes de abertura (`SMW.CFG` e `SMW.OPT`), numa pasta só com o jogo:
+
+```sh
+cc -std=gnu11 -fsanitize=address,undefined -IFonte/ps2 $(pkg-config --cflags minizip zlib) \
+   Fonte/ps2/files.c testes/opcoes.c $(pkg-config --libs minizip zlib) -o /tmp/smw-opcoes
+ASAN_OPTIONS=detect_leaks=0 /tmp/smw-opcoes /caminho/da/pasta/com/o/jogo/
+```
+
+Gravador: o núcleo no Node 18+ (precisa de Python 3 com pycdlib: a ISO é comparada byte a byte com a do pycdlib)
+e as telas num Chrome sem janela, com um pendrive simulado que já tem um save (precisa de `npm install puppeteer-core`):
+
+```sh
+node Gravador/testes/testar_nucleo.js "/caminho/Super Mario World (USA).zip" APPS/SMW/SMW.ELF
+CHROME=/usr/bin/google-chrome node Gravador/testes/testar_telas.js Gravador_SMW_PS2.html \
+   "/caminho/Super Mario World (USA).zip" /tmp/telas-gravador
+```
 
 Varredura de todas as 235 salas do jogo com AddressSanitizer e UBSan (carrega cada sala pelo próprio motor e joga alguns segundos; acusa leituras e escritas fora das tabelas). Leva uns 3 minutos:
 
@@ -144,6 +186,8 @@ Projeto **gratuito**, feito por fãs. Ele existe graças a:
   (blashy101, licença MIT): a PPU otimizada e os achados da câmera do mapa, das tabelas e do volume do
   áudio, trazidos para este port na v0.9. A tela 16:9 da v0.10 foi escrita neste port, sem usar a
   desse projeto (que tem outra licença).
+- **[Press Start 2P](https://fonts.google.com/specimen/Press+Start+2P)** (CodeMan38) e
+  **[VT323](https://fonts.google.com/specimen/VT323)** (Peter Hull), licença SIL OFL 1.1: as fontes do Gravador.
 - **[ps2dev](https://github.com/ps2dev/ps2dev)**, **[PS2SDK](https://github.com/ps2dev/ps2sdk)** e
   **[gsKit](https://github.com/ps2dev/gsKit)**: as ferramentas e bibliotecas do PS2.
 - **[OPL](https://github.com/ps2homebrew/Open-PS2-Loader)**: para rodar no console.

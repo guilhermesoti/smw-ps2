@@ -8,7 +8,7 @@ antes dele: abaixo está quem fez cada parte.
 | Quem | O que fez |
 |---|---|
 | **Guilherme Soti** — [Retrogames Patos de Minas](https://github.com/guilhermesoti) | Ideia e direção do projeto, todos os testes num PlayStation 2 de verdade (pelo OPL), relatos dos erros vistos no console e as escolhas da tradução (Princesa Peach, botões do PS2 nas dicas, "FIM DE JOGO") e do visual |
-| **Claude** (Anthropic, pelo Claude Code) | Desenvolvimento do port: camada PS2 (vídeo 240p/480p no GS, áudio, controles, Memory Card, USB), correções a partir dos testes no console, tradução para português feita dentro do port, ícone do save, abertura, documentação na v0.9, a adaptação das partes do port de blashy101 e os testes de salas e da câmera; na v0.10, a tela 16:9 (colunas extras na PPU, cenário e objetos carregados mais longe) e os testes dela |
+| **Claude** (Anthropic, pelo Claude Code) | Desenvolvimento do port: camada PS2 (vídeo 240p/480p no GS, áudio, controles, Memory Card, USB), correções a partir dos testes no console, tradução para português feita dentro do port, ícone do save, abertura, documentação na v0.9, a adaptação das partes do port de blashy101 e os testes de salas e da câmera; na v0.10, a tela 16:9 (colunas extras na PPU, cenário e objetos carregados mais longe) e os testes dela; na v0.11, o Gravador SMW PS2 e a tela FORMATO DA TELA |
 
 ## O jogo em C (a base de tudo)
 
@@ -36,6 +36,18 @@ antes dele: abaixo está quem fez cada parte.
 Escrita do zero neste port (`Fonte/engine/src/largo.c`, `largo.h` e as mudanças marcadas com
 `g_largo` no motor e na PPU), sem copiar código da tela larga de outros ports. Ela usa a estrutura de
 colunas extras (`extraLeftRight`) que já existia na PPU do snesrev/smw.
+
+## Gravador SMW PS2 (v0.11)
+
+Escrito neste port (`Gravador/`): as telas seguem o visual da abertura da Retrogames. Usa duas fontes
+livres, embutidas sem mudanças:
+
+- **[Press Start 2P](https://fonts.google.com/specimen/Press+Start+2P)** — por **CodeMan38** (Cody "CodeMan38"
+  Boisclair), SIL Open Font License 1.1 ([Licencas/OFL-PressStart2P.txt](Licencas/OFL-PressStart2P.txt)).
+- **[VT323](https://fonts.google.com/specimen/VT323)** — por **Peter Hull**, SIL Open Font License 1.1
+  ([Licencas/OFL-VT323.txt](Licencas/OFL-VT323.txt)).
+
+As letras acentuadas da tela FORMATO DA TELA no PS2 vêm da própria fonte 8x8 do PS2SDK.
 
 ## Ferramentas e bibliotecas do PlayStation 2
 

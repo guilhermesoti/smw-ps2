@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.10 (beta) | NTSC 240p/480p | 4:3 ou 16:9 | Português
+Retrogames Patos de Minas | v0.11 (beta) | NTSC 240p/480p | 4:3 ou 16:9 | Português
 
 O QUE VOCÊ PRECISA
 
@@ -7,7 +7,28 @@ Um pendrive FAT32 e a sua própria cópia de Super Mario World (USA) de
 SNES, em ZIP (com o .sfc/.smc dentro), .SFC ou .SMC. O pacote não inclui
 o jogo. Um Memory Card formatado é necessário para gravar pela ISO.
 
-JOGAR PELO PENDRIVE
+O JEITO MAIS FÁCIL: GRAVADOR SMW PS2
+
+Abra o arquivo Gravador_SMW_PS2.html no navegador do computador
+(Windows, Linux ou Mac; não precisa instalar nada nem de internet). Ele
+pede a sua cópia do jogo, confere se é a versão certa e grava tudo no
+pendrive: o aplicativo (APPS/SMW), a ISO (pasta CD) ou os dois.
+
+1. CARTUCHO: escolha ou arraste o .zip, .sfc ou .smc. A luz verde
+   acende quando a cópia é a americana original; a laranja explica o
+   que está errado (versão europeia/japonesa, hack, tradução...).
+2. FORMATO: pendrive (aplicativo), lista de jogos (ISO) ou os dois.
+3. AJUSTES: como o jogo abre (tela, vídeo e idioma), ou "perguntar".
+4. DESTINO: escolha a raiz do pendrive (por exemplo E:\).
+5. GRAVAR: grava e confere cada arquivo.
+
+No Chrome e no Edge ele grava direto no pendrive, sem apagar o save que
+já estiver lá. No Firefox e no Safari ele baixa um ZIP (ou a ISO): é só
+descompactar na raiz do pendrive. A sua cópia do jogo não sai do
+computador. A ISO e o SMW.ZIP gravados têm o seu jogo dentro: são só
+para você.
+
+JOGAR PELO PENDRIVE (SEM O GRAVADOR)
 
 1. Pela lista de aplicativos (ELF)
    Copie a pasta APPS/SMW para dentro de APPS na raiz do pendrive e
@@ -17,7 +38,7 @@ JOGAR PELO PENDRIVE
    mass:/APPS/SMW/SMW.ELF pelo wLaunchELF.
 
 2. Pela lista de jogos do OPL (ISO)
-   Gere a ISO com a sua cópia (veja RECOMPILAR abaixo) e copie
+   Gere a ISO com o Gravador (ou veja RECOMPILAR abaixo) e copie
    SMWG_000.01.Super Mario World.iso para a pasta CD do pendrive.
    No PS2, atualize a lista de jogos USB/BDM do OPL e abra o jogo.
 
@@ -113,20 +134,24 @@ Na tela de abertura, durante os 3 segundos com as informações:
   SNES vira duas, com scanlines (visual de monitor de tubo/RGB).
 - CÍRCULO, ou não apertar nada: 240p, para cabo AV (amarelo) e para
   adaptadores HDMI que não aceitarem 480p.
-- QUADRADO (antes do TRIÂNGULO ou do CÍRCULO): tela 16:9, para TV no
-  modo widescreen (16:9, "Wide"). Para 16:9 em 480p, aperte QUADRADO
-  e depois TRIÂNGULO.
+- Segurar QUADRADO: mostra de novo a tela FORMATO DA TELA (4:3 ou 16:9)
+  depois da abertura.
 IDIOMA: o jogo abre em português do Brasil. Para jogar em inglês, segure
-SELECT nessa mesma tela de abertura.
+SELECT nessa mesma tela de abertura (se o Gravador deixou o jogo em
+inglês, SELECT volta para o português).
+
+Se o Gravador deixou o vídeo em 480p, ele já entra em 480p sem apertar
+nada; CÍRCULO volta para 240p.
 
 Se escolher 480p e a TV ficar sem imagem, desligue e abra o jogo de
-novo sem apertar nada. No 480p, o PS2 deve estar com "Saída de vídeo
+novo apertando CÍRCULO. No 480p, o PS2 deve estar com "Saída de vídeo
 componente" em "Y Cb/Pb Cr" na Configuração do Sistema.
 
 Durante o jogo (segurando L2 + R2):
 - L2 + R2 + QUADRADO: liga/desliga as scanlines (no 480p).
 - L2 + R2 + CÍRCULO: liga/desliga a suavização da imagem.
-- L2 + R2 + CRUZ: troca entre 4:3 e 16:9.
+- L2 + R2 + CRUZ: troca entre 4:3 e 16:9 (a troca fica gravada junto
+  com o próximo save).
 - L2 + R2 + TRIÂNGULO: liga/desliga o medidor de desempenho, no canto
   de baixo. "TELA 60" = todos os 60 quadros de cada segundo foram
   desenhados; "TELA 30" = metade foi pulada para manter a velocidade.
@@ -139,6 +164,12 @@ atualização, o jogo avança até 2 quadros sem desenhar, para manter a
 velocidade e a música corretas.
 
 TELA 16:9 (BETA)
+
+Na primeira vez que o jogo abre, depois da vinheta da Retrogames, vem a
+tela FORMATO DA TELA: direcional escolhe 4:3 ou 16:9 e X confirma. A
+escolha fica gravada (arquivo SMW.OPT, no mesmo lugar do save) e a tela
+não aparece mais. O TESTE DA TV nessa tela tem um círculo que só fica
+redondo quando a TV está no modo certo para a opção marcada.
 
 Nas fases, o jogo mostra 43 colunas a mais de cada lado (342 em vez de
 256): você vê mais da fase, sem esticar o desenho. O PS2 manda a imagem
@@ -158,6 +189,17 @@ ou volte para 4:3 com L2 + R2 + CRUZ.
   medidor (L2 + R2 + TRIÂNGULO) mostrar "TELA 30" com frequência numa
   fase, conte para a gente qual foi.
 
+AJUSTES DE ABERTURA (SMW.CFG E SMW.OPT)
+
+O Gravador grava SMW.CFG junto do jogo (em APPS/SMW ou dentro da ISO),
+um texto simples com o jeito de abrir:
+  tela=perguntar   (ou 4:3, 16:9)
+  video=perguntar  (ou 240p, 480p)
+  idioma=pt        (ou en)
+Dá para editar no Bloco de Notas. A tela escolhida no próprio PS2
+(SMW.OPT, onde fica o save) vale mais que a do SMW.CFG. Sem esses
+arquivos o jogo abre como antes: 240p, português, e pergunta a tela.
+
 SOBRE ESTA VERSÃO
 
 A lógica do jogo foi compilada em C para o Emotion Engine do PS2. Os
@@ -165,6 +207,15 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.11 (beta):
+- Gravador SMW PS2 (Gravador_SMW_PS2.html): programa no navegador que
+  confere a sua cópia e grava o aplicativo, a ISO ou os dois no pendrive
+  (veja O JEITO MAIS FÁCIL, no começo).
+- Tela FORMATO DA TELA na primeira vez, com o teste do círculo, em vez
+  de apertar QUADRADO na abertura. A escolha fica gravada.
+- SMW.CFG: o jogo pode abrir já em 16:9, 480p ou inglês (feito pelo
+  Gravador). Os acentos aparecem nas telas novas da abertura.
 
 Mudanças da v0.10 (beta):
 - Tela 16:9 opcional: QUADRADO na abertura ou L2 + R2 + CRUZ durante o
@@ -297,6 +348,11 @@ superior com pycdlib instalado:
 
   python3 Fonte/gerar_iso.py
 
+O Gravador (Gravador_SMW_PS2.html) é gerado do código em Gravador/, com
+o SMW.ELF já compilado dentro (não usa a ROM):
+
+  python3 Gravador/gerar_gravador.py
+
 O motor parte de snesrev/smw, revisão bd80629bc968267239c4a2fb77fa96d0ed62da7b.
 A PPU vem do port github.com/blashy101/-AI-Super-Mario-World-PS2-Native-Port.
 Os avisos dos projetos estão na pasta Licencas.
@@ -314,8 +370,9 @@ Guilherme Soti (Retrogames Patos de Minas), que dirigiu o projeto e
 testou tudo num PS2 de verdade, com o Claude (Anthropic) no
 desenvolvimento. O motor é do snesrev/smw, com a emulação de PPU e som
 derivada do LakeSnes; a PPU otimizada e duas correções vêm do port de
-blashy101; a tela 16:9 foi feita neste port; o PS2 usa PS2SDK e gsKit.
-Detalhes em CREDITOS.md.
+blashy101; a tela 16:9 e o Gravador foram feitos neste port; o PS2 usa
+PS2SDK e gsKit; o Gravador usa as fontes Press Start 2P e VT323 (licença
+SIL OFL). Detalhes em CREDITOS.md.
 
 O port é e vai continuar gratuito. Se quiser apoiar os próximos (como um
 port do Tekken 3), pode doar qualquer valor:
