@@ -22,18 +22,23 @@ const char *smw_notice(unsigned *serial);
 /* Short codes of the last failed save, e.g. "24 31" (see LEIA-ME). */
 const char *smw_save_error_text(void);
 
-/* Ajustes de abertura. tela: 0 = 4:3, 1 = 16:9; video: 0 = 240p, 1 = 480p;
-   idioma: 0 = portugues, 1 = ingles; SMW_OPT_ASK = perguntar / sem valor. */
+/* Ajustes (tela AJUSTES na abertura, SMW.CFG do Gravador e SMW.OPT).
+   tela: 0 = 4:3, 1 = 16:9. video: SMW_VIDEO_*. idioma: 0 = portugues,
+   1 = ingles. suave: 0 = desligada, 1 = media, 2 = forte. compat: 1 = saida
+   de 512 colunas (TV ou adaptador que nao aceitou a de 1280).
+   SMW_OPT_ASK = sem valor (o jogador escolhe na tela de ajustes). */
 enum { SMW_OPT_ASK = -1 };
-typedef struct { int tela, video, idioma; } SmwOptions;
+enum { SMW_VIDEO_240P = 0, SMW_VIDEO_480P = 1, SMW_VIDEO_480I = 2 };
+typedef struct { int tela, video, idioma, suave, compat; } SmwOptions;
+/* Todos os campos em SMW_OPT_ASK. */
+void smw_options_clear(SmwOptions *o);
 /* SMW.CFG do Gravador (pasta do jogo ou ISO). Depois de smw_find_rom. */
 void smw_read_config(SmwOptions *o);
-/* Tela escolhida no PS2 (SMW.OPT, onde fica o save), ou SMW_OPT_ASK.
-   Depois de smw_start (que carrega o progresso). */
-int smw_read_saved_tela(void);
-/* Grava a escolha agora (tela FORMATO DA TELA). Se nao der, tenta de novo
-   no proximo save. */
-bool smw_save_tela(int tela);
-/* Troca feita no jogo (L2+R2+X): vai junto com o proximo save. */
-void smw_tela_changed(int tela);
+/* SMW.OPT (onde fica o save): preenche so os campos que estao no arquivo.
+   Depois de smw_start (que carrega o progresso). true se o arquivo existe. */
+bool smw_read_saved_options(SmwOptions *o);
+/* Grava agora. Se nao der, tenta de novo no proximo save. */
+bool smw_save_options(const SmwOptions *o);
+/* Troca feita no jogo (L2+R2+X, L2+R2+CIRCULO): vai junto com o proximo save. */
+void smw_options_changed(const SmwOptions *o);
 #endif

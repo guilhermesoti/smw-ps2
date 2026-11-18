@@ -819,8 +819,9 @@ static int save_to(int store, const uint8_t *save, uint32_t generation) {
   return 0;
 }
 
-static int pending_tela = -1;
-static bool write_options_to(int store, int tela);
+static SmwOptions pending_options;
+static bool options_pending;
+static bool write_options_to(int store, const SmwOptions *o);
 
 bool smw_save_progress(const uint8_t *save) {
   int order[STORE_COUNT], count = 0;
@@ -848,8 +849,8 @@ bool smw_save_progress(const uint8_t *save) {
       char text[48];
       snprintf(text, sizeof(text), "SALVO: %s", kStoreNames[store]);
       set_notice(text);
-      /* A troca de tela feita no jogo (L2+R2+X) vai junto com o save. */
-      if (pending_tela >= 0 && write_options_to(store, pending_tela)) pending_tela = -1;
+      /* Ajustes trocados no jogo (L2+R2+X, L2+R2+CIRCULO) vao junto com o save. */
+      if (options_pending && write_options_to(store, &pending_options)) options_pending = false;
       return true;
     }
     if (used + 4 < sizeof(error_text))
@@ -871,8 +872,8 @@ bool smw_save_progress(const uint8_t *save) {
 /* ------------------------------------------------------- options --- */
 
 /* SMW.CFG: feito pelo Gravador no PC, ao lado do jogo (APPS/SMW) ou dentro
-   da ISO. So e lido. SMW.OPT: a escolha feita no PS2 (tela FORMATO DA TELA
-   ou L2+R2+X), gravada onde fica o save. Os dois sao texto, uma linha
+   da ISO. So e lido. SMW.OPT: a escolha feita no PS2 (tela AJUSTES, L2+R2+X
+   ou L2+R2+CIRCULO), gravada onde fica o save. Os dois sao texto, uma linha
    "chave=valor" cada; linhas com # e chaves desconhecidas sao ignoradas. */
 
 static bool same_word(const char *a, const char *b) { return strcasecmp(a, b) == 0; }
@@ -882,6 +883,10 @@ static char *trim(char *s) {
   size_t n = strlen(s);
   while (n && (s[n-1] == ' ' || s[n-1] == '\t' || s[n-1] == '\r')) s[--n] = '\0';
   return s;
+}
+
+void smw_options_clear(SmwOptions *o) {
+  o->tela = o->video = o->idioma = o->suave = o->compat = SMW_OPT_ASK;
 }
 
 static void parse_options(char *text, SmwOptions *o) {
@@ -898,12 +903,20 @@ static void parse_options(char *text, SmwOptions *o) {
         else if (same_word(value, "16:9")) o->tela = 1;
         else if (same_word(value, "perguntar")) o->tela = SMW_OPT_ASK;
       } else if (same_word(key, "video")) {
-        if (same_word(value, "240p")) o->video = 0;
-        else if (same_word(value, "480p")) o->video = 1;
+        if (same_word(value, "240p")) o->video = SMW_VIDEO_240P;
+        else if (same_word(value, "480p")) o->video = SMW_VIDEO_480P;
+        else if (same_word(value, "480i")) o->video = SMW_VIDEO_480I;
         else if (same_word(value, "perguntar")) o->video = SMW_OPT_ASK;
       } else if (same_word(key, "idioma")) {
         if (same_word(value, "pt") || same_word(value, "portugues")) o->idioma = 0;
         else if (same_word(value, "en") || same_word(value, "ingles")) o->idioma = 1;
+      } else if (same_word(key, "suavizacao") || same_word(key, "suave")) {
+        if (same_word(value, "nao") || same_word(value, "desligada") || same_word(value, "0")) o->suave = 0;
+        else if (same_word(value, "media") || same_word(value, "1")) o->suave = 1;
+        else if (same_word(value, "forte") || same_word(value, "sim") || same_word(value, "2")) o->suave = 2;
+      } else if (same_word(key, "saida")) {
+        if (same_word(value, "1280")) o->compat = 0;
+        else if (same_word(value, "512")) o->compat = 1;
       }
     }
     line = next;
@@ -921,7 +934,7 @@ static bool read_options(const char *path, SmwOptions *o) {
 
 void smw_read_config(SmwOptions *o) {
   char path[SMW_PATH];
-  o->tela = o->video = o->idioma = SMW_OPT_ASK;
+  smw_options_clear(o);
   if (rom_on_disc) {
     if (!read_options("cdrom0:/SMW.CFG", o)) read_options("cdrom0:/SMW.CFG;1", o);
   }
@@ -937,40 +950,56 @@ static int store_order(int order[STORE_COUNT]) {
   return count;
 }
 
-int smw_read_saved_tela(void) {
+bool smw_read_saved_options(SmwOptions *o) {
   int order[STORE_COUNT], count = store_order(order);
   for (int i = 0; i < count; ++i) {
     char path[SMW_PATH];
-    SmwOptions o = {SMW_OPT_ASK, SMW_OPT_ASK, SMW_OPT_ASK};
     if (store_check(order[i]) != 0 || !join_path(path, store_dir(order[i]), "SMW.OPT")) continue;
-    if (read_options(path, &o) && o.tela != SMW_OPT_ASK) return o.tela;
+    if (read_options(path, o)) return true;
   }
-  return SMW_OPT_ASK;
+  return false;
 }
 
-static bool write_options_to(int store, int tela) {
-  char path[SMW_PATH], text[32];
+/* Texto do SMW.OPT: so os campos com valor. */
+static int options_text(const SmwOptions *o, char *text, size_t size) {
+  static const char *const videos[] = {"240p", "480p", "480i"};
+  static const char *const suaves[] = {"nao", "media", "forte"};
+  int n = 0;
+  if (o->tela >= 0) n += snprintf(text + n, size - n, "tela=%s\n", o->tela ? "16:9" : "4:3");
+  if (o->video >= 0 && o->video <= 2) n += snprintf(text + n, size - n, "video=%s\n", videos[o->video]);
+  if (o->suave >= 0 && o->suave <= 2) n += snprintf(text + n, size - n, "suavizacao=%s\n", suaves[o->suave]);
+  if (o->idioma >= 0) n += snprintf(text + n, size - n, "idioma=%s\n", o->idioma ? "en" : "pt");
+  if (o->compat == 1) n += snprintf(text + n, size - n, "saida=512\n");
+  return n;
+}
+
+static bool write_options_to(int store, const SmwOptions *o) {
+  char path[SMW_PATH], text[128];
   const char *dir = store_dir(store);
   if (!join_path(path, dir, "SMW.OPT")) return false;
   bool recording = card_recording;
   card_recording = false;  /* falha aqui nao entra no ERRO AO SALVAR */
   if (store != STORE_FOLDER) make_folder(dir);
-  int n = snprintf(text, sizeof(text), "tela=%s\n", tela ? "16:9" : "4:3");
+  int n = options_text(o, text, sizeof(text));
   bool ok = file_write(path, (const uint8_t *)text, n);
   card_recording = recording;
   if (ok && store != STORE_FOLDER) write_card_icon(dir, store - STORE_MC0);
   return ok;
 }
 
-bool smw_save_tela(int tela) {
+bool smw_save_options(const SmwOptions *o) {
   int order[STORE_COUNT], count = store_order(order);
-  pending_tela = tela;
+  pending_options = *o;
+  options_pending = true;
   for (int i = 0; i < count; ++i)
-    if (store_check(order[i]) == 0 && write_options_to(order[i], tela)) {
-      pending_tela = -1;
+    if (store_check(order[i]) == 0 && write_options_to(order[i], o)) {
+      options_pending = false;
       return true;
     }
   return false;
 }
 
-void smw_tela_changed(int tela) { pending_tela = tela; }
+void smw_options_changed(const SmwOptions *o) {
+  pending_options = *o;
+  options_pending = true;
+}

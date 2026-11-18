@@ -2,11 +2,12 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.12 (beta) · NTSC 240p/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
+**Versão 0.13 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
-- Vídeo 240p progressivo (cabo AV e a maioria dos adaptadores HDMI) ou 480p com scanlines (componente/HDMI).
-- Tela 16:9 opcional (beta): nas fases mostra 43 colunas a mais de cada lado, para TV no modo widescreen. O jogo pergunta na primeira vez (tela FORMATO DA TELA) e L2 + R2 + CRUZ troca no jogo.
+- Tela AJUSTES no começo: vídeo 240p (cabo AV, TV de tubo), 480i (cabo AV, TV de tela plana) ou 480p com scanlines (componente/HDMI), tela 4:3 ou 16:9, suavização (forte, média, desligada) e idioma. Vídeo novo só fica se você confirmar que a imagem apareceu.
+- No 240p e no 480i, 1280 pontos por linha: todo pixel do SNES com a mesma largura, também no 16:9.
+- Tela 16:9 opcional (beta): nas fases mostra 43 colunas a mais de cada lado, para TV no modo widescreen. Escolha na tela AJUSTES; L2 + R2 + CRUZ troca no jogo.
 - **Gravador SMW PS2**: um HTML que abre em qualquer navegador, confere a cópia do jogo e grava o aplicativo, a ISO ou os dois no pendrive.
 - Em português do Brasil: mensagens, nomes das fases e textos dos castelos. Segure SELECT na abertura para jogar em inglês.
 - Grava no pendrive ou no Memory Card (pasta `SMWPS2`, com ícone 3D no navegador do PS2).
@@ -30,7 +31,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.12 obtido com o ps2dev v2.0.0 foi `2c3d9253c7b1c82c6fe4310f4e4dba04db829d600d10db4fa680e880b256abd7`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.13 obtido com o ps2dev v2.0.0 foi `a953884e5acc9f61cfedd15067e056226b7c94423c95cf85ccdd564b16b52ff3`.
 
 ## Gravador SMW PS2 (programa no PC)
 
@@ -53,8 +54,8 @@ O código fica em `Gravador/src/` (`nucleo.js`: ROM, ISO, ZIP e SMW.CFG; `tela.j
 ### Ajustes de abertura
 
 O Gravador grava `SMW.CFG` ao lado do jogo (ou dentro da ISO), texto com `tela=perguntar|4:3|16:9`,
-`video=perguntar|240p|480p` e `idioma=pt|en`. A tela escolhida no PS2 fica em `SMW.OPT`, no lugar do save, e
-vale mais que a do `SMW.CFG`. Sem os dois, o jogo abre como antes.
+`video=perguntar|240p|480i|480p`, `suavizacao=perguntar|forte|media|nao` e `idioma=pt|en`: o que já vem marcado na
+tela AJUSTES. O que foi escolhido no PS2 fica em `SMW.OPT`, no lugar do save, e vale mais que o `SMW.CFG`.
 
 ## Jogar por USB
 
@@ -88,7 +89,7 @@ Copie `CD/SMWG_000.01.Super Mario World.iso` para a pasta `CD/` do pendrive e at
 | Start / Select | Pausar ou iniciar / soltar o item da reserva |
 | L1 / R1 | Deslocar a câmera nas fases que permitem |
 | L2 + R2 + × | Trocar entre 4:3 e 16:9 |
-| L2 + R2 + △ / □ / ○ | Medidor de desempenho / scanlines (480p) / suavização |
+| L2 + R2 + △ / □ / ○ | Medidor de desempenho / scanlines (480p) / suavização (desligada, média, forte) |
 
 ## Repetir o teste de regressão
 

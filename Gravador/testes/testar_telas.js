@@ -87,7 +87,7 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   await clica(p, '.grupo[data-ajuste="tela"] .seg[data-valor="16:9"]');
   await clica(p, '.grupo[data-ajuste="video"] .seg[data-valor="480p"]');
   await foto(p, '3_ajustes');
-  confere((await texto(p, '#resumo')).includes('Joga em 16:9'), 'resumo segue os ajustes');
+  confere((await texto(p, '#resumo')).includes('tela 16:9') && (await texto(p, '#resumo')).includes('480p'), 'resumo segue os ajustes');
   await clica(p, '#avancar');
   confere(await p.$eval('#avancar', (b) => b.disabled), 'passo 4: GRAVAR desligado sem pendrive');
   await clica(p, '#escolher-pasta');
@@ -95,7 +95,7 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   await foto(p, '4_destino');
   const info = await texto(p, '#d-info');
   confere(info.includes('Save encontrado'), 'destino: acha o save que já existe');
-  confere(info.includes('trocada por 16:9'), 'destino: avisa da escolha antiga do PS2');
+  confere(info.includes('vão ser trocados pelos daqui'), 'destino: avisa da escolha antiga do PS2');
   confere((await texto(p, '#arvore')).includes('PENDRIVE\\'), 'destino: árvore com o nome do pendrive');
 
   await clica(p, '#avancar');
@@ -135,7 +135,7 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   confere(nomes === 'APPS/SMW/SMW.CFG,APPS/SMW/SMW.ELF,APPS/SMW/SMW.SRM,APPS/SMW/SMW.ZIP,APPS/SMW/title.cfg,CD/SMWG_000.01.Super Mario World.iso',
     'pendrive: arquivos certos, SMW.OPT antigo removido (' + nomes + ')');
   confere(fs.readFileSync(path.join(pend, 'APPS/SMW/SMW.SRM'), 'latin1') === 'SAVE-ANTIGO', 'pendrive: save antigo intacto');
-  confere(/tela=16:9\r\nvideo=480p\r\nidioma=pt/.test(fs.readFileSync(path.join(pend, 'APPS/SMW/SMW.CFG'), 'latin1')), 'pendrive: SMW.CFG com os ajustes');
+  confere(/tela=16:9\r\nvideo=480p\r\nsuavizacao=perguntar\r\nidioma=pt/.test(fs.readFileSync(path.join(pend, 'APPS/SMW/SMW.CFG'), 'latin1')), 'pendrive: SMW.CFG com os ajustes');
   await p.close();
 
   /* ---------- 2. navegador sem gravação direta: download ---------- */

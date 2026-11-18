@@ -3,16 +3,13 @@
  * sintetizado aqui mesmo), o titulo do port e a tela "Apoie o projeto" com o
  * QR code do Pix.
  *
- * Na primeira vez, entre a vinheta e a tela de apoio, vem a tela FORMATO
- * DA TELA (formato.c), para escolher 4:3 ou 16:9.
- *
- * Roda depois da escolha do video (main.c), antes do jogo. Cada quadro e
- * desenhado pela CPU num quadro 320 x 224 e esticado na tela pelo GS.
+ * Roda depois da tela AJUSTES (main.c), antes do jogo. Cada quadro e
+ * desenhado pela CPU num quadro 320 x 224 e esticado na tela pelo GS, com a
+ * mesma suavizacao do jogo.
  * START pula a vinheta; na tela de apoio, X ou START (ou 20 s) seguem para
  * o jogo. Sem controle conectado, a abertura segue sozinha. */
 #include "intro.h"
 #include "intro_qr.h"
-#include "formato.h"
 #include <audsrv.h>
 #include <kernel.h>
 #include <libpad.h>
@@ -245,30 +242,60 @@ static unsigned read_buttons(void) {
   return now;
 }
 
-/* Para o GS (0xAABBGGRR), com o brilho 0..128 do fade, e mostra. */
-static void present(GSGLOBAL *gs, GSTEXTURE *tex, bool p480, int bright) {
-  unsigned k = (unsigned)bright * 2;
-  for (int i = 0; i < W * H; i++) {
-    uint32_t p = canvas_px[i], r = (p >> 16) & 255, g = (p >> 8) & 255, b = p & 255;
-    if (k < 256) r = r * k >> 8, g = g * k >> 8, b = b * k >> 8;
-    canvas_px[i] = 0x80000000u | (b << 16) | (g << 8) | r;
+/* Desenha a textura t na tela, de (x0, y0) a (x1, y1), usando u1 x v1 texels.
+   suave 0: pixels nitidos; 2: filtro bilinear do GS; 1: metade de cada (o
+   desenho nitido e, por cima, o suave com 50% de transparencia). */
+void smw_sprite_suave(GSGLOBAL *gs, GSTEXTURE *t, float x0, float y0, float x1, float y1, float u1,
+                      float v1, int suave) {
+  u8 enabled = gs->PrimAlphaEnable;
+  /* O filtro bilinear le o texel vizinho: na borda, repete a ultima coluna
+     e a ultima linha usadas em vez de ler o que vem depois na VRAM. */
+  gs->Clamp->MINU = 0, gs->Clamp->MAXU = (int)u1 - 1;
+  gs->Clamp->MINV = 0, gs->Clamp->MAXV = (int)v1 - 1;
+  gsKit_set_clamp(gs, GS_CMODE_REGION_CLAMP);
+  t->Filter = suave >= 2 ? GS_FILTER_LINEAR : GS_FILTER_NEAREST;
+  gs->PrimAlphaEnable = GS_SETTING_OFF;
+  gsKit_prim_sprite_texture(gs, t, x0, y0, 0, 0, x1, y1, u1, v1, 1, GS_SETREG_RGBAQ(128, 128, 128, 128, 0));
+  if (suave == 1) {
+    /* Cor = metade da textura suave + metade do que ja esta na tela. */
+    gsKit_set_primalpha(gs, GS_SETREG_ALPHA(0, 1, 2, 1, 0x40), 0);
+    t->Filter = GS_FILTER_LINEAR;
+    gs->PrimAlphaEnable = GS_SETTING_ON;
+    gsKit_prim_sprite_texture(gs, t, x0, y0, 0, 0, x1, y1, u1, v1, 2, GS_SETREG_RGBAQ(128, 128, 128, 128, 0));
   }
-  SyncDCache(canvas_px, canvas_px + W * H);
+  gs->PrimAlphaEnable = enabled;
+}
+
+/* Converte o quadro para o GS (0xAABBGGRR) com o brilho 0..128 e mostra
+   ocupando a tela (480p: 448 linhas centradas nas 480). */
+void smw_mostra_quadro(GSGLOBAL *gs, GSTEXTURE *tex, uint32_t *quadro, bool p480, int bright, int suave) {
+  unsigned k = (unsigned)bright * 2;
+  const int n = (int)(tex->Width * tex->Height);
+  for (int i = 0; i < n; i++) {
+    uint32_t p = quadro[i], r = (p >> 16) & 255, g = (p >> 8) & 255, b = p & 255;
+    if (k < 256) r = r * k >> 8, g = g * k >> 8, b = b * k >> 8;
+    quadro[i] = 0x80000000u | (b << 16) | (g << 8) | r;
+  }
+  SyncDCache(quadro, quadro + n);
   gs->PrimAlphaEnable = GS_SETTING_OFF;
   gsKit_clear(gs, GS_SETREG_RGBAQ(0, 0, 0, 0, 0));
   gsKit_texture_send_inline(gs, tex->Mem, tex->Width, tex->Height, tex->Vram, tex->PSM, tex->TBW, GS_CLUT_NONE);
-  float top = p480 ? 16.0f : 0.0f, height = p480 ? 2.0f * H : (float)gs->Height;
-  gsKit_prim_sprite_texture(gs, tex, 0, top, 0, 0, gs->Width, top + height, W, H, 1,
-                            GS_SETREG_RGBAQ(128, 128, 128, 128, 0));
+  float top = p480 ? 16.0f : 0.0f, height = p480 ? 2.0f * tex->Height : (float)gs->Height;
+  smw_sprite_suave(gs, tex, 0, top, gs->Width, top + height, tex->Width, tex->Height, suave);
   gsKit_queue_exec(gs);
   gsKit_finish();
   gsKit_sync_flip(gs);
 }
 
+static int intro_suave;
+static void present(GSGLOBAL *gs, GSTEXTURE *tex, bool p480, int bright) {
+  smw_mostra_quadro(gs, tex, canvas_px, p480, bright, intro_suave);
+}
+
 /* Um "blip" curto ao trocar de opcao. */
 #define BLIP_FRAMES (RATE / 25)
 static int16_t blip_buf[BLIP_FRAMES * 2];
-static void blip(bool audio_ok) {
+void smw_blip(bool audio_ok) {
   if (!audio_ok) return;
   if (!blip_buf[2]) {
     float a = 2 * 3.14159265f * 880.0f / RATE;
@@ -281,40 +308,12 @@ static void blip(bool audio_ok) {
   if (audsrv_available() >= (int)sizeof(blip_buf)) audsrv_play_audio((const char *)blip_buf, sizeof(blip_buf));
 }
 
-/* Tela FORMATO DA TELA. Devolve true quando o jogador confirma (X ou
-   START); sem resposta em 20 s segue com a opcao marcada, sem gravar. */
-static bool aspect_screen(GSGLOBAL *gs, GSTEXTURE *tex, bool p480, bool audio_ok, int *tela) {
-  enum { LIMITE = 20 };
-  unsigned held = read_buttons();
-  int sel = 0, leaving = -1;
-  bool confirmed = false;
-  for (int frame = 0;; frame++) {
-    unsigned now = read_buttons(), pressed = now & ~held;
-    held = now;
-    if (leaving < 0) {
-      if ((pressed & PAD_LEFT) && sel != 0) sel = 0, blip(audio_ok);
-      if ((pressed & PAD_RIGHT) && sel != 1) sel = 1, blip(audio_ok);
-      if (frame >= 20 && (pressed & (PAD_CROSS | PAD_START))) confirmed = true, leaving = frame;
-      if (frame >= 60 * LIMITE) leaving = frame;
-    }
-    formato_desenha(canvas_px, msx, sel, frame, LIMITE - frame / 60);
-    int bright = frame < 20 ? frame * 128 / 20 : 128;
-    if (leaving >= 0) {
-      bright = 128 - (frame - leaving) * 128 / 20;
-      if (frame - leaving > 20) break;
-    }
-    present(gs, tex, p480, bright < 0 ? 0 : bright);
-  }
-  *tela = sel;
-  return confirmed;
-}
-
-bool smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version, int *tela) {
+void smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version, int suave) {
   enum { A_START = 20, LOCK = 110, A_FADE = 300, B_START = 330, B_FADE = 450, C_START = 480 };
   static GSTEXTURE tex;
   unsigned held = 0xFFFF;
   int leaving = -1, leave_at = 0, skip = 0;
-  bool ask = tela && *tela < 0, confirmed = false;
+  intro_suave = suave;
   char line[64];
 
   tex.Width = W;
@@ -324,7 +323,7 @@ bool smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version, int 
   tex.TBW = W / 64;
   tex.Mem = (u32 *)canvas_px;
   tex.Vram = gsKit_vram_alloc(gs, gsKit_texture_size(W, H, GS_PSM_CT32), GSKIT_ALLOC_USERBUFFER);
-  if (tex.Vram == GSKIT_ALLOC_ERROR) return false;  /* sem VRAM: vai direto ao jogo */
+  if (tex.Vram == GSKIT_ALLOC_ERROR) return;  /* sem VRAM: vai direto ao jogo */
 
   sound = audio_ok ? malloc(SOUND_FRAMES * 4) : NULL;
   sound_at = 0;
@@ -341,11 +340,6 @@ bool smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version, int 
     if (f >= C_START + 60 && leaving < 0 && (pressed & (PAD_START | PAD_CROSS))) leaving = 0;
     if (f >= C_START + 60 * 20 && leaving < 0) leaving = 0;
     if (f >= A_START && f < C_START) feed_sound();
-    if (ask && f >= C_START) {
-      ask = false;
-      confirmed = aspect_screen(gs, &tex, p480, audio_ok, tela);
-      held = read_buttons();  /* o X que confirmou nao pula a tela de apoio */
-    }
     memset(canvas_px, 0, sizeof(canvas_px));
     if (f < A_START) {
       /* preto */
@@ -412,5 +406,4 @@ bool smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version, int 
   present(gs, &tex, p480, 0);
   free(sound);
   sound = NULL;
-  return confirmed;
 }

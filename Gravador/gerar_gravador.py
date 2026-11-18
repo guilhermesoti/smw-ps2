@@ -24,7 +24,7 @@ def main():
     saida = Path(sys.argv[1]) if len(sys.argv) > 1 else RAIZ / "Gravador_SMW_PS2.html"
     elf = (RAIZ / "APPS" / "SMW" / "SMW.ELF").read_bytes()
     main_c = (RAIZ / "Fonte" / "ps2" / "main.c").read_text(encoding="utf-8")
-    versao = re.search(r'smw_intro\(gs, video\.p480, sound, "([^"]+)"', main_c).group(1)
+    versao = re.search(r'#define SMW_VERSAO "([^"]+)"', main_c).group(1)
     sha = hashlib.sha256(elf).hexdigest()
     b64 = base64.b64encode(elf).decode()
     b64 = "\n".join(b64[i:i + 120] for i in range(0, len(b64), 120))

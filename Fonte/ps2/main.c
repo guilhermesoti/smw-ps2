@@ -1,4 +1,5 @@
 #include "files.h"
+#include "formato.h"
 #include "intro.h"
 #include "src/ptbr.h"
 #include <audsrv.h>
@@ -17,6 +18,8 @@
 #include <string.h>
 #include <timer.h>
 #include <unistd.h>
+
+#define SMW_VERSAO "0.13"
 
 #define DECLARE_DRIVER(n) extern unsigned char n##_irx[]; extern unsigned int size_##n##_irx
 DECLARE_DRIVER(bdm);
@@ -42,11 +45,15 @@ static bool sound;
 static int audio_capacity;  /* bytes in audsrv's ring buffer */
 static const char *card_drivers = "nenhum";
 
-/* Video options. 240p works on any cable (AV, S-Video, RGB, component and
-   most HDMI adapters). 480p needs component or an HDMI adapter; there each
+/* Video. 240p: like the SNES, for CRT TVs. 480i: the same 224 lines shown
+   in both fields of an interlaced picture (flat TVs often handle it better
+   than 240p over the AV cable). 480p: component or HDMI adapter; there each
    SNES line becomes two TV lines, and optional scanlines darken every
-   second line like a CRT fed with RGB. */
-static struct { bool p480, scanlines, smooth, wide; } video = {false, true, false, false};
+   second line like a CRT fed with RGB. suave: 0 sharp, 1 medium, 2 strong
+   (GS bilinear filter). */
+static struct { int modo; bool p480, scanlines, wide, compat; int suave; } video = {
+    SMW_VIDEO_240P, false, true, false, false, 2};
+static SmwOptions opcoes;  /* what is saved in SMW.OPT */
 /* Image columns and row length in pixels: 256/256 (4:3) or 342/384 (16:9). */
 static unsigned screen_w = SMW_WIDTH, screen_pitch = SMW_WIDTH;
 
@@ -60,16 +67,15 @@ static struct {
   char text[64];
 } perf;
 
+/* Fatal errors use the PS2SDK text screen, which needs no other video. */
 static void stop_with(const char *reason) {
-  scr_printf("\n%s\n", reason);
+  init_scr();
+  scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v" SMW_VERSAO "\n\n%s\n", reason);
   printf("SMW: %s\n", reason);
   for (;;) SleepThread();
 }
 
-void Die(const char *error) {
-  init_scr();
-  stop_with(error);
-}
+void Die(const char *error) { stop_with(error); }
 
 static bool load_driver(void *image, unsigned int size, const char *name) {
   int status = -1;
@@ -77,7 +83,7 @@ static bool load_driver(void *image, unsigned int size, const char *name) {
   /* A removable resident module is also ready to use (IOP modload >= 1.3). */
   if (id >= 0 && (status == 0 || status == 2)) return true;
   if (SifSearchModuleByName(name) > 0) return true;
-  scr_printf("\n%s: id %d, status %d\n", name, id, status);
+  printf("SMW: %s: id %d, status %d\n", name, id, status);
   return false;
 }
 #define LOAD(n) load_driver(n##_irx, size_##n##_irx, #n)
@@ -108,7 +114,7 @@ static void start_drivers(bool from_disc) {
     bool usb = LOAD(usbd);
     bool storage = LOAD(usbmass_bd);
     if (!(block && fat && usb && storage))
-      scr_printf("USB: tentando os dispositivos ja montados.\n");
+      printf("SMW: USB: tentando os dispositivos ja montados.\n");
   }
   /* Controller and memory card drivers: the console's own BIOS modules
      first, exactly like commercial games load them. OPL's ISO mode is made
@@ -178,24 +184,45 @@ static unsigned stable_pads(unsigned connected) {
   return stable;
 }
 
-/* Progressive 240p output, like the SNES itself. Interlaced 480i makes
-   modern TVs comb or tear moving images. 512 pixels = exactly 2x the SNES
-   width, so every SNES pixel has the same size on screen. */
-static void start_video(void) {
-  dmaKit_init(D_CTRL_RELE_OFF, D_CTRL_MFD_OFF, D_CTRL_STS_UNSPEC,
-              D_CTRL_STD_OFF, D_CTRL_RCYC_8, 1 << DMA_CHANNEL_GIF);
-  dmaKit_chan_init(DMA_CHANNEL_GIF);
+/* Settings screens (320 x 224 frame, formato.c). */
+static uint32_t quadro[FORMATO_W * FORMATO_H] __attribute__((aligned(64)));
+static GSTEXTURE quadro_tex;
+extern unsigned char msx[];  /* PS2SDK libdebug 8x8 font */
+
+/* Video modes. VIDEO_AJUSTES is the one of the settings screen: 480i with
+   640 columns, the mode of the PS2SDK text screen, which every TV shows.
+   The game uses 1280 columns in 240p and 480i (512 if compat): 5 per SNES
+   pixel in 4:3 (the same picture as 512 = 2 per pixel) and about 3.74 in
+   16:9, where 512 gave alternating 1- and 2-column pixels. 480p keeps 640. */
+enum { VIDEO_AJUSTES = 100 };
+
+static void video_abre(int modo, bool compat) {
+  static bool dma_ready;
+  if (!dma_ready) {
+    dmaKit_init(D_CTRL_RELE_OFF, D_CTRL_MFD_OFF, D_CTRL_STS_UNSPEC,
+                D_CTRL_STD_OFF, D_CTRL_RCYC_8, 1 << DMA_CHANNEL_GIF);
+    dmaKit_chan_init(DMA_CHANNEL_GIF);
+    dma_ready = true;
+  }
+  if (gs) {
+    gsKit_vram_clear(gs);
+    gsKit_deinit_global(gs);
+  }
   gs = gsKit_init_global();
   if (!gs) stop_with("Sem memoria para iniciar o video.");
-  gs->Interlace = GS_NONINTERLACED;
-  gs->Field = GS_FRAME;
-  if (video.p480) {
+  if (modo == SMW_VIDEO_480P) {
     gs->Mode = GS_MODE_DTV_480P;
+    gs->Interlace = GS_NONINTERLACED;
+    gs->Field = GS_FRAME;
     gs->Width = 640;
     gs->Height = 480;
   } else {
     gs->Mode = GS_MODE_NTSC;
-    gs->Width = 512;
+    /* 480i in FIELD mode with 224 lines: every line is shown in both fields. */
+    bool entrelacado = modo == SMW_VIDEO_480I || modo == VIDEO_AJUSTES;
+    gs->Interlace = entrelacado ? GS_INTERLACED : GS_NONINTERLACED;
+    gs->Field = entrelacado ? GS_FIELD : GS_FRAME;
+    gs->Width = modo == VIDEO_AJUSTES ? 640 : compat ? 512 : 1280;
     gs->Height = SMW_HEIGHT;
   }
   gs->PSM = GS_PSM_CT32;
@@ -204,8 +231,6 @@ static void start_video(void) {
   gs->PrimAlphaEnable = GS_SETTING_OFF;
   gsKit_init_screen(gs);
   gsKit_mode_switch(gs, GS_ONESHOT);
-  /* Scanlines: dest + (black - dest) * alpha / 128 */
-  gsKit_set_primalpha(gs, GS_SETREG_ALPHA(0, 1, 0, 1, 0), 0);
 
   texture.Width = screen_pitch;
   texture.Height = SMW_HEIGHT;
@@ -216,10 +241,24 @@ static void start_video(void) {
   /* Allocated for the widest image so 4:3/16:9 can be switched in game. */
   texture.Vram = gsKit_vram_alloc(gs, gsKit_texture_size(SMW_MAX_PITCH, SMW_HEIGHT, texture.PSM),
                                    GSKIT_ALLOC_USERBUFFER);
-  if (texture.Vram == GSKIT_ALLOC_ERROR) {
-    init_scr();
+  quadro_tex.Width = FORMATO_W;
+  quadro_tex.Height = FORMATO_H;
+  quadro_tex.PSM = GS_PSM_CT32;
+  quadro_tex.Filter = GS_FILTER_NEAREST;
+  quadro_tex.TBW = FORMATO_W / 64;
+  quadro_tex.Mem = (u32 *)quadro;
+  quadro_tex.Vram = gsKit_vram_alloc(gs, gsKit_texture_size(FORMATO_W, FORMATO_H, GS_PSM_CT32),
+                                     GSKIT_ALLOC_USERBUFFER);
+  if (texture.Vram == GSKIT_ALLOC_ERROR || quadro_tex.Vram == GSKIT_ALLOC_ERROR)
     stop_with("Sem memoria de video para a textura.");
-  }
+  video.modo = modo;
+  video.p480 = modo == SMW_VIDEO_480P;
+  video.compat = compat;
+}
+
+/* One frame of a settings screen (already drawn in quadro). */
+static void mostra_quadro(int bright) {
+  smw_mostra_quadro(gs, &quadro_tex, quadro, video.p480, bright, video.suave);
 }
 
 /* Small on-screen messages: save errors (codes in the LEIA-ME), where the
@@ -275,15 +314,15 @@ static void present(void) {
   gsKit_clear(gs, GS_SETREG_RGBAQ(0, 0, 0, 0, 0));
   gsKit_texture_send_inline(gs, texture.Mem, texture.Width, texture.Height,
                             texture.Vram, texture.PSM, texture.TBW, GS_CLUT_NONE);
-  texture.Filter = video.smooth ? GS_FILTER_LINEAR : GS_FILTER_NEAREST;
   /* 480p: 224 SNES lines -> 448 TV lines, centred in the 480 visible. */
   float top = video.p480 ? 16.0f : 0.0f;
   float height = video.p480 ? 2.0f * SMW_HEIGHT : (float)gs->Height;
   /* 16:9: 342 columns in the same 4:3 picture; a TV in wide mode stretches
      it back to the right proportions. */
-  gsKit_prim_sprite_texture(gs, &texture, 0, top, 0, 0, gs->Width, top + height,
-                            screen_w, SMW_HEIGHT, 1, GS_SETREG_RGBAQ(128,128,128,128,0));
+  smw_sprite_suave(gs, &texture, 0, top, gs->Width, top + height, screen_w, SMW_HEIGHT, video.suave);
   if (video.p480 && video.scanlines) {
+    /* Scanlines: dest + (black - dest) * alpha / 128 */
+    gsKit_set_primalpha(gs, GS_SETREG_ALPHA(0, 1, 0, 1, 0), 0);
     gs->PrimAlphaEnable = GS_SETTING_ON;
     for (int line = 0; line < SMW_HEIGHT; ++line)
       gsKit_prim_sprite(gs, 0, top + 2 * line + 1, gs->Width, top + 2 * line + 2, 2,
@@ -321,7 +360,8 @@ static void set_aspect(bool wide) {
   texture.TBW = screen_pitch / 64;
 }
 
-/* L2+R2 + Square: scanlines on/off (480p). L2+R2 + Circle: smoothing.
+/* L2+R2 + Square: scanlines on/off (480p). L2+R2 + Circle: smoothing
+   (off, medium, strong).
    L2+R2 + Triangle: performance meter. L2+R2 + Cross: 4:3 / 16:9. While
    L2+R2 are held the pad sends nothing to the game. */
 static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
@@ -329,11 +369,16 @@ static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
   *previous = raw;
   if ((raw & (PAD_L2 | PAD_R2)) != (PAD_L2 | PAD_R2)) return game;
   if (pressed & PAD_SQUARE) video.scanlines = !video.scanlines;
-  if (pressed & PAD_CIRCLE) video.smooth = !video.smooth;
+  if (pressed & PAD_CIRCLE) {
+    video.suave = (video.suave + 1) % 3;
+    opcoes.suave = video.suave;
+    smw_options_changed(&opcoes);  /* saved with the next game save */
+  }
   if (pressed & PAD_TRIANGLE) perf.on = !perf.on, perf.text[0] = 0;
   if (pressed & PAD_CROSS) {
     set_aspect(!video.wide);
-    smw_tela_changed(video.wide);  /* fica gravado junto com o proximo save */
+    opcoes.tela = video.wide;
+    smw_options_changed(&opcoes);  /* fica gravado junto com o proximo save */
   }
   return 0;
 }
@@ -385,17 +430,96 @@ static uint32_t measure_field(void) {
   return field;
 }
 
+/* PS2 buttons held on either pad (1 = held). */
+static unsigned botoes(void) {
+  unsigned connected = 0;
+  uint16_t r0 = 0, r1 = 0;
+  read_pad(0, &connected, &r0);
+  read_pad(1, &connected, &r1);
+  return (unsigned)(r0 | r1);
+}
+
+static void carregando(const char *etapa, int passo) {
+  formato_carregando(quadro, msx, etapa, passo, 4, 0);
+  mostra_quadro(128);
+}
+
+/* Order of the video modes on the screen: 240p, 480i, 480p. */
+static int outro_video(int v, int dir) {
+  static const int ordem[3] = {SMW_VIDEO_240P, SMW_VIDEO_480I, SMW_VIDEO_480P};
+  int i = 0;
+  while (i < 2 && ordem[i] != v) ++i;
+  return ordem[(i + 3 + dir) % 3];
+}
+
+/* Tela AJUSTES. contagem: comeca sozinha em 5 s (ajustes ja salvos) ate o
+   jogador apertar um botao. Volta com X ou START (ou no fim da contagem). */
+static void tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const char *situacao) {
+  Ajustes a = {contagem ? AJUSTE_JOGAR : AJUSTE_VIDEO, o->video, o->tela, o->suave, o->idioma,
+               -1, aviso, situacao};
+  unsigned held = botoes();
+  int saindo = -1;
+  for (int frame = 0;; ++frame) {
+    unsigned agora = botoes(), apertou = agora & ~held;
+    held = agora;
+    if (saindo < 0 && apertou) {
+      contagem = false;
+      int dir = (apertou & PAD_LEFT) ? -1 : (apertou & PAD_RIGHT) ? 1 : 0;
+      if (apertou & (PAD_CROSS | PAD_START)) {
+        saindo = frame;
+      } else if (apertou & (PAD_UP | PAD_DOWN)) {
+        a.linha = (a.linha + ((apertou & PAD_UP) ? AJUSTE_LINHAS - 1 : 1)) % AJUSTE_LINHAS;
+        smw_blip(sound);
+      } else if (dir && a.linha != AJUSTE_JOGAR) {
+        if (a.linha == AJUSTE_VIDEO) a.video = outro_video(a.video, dir);
+        if (a.linha == AJUSTE_TELA) a.tela = !a.tela;
+        if (a.linha == AJUSTE_SUAVE) a.suave = (a.suave + 3 + dir) % 3;
+        if (a.linha == AJUSTE_IDIOMA) a.idioma = !a.idioma;
+        a.aviso = NULL;
+        smw_blip(sound);
+      }
+    }
+    if (saindo < 0 && contagem && frame >= 5 * 60) saindo = frame;
+    a.segundos = contagem ? 5 - frame / 60 : -1;
+    formato_ajustes(quadro, msx, &a, frame);
+    video.suave = a.suave;  /* the screen itself shows the smoothing */
+    int bright = frame < 15 ? frame * 128 / 15 : 128;
+    if (saindo >= 0) {
+      bright = 128 - (frame - saindo) * 128 / 15;
+      if (frame - saindo > 15) break;
+    }
+    mostra_quadro(bright < 0 ? 0 : bright);
+  }
+  o->video = a.video, o->tela = a.tela, o->suave = a.suave, o->idioma = a.idioma;
+}
+
+/* No modo novo: X ou START em 10 s confirma que a TV mostra a imagem. */
+static bool confirma_video(int idioma) {
+  unsigned held = botoes();
+  for (int frame = 0; frame < 10 * 60; ++frame) {
+    unsigned agora = botoes(), apertou = agora & ~held;
+    held = agora;
+    if (frame > 20 && (apertou & (PAD_CROSS | PAD_START))) return true;
+    formato_confirma(quadro, msx, video.modo, idioma, 10 - frame / 60, frame);
+    mostra_quadro(frame < 15 ? frame * 128 / 15 : 128);
+  }
+  return false;
+}
+
+static bool mesmas_opcoes(const SmwOptions *a, const SmwOptions *b) {
+  return a->tela == b->tela && a->video == b->video && a->idioma == b->idioma &&
+         a->suave == b->suave && (a->compat == 1) == (b->compat == 1);
+}
+
 int main(int argc, char **argv) {
-  char folder[SMW_PATH] = "", actual[SMW_PATH] = "", report[1024];
+  char folder[SMW_PATH] = "", actual[SMW_PATH] = "", report[1024], msg[256];
   if (argc && argv && argv[0]) smw_boot_folder(argv[0], folder);
   bool from_disc = smw_path_is_disc(folder);
-  init_scr();
-  scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v0.12\n\n");
-  scr_printf(from_disc ? "Iniciando controles e Memory Card...\n"
-                       : "Iniciando USB, controles e Memory Card...\n");
+  video_abre(VIDEO_AJUSTES, false);
+  carregando(from_disc ? "Controles e Memory Card..." : "Pendrive, controles e Memory Card...", 1);
   start_drivers(from_disc);
-  if (!sound) scr_printf("Audio indisponivel. Continuando.\n");
-  scr_printf("Procurando o ZIP ou cartucho americano...\n");
+  if (!sound) printf("SMW: audio indisponivel, continuando.\n");
+  carregando("Procurando o jogo...", 2);
   uint8_t *rom = NULL;
   uint32_t crc = 0;
   RomResult result = ROM_MISSING;
@@ -406,57 +530,85 @@ int main(int argc, char **argv) {
   if (result == ROM_MISSING)
     stop_with("Coloque Super Mario World (USA).zip ou SMW.SFC\nem APPS/SMW no pendrive FAT32 e abra o ELF de novo.");
   if (result != ROM_GOOD) {
-    scr_printf("%s\n", actual);
-    if (result == ROM_BAD_ZIP) stop_with("ZIP invalido ou sem arquivo .sfc/.smc.");
-    if (result == ROM_BAD_SIZE) stop_with("Tamanho incorreto. Use o jogo USA de SNES, 512 KiB,\ncom ou sem cabecalho de copiador de 512 bytes.");
-    if (result == ROM_BAD_CRC) {
-      scr_printf("CRC32 lido: %08lX  |  Esperado: B19ED489\n", (unsigned long)crc);
-      stop_with("Esta versao precisa do cartucho USA original.");
-    }
-    stop_with(result == ROM_NO_MEMORY ? "Memoria insuficiente." : "Erro de leitura da midia.");
+    const char *motivo =
+        result == ROM_BAD_ZIP ? "ZIP invalido ou sem arquivo .sfc/.smc."
+        : result == ROM_BAD_SIZE ? "Tamanho incorreto. Use o jogo USA de SNES, 512 KiB,\ncom ou sem cabecalho de copiador de 512 bytes."
+        : result == ROM_NO_MEMORY ? "Memoria insuficiente." : "Erro de leitura da midia.";
+    if (result == ROM_BAD_CRC)
+      snprintf(msg, sizeof(msg), "%s\nCRC32 lido: %08lX  |  Esperado: B19ED489\nEsta versao precisa do cartucho USA original.",
+               actual, (unsigned long)crc);
+    else
+      snprintf(msg, sizeof(msg), "%s\n%s", actual, motivo);
+    stop_with(msg);
   }
-  scr_printf("ROM USA verificada.\n\n");
+  carregando("Lendo o save...", 3);
   smw_start(rom, pixels);
   free(rom);
   smw_storage_report(report, sizeof(report));
-  scr_printf("Drivers de controle e Memory Card: %s\n%s", card_drivers, report);
+  printf("SMW: drivers de controle e Memory Card: %s\n%s", card_drivers, report);
   smw_load_report(report, sizeof(report));
-  scr_printf("%sNovos saves vao para: %s\n", report, smw_save_location());
-  /* Ajustes de abertura: SMW.CFG (feito pelo Gravador no PC) da o padrao;
-     a tela escolhida no PS2 (SMW.OPT) vale mais que a do SMW.CFG. */
-  SmwOptions cfg;
-  smw_read_config(&cfg);
-  int tela = smw_read_saved_tela();
-  if (tela == SMW_OPT_ASK) tela = cfg.tela;
-  bool english = cfg.idioma == 1, other_language = false;
-  video.p480 = cfg.video == 1;
-  /* Three seconds to read the above and pick the video mode. */
-  scr_printf("\nVIDEO: aperte TRIANGULO para 480p (adaptador HDMI ou componente)\n"
-             "       ou CIRCULO para 240p (cabo AV). Sem apertar: %s.\n",
-             video.p480 ? "480p (SMW.CFG)" : "240p");
-  if (tela == SMW_OPT_ASK) scr_printf("TELA: 4:3 ou 16:9, escolha depois da abertura.\n");
-  else scr_printf("TELA: %s. Segure QUADRADO para escolher de novo.\n", tela ? "16:9" : "4:3");
-  scr_printf("IDIOMA: %s. Segure SELECT para jogar em %s.\n",
-             english ? "ingles" : "portugues", english ? "portugues" : "ingles");
-  for (int i = 0; i < 60; ++i) {
-    unsigned connected = 0;
-    uint16_t a = read_pad(0, &connected, NULL) | read_pad(1, &connected, NULL);
-    if (a & (1u << 2)) other_language = true;           /* Select */
-    if (a & (1u << 1)) tela = SMW_OPT_ASK;              /* Square = SNES Y */
-    if (a & (1u << 9)) { video.p480 = true; break; }   /* Triangle = SNES X */
-    if (a & (1u << 8)) { video.p480 = false; break; }  /* Circle = SNES A */
-    usleep(50000);
-  }
-  g_ptbr = english == other_language;
-  scr_printf("Video: %s | Tela: %s | Idioma: %s\n",
-             video.p480 ? "480p (sem imagem? reinicie e aperte CIRCULO)" : "240p",
-             tela == SMW_OPT_ASK ? "escolher" : tela ? "16:9" : "4:3", g_ptbr ? "portugues" : "ingles");
-  sleep(1);
+  printf("SMW: %sNovos saves vao para: %s\n", report, smw_save_location());
+  carregando("Pronto!", 4);
 
-  start_video();
-  /* Na primeira vez (tela ainda nao escolhida) a abertura pergunta. */
-  if (smw_intro(gs, video.p480, sound, "0.12", &tela)) smw_save_tela(tela);
-  set_aspect(tela == 1);
+  /* Ajustes: o padrao, depois o SMW.CFG (Gravador no PC) e por cima o
+     SMW.OPT (o que foi escolhido no PS2). Com tudo salvo, a tela AJUSTES
+     comeca sozinha em 5 s. */
+  SmwOptions cfg, salvo;
+  smw_read_config(&cfg);
+  smw_options_clear(&salvo);
+  smw_read_saved_options(&salvo);
+  opcoes = (SmwOptions){0, SMW_VIDEO_240P, 0, 2, 0};
+  const SmwOptions *fontes[2] = {&cfg, &salvo};
+  for (int i = 0; i < 2; ++i) {
+    if (fontes[i]->tela >= 0) opcoes.tela = fontes[i]->tela;
+    if (fontes[i]->video >= 0) opcoes.video = fontes[i]->video;
+    if (fontes[i]->idioma >= 0) opcoes.idioma = fontes[i]->idioma;
+    if (fontes[i]->suave >= 0) opcoes.suave = fontes[i]->suave;
+    if (fontes[i]->compat >= 0) opcoes.compat = fontes[i]->compat;
+  }
+  const bool conhecido = salvo.video >= 0 && salvo.tela >= 0 && salvo.suave >= 0;
+  const SmwOptions inicio = opcoes;
+  const char *lugar = smw_save_location();
+  char situacao[64], aviso_texto[64];
+  if (strncmp(lugar, "NENHUM", 6) == 0) snprintf(situacao, sizeof(situacao), "Sem save: insira um Memory Card formatado.");
+  else snprintf(situacao, sizeof(situacao), "Save: %s", lugar);
+  const char *aviso = NULL;
+  bool contagem = conhecido;
+  for (;;) {
+    video.suave = opcoes.suave;
+    tela_ajustes(&opcoes, contagem, aviso, situacao);
+    contagem = false;
+    aviso = NULL;
+    bool analogico = opcoes.video != SMW_VIDEO_480P;
+    /* O modo que ja foi confirmado nesta TV entra direto; um modo novo
+       pergunta se a imagem apareceu. Se 1280 colunas nao aparecerem, tenta
+       512 antes de voltar para os ajustes. */
+    if (conhecido && opcoes.video == salvo.video) {
+      video_abre(opcoes.video, analogico && opcoes.compat == 1);
+      break;
+    }
+    video_abre(opcoes.video, analogico && opcoes.compat == 1);
+    if (confirma_video(opcoes.idioma)) break;
+    if (analogico && opcoes.compat != 1) {
+      video_abre(opcoes.video, true);
+      if (confirma_video(opcoes.idioma)) {
+        opcoes.compat = 1;
+        break;
+      }
+    }
+    static const char *const nomes[] = {"240p", "480p", "480i"};
+    snprintf(aviso_texto, sizeof(aviso_texto),
+             opcoes.idioma == 1 ? "The TV did not show %s. Pick another." : "A TV não mostrou o %s. Escolha outro.",
+             nomes[opcoes.video]);
+    aviso = aviso_texto;
+    video_abre(VIDEO_AJUSTES, false);
+  }
+  if (!conhecido || !mesmas_opcoes(&opcoes, &inicio)) smw_save_options(&opcoes);
+  g_ptbr = opcoes.idioma != 1;
+  video.suave = opcoes.suave;
+
+  smw_intro(gs, video.p480, sound, SMW_VERSAO, video.suave);
+  set_aspect(opcoes.tela == 1);
   const uint32_t field = measure_field();
   uint32_t last = cpu_ticks();
   int pending = 0, debt = 0;

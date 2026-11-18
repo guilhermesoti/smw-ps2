@@ -50,9 +50,10 @@ const espera = async (promessa, codigo) => {
   confere(!!(await espera(N.conferirRom('foto.png', new Uint8Array(3000), inflar), 'FORMATO')), 'arquivo qualquer é recusado');
 
   /* SMW.CFG */
-  const cfg = N.gerarCfg({ tela: '16:9', video: '480p', idioma: 'en' });
-  confere(/\r\ntela=16:9\r\nvideo=480p\r\nidioma=en\r\n$/.test(cfg), 'SMW.CFG com os ajustes');
-  confere(/tela=perguntar\r\nvideo=perguntar\r\nidioma=pt/.test(N.gerarCfg({ tela: 'x' })), 'SMW.CFG com valores inválidos volta ao padrão');
+  const cfg = N.gerarCfg({ tela: '16:9', video: '480p', suavizacao: 'media', idioma: 'en' });
+  confere(/\r\ntela=16:9\r\nvideo=480p\r\nsuavizacao=media\r\nidioma=en\r\n$/.test(cfg), 'SMW.CFG com os ajustes');
+  confere(/video=480i\r\n/.test(N.gerarCfg({ video: '480i' })), 'SMW.CFG com 480i');
+  confere(/tela=perguntar\r\nvideo=perguntar\r\nsuavizacao=perguntar\r\nidioma=pt/.test(N.gerarCfg({ tela: 'x', suavizacao: 'y' })), 'SMW.CFG com valores inválidos volta ao padrão');
 
   /* ISO igual à do pycdlib */
   const arquivosIso = [

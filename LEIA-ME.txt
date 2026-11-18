@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.12 (beta) | NTSC 240p/480p | 4:3 ou 16:9 | Português
+Retrogames Patos de Minas | v0.13 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
 
 O QUE VOCÊ PRECISA
 
@@ -129,27 +129,41 @@ Se aparecer, anote a linha inteira. Ela diz exatamente o que corrigir.
 
 VÍDEO E DESEMPENHO
 
-Na tela de abertura, durante os 3 segundos com as informações:
-- TRIÂNGULO: 480p, para adaptador HDMI ou cabo componente. Cada linha do
-  SNES vira duas, com scanlines (visual de monitor de tubo/RGB).
-- CÍRCULO, ou não apertar nada: 240p, para cabo AV (amarelo) e para
-  adaptadores HDMI que não aceitarem 480p.
-- Segurar QUADRADO: mostra de novo a tela FORMATO DA TELA (4:3 ou 16:9)
-  depois da abertura.
-IDIOMA: o jogo abre em português do Brasil. Para jogar em inglês, segure
-SELECT nessa mesma tela de abertura (se o Gravador deixou o jogo em
-inglês, SELECT volta para o português).
+Depois do carregamento vem a tela AJUSTES. Direcional para cima e para
+baixo escolhe a linha, para os lados muda o valor, X ou START começa:
+- VÍDEO:
+  240p: cabo AV (amarelo) em TV de tubo. É a imagem mais parecida com
+  a do SNES.
+  480i: cabo AV em TV de tela plana. As mesmas 224 linhas aparecem nos
+  dois campos da imagem entrelaçada; muitas TVs de tela plana tratam
+  isso melhor que o 240p. Experimente se o 240p ficar ruim na sua TV.
+  480p: adaptador HDMI ou cabo componente. Cada linha do SNES vira duas,
+  com scanlines (visual de monitor de tubo/RGB). O PS2 deve estar com
+  "Saída de vídeo componente" em "Y Cb/Pb Cr" na Configuração do
+  Sistema.
+- TELA: 4:3 ou 16:9 (veja TELA 16:9 abaixo), com o teste do círculo.
+- SUAVIZAÇÃO: forte, média ou desligada. Deixa os pixels mais macios,
+  sem serrilhado; ajuda muito no cabo AV e em TV de tela plana. A
+  própria tela AJUSTES já mostra o efeito. Vale para o jogo todo,
+  inclusive a abertura.
+- IDIOMA: português do Brasil ou inglês (o original).
 
-Se o Gravador deixou o vídeo em 480p, ele já entra em 480p sem apertar
-nada; CÍRCULO volta para 240p.
+A tela AJUSTES aparece sempre na mesma imagem (480i), que toda TV mostra.
+Quando você escolhe um vídeo novo, o jogo pergunta "A IMAGEM APARECEU?":
+aperte X em 10 segundos. Sem resposta (TV sem imagem), ele volta
+sozinho para a tela AJUSTES. Os ajustes ficam gravados (SMW.OPT, onde
+fica o save) e, da próxima vez, o jogo começa sozinho em 5 segundos;
+aperte qualquer botão para mudar alguma coisa.
 
-Se escolher 480p e a TV ficar sem imagem, desligue e abra o jogo de
-novo apertando CÍRCULO. No 480p, o PS2 deve estar com "Saída de vídeo
-componente" em "Y Cb/Pb Cr" na Configuração do Sistema.
+No 240p e no 480i o PS2 desenha cada pixel do SNES com a mesma largura
+(1280 pontos por linha), também no 16:9. Se a sua TV ou adaptador não
+mostrar essa saída, o jogo tenta sozinho a de 512 pontos antes de voltar
+para os ajustes, e lembra disso.
 
 Durante o jogo (segurando L2 + R2):
 - L2 + R2 + QUADRADO: liga/desliga as scanlines (no 480p).
-- L2 + R2 + CÍRCULO: liga/desliga a suavização da imagem.
+- L2 + R2 + CÍRCULO: troca a suavização (desligada, média, forte). A
+  troca fica gravada junto com o próximo save.
 - L2 + R2 + CRUZ: troca entre 4:3 e 16:9 (a troca fica gravada junto
   com o próximo save).
 - L2 + R2 + TRIÂNGULO: liga/desliga o medidor de desempenho, no canto
@@ -165,11 +179,10 @@ velocidade e a música corretas.
 
 TELA 16:9 (BETA)
 
-Na primeira vez que o jogo abre, depois da vinheta da Retrogames, vem a
-tela FORMATO DA TELA: direcional escolhe 4:3 ou 16:9 e X confirma. A
-escolha fica gravada (arquivo SMW.OPT, no mesmo lugar do save) e a tela
-não aparece mais. O TESTE DA TV nessa tela tem um círculo que só fica
-redondo quando a TV está no modo certo para a opção marcada.
+Escolha 4:3 ou 16:9 na linha TELA da tela AJUSTES. O teste ao lado tem
+um círculo que só fica redondo quando a TV está no modo certo para a
+opção marcada. A escolha fica gravada (arquivo SMW.OPT, no mesmo lugar
+do save).
 
 Nas fases, o jogo mostra 43 colunas a mais de cada lado (342 em vez de
 256): você vê mais da fase, sem esticar o desenho. O PS2 manda a imagem
@@ -192,13 +205,15 @@ ou volte para 4:3 com L2 + R2 + CRUZ.
 AJUSTES DE ABERTURA (SMW.CFG E SMW.OPT)
 
 O Gravador grava SMW.CFG junto do jogo (em APPS/SMW ou dentro da ISO),
-um texto simples com o jeito de abrir:
-  tela=perguntar   (ou 4:3, 16:9)
-  video=perguntar  (ou 240p, 480p)
-  idioma=pt        (ou en)
-Dá para editar no Bloco de Notas. A tela escolhida no próprio PS2
-(SMW.OPT, onde fica o save) vale mais que a do SMW.CFG. Sem esses
-arquivos o jogo abre como antes: 240p, português, e pergunta a tela.
+um texto simples com o que já vem marcado na tela AJUSTES:
+  tela=perguntar        (ou 4:3, 16:9)
+  video=perguntar       (ou 240p, 480i, 480p)
+  suavizacao=perguntar  (ou forte, media, nao)
+  idioma=pt             (ou en)
+Dá para editar no Bloco de Notas. O que foi escolhido no próprio PS2
+(SMW.OPT, onde fica o save) vale mais que o SMW.CFG. Sem esses arquivos
+a tela AJUSTES começa em 240p, 4:3, suavização forte e português, e
+espera você apertar X.
 
 SOBRE ESTA VERSÃO
 
@@ -207,6 +222,21 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.13 (beta):
+- Tela AJUSTES no lugar da tela de texto do começo: vídeo (240p, 480i
+  ou 480p), tela (4:3 ou 16:9), suavização e idioma, com o teste do
+  círculo. Também substitui a tela FORMATO DA TELA.
+- Vídeo 480i novo, para cabo AV em TV de tela plana.
+- Suavização em três níveis (forte, média, desligada) no jogo todo,
+  inclusive na abertura. L2 + R2 + CÍRCULO troca durante o jogo.
+- 240p e 480i com 1280 pontos por linha: no 16:9 os pixels ficam todos
+  da mesma largura (antes, com 512, saíam alternados de 1 e 2 pontos) e
+  as telas da abertura também (antes 1,6 ponto por pixel).
+- Vídeo novo pergunta "A IMAGEM APARECEU?" e volta sozinho para os
+  ajustes se a TV ficar sem imagem; nada de reiniciar o jogo.
+- Carregamento com tela própria; erros (jogo não encontrado etc.)
+  continuam na tela de texto.
 
 Mudanças da v0.12 (beta):
 - Tela 16:9: efeitos que sumiam nas 43 colunas extras de cada lado agora

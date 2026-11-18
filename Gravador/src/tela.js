@@ -9,7 +9,7 @@
 
   const estado = {
     passo: 1, rom: null, modo: 'app', pasta: null, gravando: false, resultado: null,
-    ajustes: { tela: 'perguntar', video: 'perguntar', idioma: 'pt' },
+    ajustes: { tela: 'perguntar', video: 'perguntar', suavizacao: 'perguntar', idioma: 'pt' },
   };
   const temApp = () => estado.modo === 'app' || estado.modo === 'dois';
   const temIso = () => estado.modo === 'iso' || estado.modo === 'dois';
@@ -191,14 +191,24 @@
     atualizarResumo();
   })));
 
+  /* Algum ajuste marcado aqui: o SMW.OPT antigo (escolhas feitas no PS2) sai
+     para o SMW.CFG valer. */
+  function escolheuAjustes() {
+    const a = estado.ajustes;
+    return a.tela !== 'perguntar' || a.video !== 'perguntar' || a.suavizacao !== 'perguntar';
+  }
+
   function atualizarResumo() {
     const a = estado.ajustes;
     const linhas = [
-      a.video === 'perguntar' ? 'Pergunta o vídeo (240p ou 480p).'
-        : a.video === '240p' ? 'Já entra em 240p.' : 'Já entra em 480p (se a TV ficar sem imagem, reinicie apertando CÍRCULO).',
-      'Abertura Retrogames.',
-      a.tela === 'perguntar' ? 'Pergunta 4:3 ou 16:9, só na primeira vez.' : 'Joga em ' + a.tela + ', sem perguntar.',
+      'Tela AJUSTES: vídeo, tela, suavização e idioma.',
+      a.video === 'perguntar' ? 'Você escolhe o vídeo (240p, 480i ou 480p).'
+        : 'Já marcado: ' + a.video + (a.video === '240p' ? '.' : ' (se a TV não mostrar, volta para os ajustes).'),
+      a.tela === 'perguntar' ? 'Você escolhe 4:3 ou 16:9.' : 'Já marcado: tela ' + a.tela + '.',
+      a.suavizacao === 'perguntar' ? 'Suavização: forte, se você não mudar.'
+        : 'Suavização ' + (a.suavizacao === 'nao' ? 'desligada.' : a.suavizacao === 'media' ? 'média.' : 'forte.'),
       a.idioma === 'pt' ? 'Jogo em português.' : 'Jogo em inglês.',
+      'Abertura Retrogames.',
     ];
     $('resumo').replaceChildren(...linhas.map((t) => el('li', '', t)));
   }
@@ -248,8 +258,8 @@
       linhas.push(['atencao', 'Você escolheu a pasta "' + estado.pasta.name + '". Escolha a raiz do pendrive: o Gravador cria APPS\\SMW e CD sozinho.']);
     if (await existe(['APPS', 'SMW', 'SMW.SRM'])) linhas.push(['ok', '✓ Save encontrado (SMW.SRM): fica intacto.']);
     if (temApp() && await existe(['APPS', 'SMW', 'SMW.ELF'])) linhas.push(['sub', 'O jogo já está nesse pendrive: vai ser atualizado.']);
-    if (temApp() && estado.ajustes.tela !== 'perguntar' && await existe(['APPS', 'SMW', 'SMW.OPT']))
-      linhas.push(['sub', 'A tela escolhida antes no PS2 vai ser trocada por ' + estado.ajustes.tela + '.']);
+    if (temApp() && escolheuAjustes() && await existe(['APPS', 'SMW', 'SMW.OPT']))
+      linhas.push(['sub', 'Os ajustes escolhidos antes no PS2 vão ser trocados pelos daqui.']);
     if (temIso() && await existe(['CD', N.NOME_ISO])) linhas.push(['sub', 'A ISO que já está no pendrive vai ser substituída.']);
     for (const [c, t] of linhas) info.append(el('span', c, t));
     info.hidden = !linhas.length;
@@ -384,7 +394,7 @@
           progresso(0.05 + 0.8 * feito / total);
           marcar(atual, 'ok');
         }
-        if (temApp() && estado.ajustes.tela !== 'perguntar') {
+        if (temApp() && escolheuAjustes()) {
           try {
             const smw = await (await pasta.getDirectoryHandle('APPS')).getDirectoryHandle('SMW');
             await smw.removeEntry('SMW.OPT');
@@ -435,7 +445,7 @@
     if (estado.modo === 'app') passos.push('Abra o OPL e vá em Aplicativos → Super Mario World. Pelo wLaunchELF: mass:/APPS/SMW/SMW.ELF.');
     else if (estado.modo === 'iso') passos.push('Abra o OPL, atualize a lista de jogos USB e abra Super Mario World. O progresso vai para o Memory Card.');
     else passos.push('No OPL, abra Super Mario World em Aplicativos ou na lista de jogos USB.');
-    passos.push(estado.ajustes.tela === 'perguntar' ? 'Na abertura, escolha 4:3 ou 16:9 e bom jogo.' : 'Bom jogo!');
+    passos.push('Na tela AJUSTES, confira vídeo, tela e suavização e aperte X. Bom jogo!');
     $('r-onde').textContent = 'NO PS2';
     $('r-aviso').textContent = (estado.modo === 'app' ? 'O SMW.ZIP tem' : estado.modo === 'iso' ? 'A ISO tem' : 'O SMW.ZIP e a ISO têm') +
       ' o seu jogo dentro. É só para você: não compartilhe.';
