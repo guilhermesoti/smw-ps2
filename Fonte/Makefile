@@ -27,6 +27,13 @@ $(OUT)/%.o: %.c
 $(OUT)/irx/%.c: $(PS2SDK)/iop/irx/%.irx
 	@mkdir -p $(@D)
 	$(PS2SDK)/bin/bin2c $< $@ $*_irx
+# audsrv sai do código em audsrv/ (PS2SDK com o volume do PCM corrigido).
+$(OUT)/iop/audsrv.irx: $(wildcard audsrv/src/* audsrv/include/*) audsrv/Makefile
+	@mkdir -p $(@D)
+	$(MAKE) -C audsrv IOP_BIN=$(abspath $@) IOP_OBJS_DIR=$(abspath $(OUT)/iop/obj)/
+$(OUT)/irx/audsrv.c: $(OUT)/iop/audsrv.irx
+	@mkdir -p $(@D)
+	$(PS2SDK)/bin/bin2c $< $@ audsrv_irx
 $(OUT)/irx/%.o: $(OUT)/irx/%.c
 	$(EE_CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 clean:
