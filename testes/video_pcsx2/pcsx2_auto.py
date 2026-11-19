@@ -14,12 +14,15 @@ precisa estar nessa pasta). --cartao ARQUIVO copia o Memory Card 1
 (Mcd001.ps2) para ARQUIVO no fim, para ler o que o jogo gravou (por exemplo
 com o mymcplus: SMWPS2/SMW_LOG.TXT). --cartao-inicial ARQUIVO usa uma cópia
 desse cartão no lugar do novo (o PCSX2 cria o cartão novo sem formatação;
-um formatado sai com "mymcplus cartao.ps2 format").
+um formatado sai com "mymcplus cartao.ps2 format"). --audio grava o som que
+o SPU2 gera em WAV: "tecla:gravar" liga e desliga a captura, e cada trecho
+sai como audio_NN.wav na pasta de saída.
 
 ROTEIRO é uma lista de passos separados por vírgula:
     esperar:SEG    espera SEG segundos
     tecla:NOME     aperta e solta (NOME = cima baixo esquerda direita x
-                   circulo quadrado triangulo start select l2 r2)
+                   circulo quadrado triangulo start select l2 r2, e gravar
+                   com --audio)
     foto:NOME      captura a tela como NOME.png (tecla de captura do PCSX2)
     raiz:NOME      captura a tela inteira do Xvfb (para diagnóstico)
     janelas        lista as janelas (para diagnóstico)
@@ -33,6 +36,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import wave
 from pathlib import Path
 
 from Xlib import X, XK, display
@@ -47,10 +51,10 @@ BIOS = HOME / ".config/PCSX2/bios"
 TECLAS = {"cima": "Up", "baixo": "Down", "esquerda": "Left", "direita": "Right",
           "x": "k", "circulo": "l", "quadrado": "j", "triangulo": "i",
           "start": "Return", "select": "BackSpace", "l2": "1", "r2": "3",
-          "foto": "F8"}
+          "foto": "F8", "gravar": "F9"}
 
 
-def preparar_config(base: Path, hostfs=False) -> Path:
+def preparar_config(base: Path, hostfs=False, audio=False) -> Path:
     """Copia o PCSX2.ini do usuário e troca só o necessário para o teste."""
     cfg = base / "config"
     inis = cfg / "PCSX2/inis"
@@ -75,6 +79,16 @@ def preparar_config(base: Path, hostfs=False) -> Path:
         # Sem som: no Xvfb não há saída de áudio e o aviso de erro roubaria o foco.
         "SPU2/Output": {"Backend": "Null"},
     }
+    if audio:
+        # Captura só do som (o que o SPU2 do PS2 gera, antes da saída Null), em WAV,
+        # numa pasta da rodada. Sem --audio a tecla de captura nem é configurada.
+        (base / "capturas").mkdir(exist_ok=True)
+        trocas["Hotkeys"]["ToggleVideoCapture"] = "Keyboard/F9"
+        trocas["Folders"]["Videos"] = str(base / "capturas")
+        trocas["EmuCore/GS"].update({"EnableVideoCapture": "false", "EnableAudioCapture": "true",
+                                     "CaptureContainer": "wav", "AudioCaptureCodec": "pcm_s16le",
+                                     "EnableAudioCaptureParameters": "false",
+                                     "OrganizeVideoCaptureByGame": "false"})
     for secao, chaves in trocas.items():
         if not ini.has_section(secao):
             ini.add_section(secao)
@@ -151,6 +165,42 @@ def foto(d, snaps: Path, saida: Path, nome: str):
 ARGUMENTOS = {"esperar": 1, "tecla": 1, "foto": 1, "raiz": 1, "janelas": 0, "filme": 3}
 
 
+def inicio_dos_dados(arq: Path) -> int:
+    """Posição do primeiro byte de som do WAV (logo depois do cabeçalho do bloco "data")."""
+    with open(arq, "rb") as f:
+        f.seek(12)  # "RIFF", tamanho, "WAVE"
+        while True:
+            cab = f.read(8)
+            if len(cab) < 8:
+                return f.tell()
+            nome, tamanho = cab[:4], int.from_bytes(cab[4:], "little")
+            if nome == b"data":
+                return f.tell()
+            f.seek(tamanho + (tamanho & 1), os.SEEK_CUR)
+
+
+def conferir_wav(arq: Path) -> str:
+    """"som", "vazio" (só o cabeçalho) ou o problema do arquivo.
+
+    Captura que não foi desligada com tecla:gravar antes do fim fica com dados,
+    mas sem o tamanho no cabeçalho (0 amostras), ou nem abre; arquivo cortado
+    tem menos dados que o cabeçalho diz. Ao desligar, o PCSX2 às vezes abre e
+    fecha na hora um "_part002" só com o cabeçalho: esse é "vazio"."""
+    try:
+        with wave.open(str(arq), "rb") as w:
+            amostras, quadro = w.getnframes(), w.getsampwidth() * w.getnchannels()
+    except (wave.Error, EOFError) as erro:
+        return f"não abre como WAV ({erro})"
+    dados = arq.stat().st_size - inicio_dos_dados(arq)
+    if amostras and dados < amostras * quadro:
+        return f"cortado: o cabeçalho diz {amostras * quadro} bytes de som e o arquivo tem {dados}"
+    if amostras:
+        return "som"
+    if dados > 0:
+        return "com dados, mas sem o tamanho no cabeçalho (desligue com tecla:gravar antes do fim)"
+    return "vazio"
+
+
 def ler_roteiro(texto):
     passos = [passo.strip().split(":") for passo in texto.split(",") if passo.strip()]
     for partes in passos:
@@ -180,6 +230,7 @@ def main():
     origem.add_argument("--elf", type=Path)
     ap.add_argument("--cartao", type=Path)
     ap.add_argument("--cartao-inicial", type=Path)
+    ap.add_argument("--audio", action="store_true")
     ap.add_argument("--saida", required=True, type=Path)
     ap.add_argument("--roteiro", required=True)
     ap.add_argument("--trabalho", type=Path, default=Path("/tmp/smw_teste_video"))
@@ -196,6 +247,11 @@ def main():
     if a.cartao_inicial and not a.cartao_inicial.is_file():
         raise SystemExit(f"Cartão inicial não encontrado: {a.cartao_inicial}")
     passos = ler_roteiro(a.roteiro)
+    gravar = sum(1 for p in passos if p[0] == "tecla" and p[1] == "gravar")
+    if not a.audio and gravar:
+        raise SystemExit("tecla:gravar só funciona com --audio.")
+    if a.audio and (gravar == 0 or gravar % 2):
+        raise SystemExit("Com --audio, o roteiro liga e desliga a captura: tecla:gravar um número par de vezes.")
     # As capturas desta rodada vão para uma pasta nova; capturas velhas não se misturam.
     if a.saida.exists() and any(a.saida.iterdir()):
         raise SystemExit(f"A pasta de saída já tem arquivos: {a.saida}")
@@ -211,7 +267,7 @@ def main():
     # o TemporaryDirectory apaga só ela, mesmo se algo der erro.
     with log, tempfile.TemporaryDirectory(prefix="rodada_", dir=a.trabalho) as tmp:
         base = Path(tmp)
-        cfg = preparar_config(base, hostfs=a.elf is not None)
+        cfg = preparar_config(base, hostfs=a.elf is not None, audio=a.audio)
         if a.cartao_inicial:
             shutil.copyfile(a.cartao_inicial, base / "memcards" / "Mcd001.ps2")
         tela, xvfb = abrir_tela()
@@ -272,6 +328,24 @@ def main():
             emulog = cfg / "PCSX2" / "logs" / "emulog.txt"
             if emulog.is_file():
                 shutil.copyfile(emulog, a.saida / "emulog.txt")
+            if a.audio:
+                # "tecla:gravar" (F9) liga e desliga a captura do som.
+                capturas = sorted(c for c in (base / "capturas").glob("*") if c.is_file())
+                com_som = 0
+                for i, arq in enumerate(capturas):
+                    destino = a.saida / f"audio_{i:02d}{arq.suffix}"
+                    shutil.copyfile(arq, destino)
+                    situacao = conferir_wav(destino)
+                    if situacao == "som":
+                        com_som += 1
+                    elif situacao == "vazio":
+                        print(f"  {destino.name}: só o cabeçalho, sem som (ignorado)")
+                    else:
+                        print(f"  ! {destino.name}: {situacao}", file=sys.stderr)
+                        falhas += 1
+                if not com_som:
+                    print("  ! o PCSX2 não gravou o som (falta tecla:gravar?)", file=sys.stderr)
+                    falhas += 1
             cartao = base / "memcards" / "Mcd001.ps2"
             if a.cartao and cartao.is_file():
                 # Com o PCSX2 fechado o cartão já foi gravado no disco.

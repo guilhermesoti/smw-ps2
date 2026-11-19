@@ -61,7 +61,7 @@ void smw_set_widescreen(bool on, uint32_t *pixels, unsigned pitch) {
   g_largo = 0;
   Ppu *ppu = g_snes->ppu;
   ppu->extraLeftRight = g_largo_max;
-  ppu->extraLeftCur = ppu->extraRightCur = 0;
+  ppu->extraLeftCur = ppu->extraRightCur = ppu->largoCena = 0;
   PpuBeginDrawing(ppu, (uint8_t *)pixels, (on ? pitch : SMW_WIDTH) * 4, 0);
 }
 
@@ -86,7 +86,8 @@ void smw_frame(uint16_t p1, uint16_t p2, unsigned pads, int16_t *stereo, int sam
   ++snes_frame_counter;
   RtlPushApuState();
   LargoAtualiza();
-  g_snes->ppu->extraLeftCur = g_snes->ppu->extraRightCur = g_largo;
+  g_snes->ppu->largoCena = g_largo;
+  LargoColunas(&g_snes->ppu->extraLeftCur, &g_snes->ppu->extraRightCur);
   SmwDrawPpuFrame(draw_pixels);
   if (samples < 1 || samples > SMW_MAX_SAMPLES) samples = SMW_SAMPLES;
   RtlRenderAudio(stereo, samples, 2);

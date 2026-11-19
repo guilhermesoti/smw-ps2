@@ -2,12 +2,12 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.13.4 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
+**Versão 0.13.5 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
-- Tela AJUSTES no começo: vídeo 240p (cabo AV, qualquer TV; o recomendado), 480i (só para TV que não mostra 240p) ou 480p com scanlines (componente/HDMI), tela 4:3 ou 16:9, suavização (desligada, média, forte; desligada por padrão) e idioma. Vídeo novo só fica se você confirmar que a imagem apareceu.
+- Tela AJUSTES no começo: vídeo 240p (cabo AV, qualquer TV; o recomendado), 480i (só para TV que não mostra 240p) ou 480p (componente/HDMI), tela 4:3 ou 16:9, suavização (desligada, média, forte; desligada por padrão), scanlines (só no 480p; desligadas por padrão) e idioma. Vídeo novo só fica se você confirmar que a imagem apareceu.
 - 1280 pontos por linha em todos os vídeos (no 480p, quadro de 16 bits): todo pixel do SNES com a mesma largura, também no 16:9.
-- Tela 16:9 opcional (beta): nas fases mostra 43 colunas a mais de cada lado, para TV no modo widescreen. Escolha na tela AJUSTES; L2 + R2 + CRUZ troca no jogo.
+- Tela 16:9 opcional (beta): nas fases mostra 43 colunas a mais de cada lado, para TV no modo widescreen (no começo e no fim da fase, o que fica fora dela aparece preto). Escolha na tela AJUSTES; L2 + R2 + CRUZ troca no jogo.
 - **Gravador SMW PS2**: um HTML que abre em qualquer navegador, confere a cópia do jogo e grava o aplicativo, a ISO ou os dois no pendrive.
 - Em português do Brasil: mensagens, nomes das fases e textos dos castelos. Segure SELECT na abertura para jogar em inglês.
 - Grava no pendrive ou no Memory Card (pasta `SMWPS2`, com ícone 3D no navegador do PS2).
@@ -32,7 +32,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.13.4 obtido com o ps2dev v2.0.0 foi `0ff45a78e69e0cc4b9d3f4dde9506f7964b9536470f65d2580550da07ae89d58`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.13.5 obtido com o ps2dev v2.0.0 foi `0a07bb488621fea9d070174e8518f550289716d388c67ad4978da74057311727`.
 
 ## Gravador SMW PS2 (programa no PC)
 
@@ -140,6 +140,23 @@ cc -O1 -std=gnu11 -fno-strict-aliasing -fwrapv -ffunction-sections -fdata-sectio
 
 Na v0.10 o resultado foi `TOTAL surge=0 some=2`: um Koopa que cai num buraco e some antes de sair da
 tela por baixo e o bloco de mensagem da sala 1FF: comportamento normal do jogo.
+
+Mario na borda da imagem em 16:9 (v0.13.5): cada sala é jogada andando para a esquerda e depois
+para a direita, e o teste mede quantos pixels sobram entre o Mario e a borda da parte desenhada
+quando ele para no limite da tela. Nas pontas das fases as colunas fora da fase ficam pretas e sobram
+de 6 a 8 pixels, como no 4:3; nas fases que andam sozinhas a sobra cresce quando a câmera sai do começo.
+Em cada sala ele também desenha o mesmo quadro com 43 colunas extras de cada lado e com 10 e 30, e confere
+que a tela nativa fica no mesmo lugar e que só as colunas que sobram ficam pretas (termina com erro se não).
+Com uma pasta no terceiro argumento, grava um PPM do primeiro quadro em cada limite:
+
+```sh
+cc -O2 -std=gnu11 -fno-strict-aliasing -fwrapv -ffunction-sections -fdata-sections -Wl,--gc-sections \
+   -IFonte/engine -IFonte/ps2 $(pkg-config --cflags minizip zlib) \
+   $(find Fonte/engine/src -name '*.c') Fonte/ps2/files.c Fonte/ps2/game.c Fonte/ps2/registro.c testes/largo_mario.c \
+   $(pkg-config --libs minizip zlib) -lm -o /tmp/smw-largo-mario
+SMW_LARGO=1 /tmp/smw-largo-mario /caminho/da/pasta/com/o/jogo/ 1500 - \
+   $(python3 -c 'import json; print(*["0x"+s["hex"] for s in json.load(open("testes/salas.json"))["salas"]])')
+```
 
 Volta da câmera no mapa depois de olhar em volta com START (deslocamentos de até 273 pixels). Use uma pasta só com o jogo, sem save:
 

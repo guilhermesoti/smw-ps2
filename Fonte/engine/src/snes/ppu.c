@@ -103,9 +103,11 @@ void ppu_handleVblank(Ppu* ppu) {
 }
 
 /* Tela larga (16:9) do port: colunas extras à esquerda/direita da tela
-   nativa de 256, lidas da VRAM como as demais (extraLeftCur/extraRightCur). */
+   nativa de 256, lidas da VRAM como as demais (extraLeftCur/extraRightCur).
+   A cena larga (largoCena) vale mesmo quando as pontas da fase deixam um
+   lado ou os dois sem colunas: o limite de sprites por linha não muda. */
 static inline bool PpuLargo(const Ppu *ppu) {
-  return ppu->wideTile != NULL || (ppu->extraLeftCur | ppu->extraRightCur) != 0;
+  return ppu->wideTile != NULL || ppu->largoCena != 0 || (ppu->extraLeftCur | ppu->extraRightCur) != 0;
 }
 
 /* Posição de x dentro da célula de mosaico, também para x negativo. */
@@ -885,14 +887,16 @@ static NOINLINE void PpuDrawWholeLine(Ppu *ppu, uint y) {
   uint32_t *dst = (uint32_t*)&ppu->renderBuffer[(y - 1) * ppu->renderPitch], *dst_org = dst;
 
   if(!ppu->wideTile) {
-    /* Quadro de 256 + 2*extraLeftRight colunas. A parte desenhada tem
-       256 + extraLeftCur + extraRightCur; o que sobrar fica preto. */
-    unsigned drawn = 256 + ppu->extraLeftCur + ppu->extraRightCur;
-    unsigned total = 256 + 2 * ppu->extraLeftRight;
-    unsigned pad = drawn < total ? (total - drawn) / 2 : 0;
-    for (unsigned i = 0; i < pad; i++) dst[i] = PpuPackRgb(0, 0, 0);
-    for (unsigned i = pad + drawn; i < total; i++) dst[i] = PpuPackRgb(0, 0, 0);
-    dst += pad;
+    /* Quadro de 256 + 2*extraLeftRight colunas, com a tela nativa sempre no
+       mesmo lugar. Desenha extraLeftCur colunas à esquerda e extraRightCur
+       à direita (podem ser diferentes); o que sobrar de cada lado fica
+       preto. */
+    unsigned max = ppu->extraLeftRight, total = 256 + 2 * max;
+    unsigned esq = ppu->extraLeftCur < max ? max - ppu->extraLeftCur : 0;
+    unsigned dir = ppu->extraRightCur < max ? max - ppu->extraRightCur : 0;
+    for (unsigned i = 0; i < esq; i++) dst[i] = PpuPackRgb(0, 0, 0);
+    for (unsigned i = total - dir; i < total; i++) dst[i] = PpuPackRgb(0, 0, 0);
+    dst += esq;
   }
 
   uint32_t windex = 0;

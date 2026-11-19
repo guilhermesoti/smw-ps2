@@ -253,15 +253,30 @@ void smw_sprite_suave(GSGLOBAL *gs, GSTEXTURE *t, float x0, float y0, float x1, 
   gs->Clamp->MINU = 0, gs->Clamp->MAXU = (int)u1 - 1;
   gs->Clamp->MINV = 0, gs->Clamp->MAXV = (int)v1 - 1;
   gsKit_set_clamp(gs, GS_CMODE_REGION_CLAMP);
-  t->Filter = suave >= 2 ? GS_FILTER_LINEAR : GS_FILTER_NEAREST;
+  /* v0.13.5: o GS amostra cada ponto da tela no canto dele (coordenada
+     inteira) e o filtro bilinear tem o centro de cada texel em i + 0,5.
+     Com as coordenadas comecando em 0, no 240p (uma linha da tela para
+     cada linha do quadro) cada linha saia a media de duas linhas do jogo,
+     e a imagem ficava embacada na vertical; no 480p, uma linha sim e outra
+     nao. No filtro bilinear as coordenadas andam meio ponto da tela, para
+     cada ponto ler o quadro no centro dele: a suavizacao fica so na mistura
+     de vizinhos que a ampliacao pede. O desenho nitido continua igual. */
+  const float du = 0.5f * u1 / (x1 - x0), dv = 0.5f * v1 / (y1 - y0);
+  const u64 cor = GS_SETREG_RGBAQ(128, 128, 128, 128, 0);
   gs->PrimAlphaEnable = GS_SETTING_OFF;
-  gsKit_prim_sprite_texture(gs, t, x0, y0, 0, 0, x1, y1, u1, v1, 1, GS_SETREG_RGBAQ(128, 128, 128, 128, 0));
+  if (suave >= 2) {
+    t->Filter = GS_FILTER_LINEAR;
+    gsKit_prim_sprite_texture(gs, t, x0, y0, du, dv, x1, y1, u1 + du, v1 + dv, 1, cor);
+  } else {
+    t->Filter = GS_FILTER_NEAREST;
+    gsKit_prim_sprite_texture(gs, t, x0, y0, 0, 0, x1, y1, u1, v1, 1, cor);
+  }
   if (suave == 1) {
     /* Cor = metade da textura suave + metade do que ja esta na tela. */
     gsKit_set_primalpha(gs, GS_SETREG_ALPHA(0, 1, 2, 1, 0x40), 0);
     t->Filter = GS_FILTER_LINEAR;
     gs->PrimAlphaEnable = GS_SETTING_ON;
-    gsKit_prim_sprite_texture(gs, t, x0, y0, 0, 0, x1, y1, u1, v1, 2, GS_SETREG_RGBAQ(128, 128, 128, 128, 0));
+    gsKit_prim_sprite_texture(gs, t, x0, y0, du, dv, x1, y1, u1 + du, v1 + dv, 2, cor);
   }
   gs->PrimAlphaEnable = enabled;
 }

@@ -20,7 +20,7 @@
 #include <timer.h>
 #include <unistd.h>
 
-#define SMW_VERSAO "0.13.4"
+#define SMW_VERSAO "0.13.5"
 
 #define DECLARE_DRIVER(n) extern unsigned char n##_irx[]; extern unsigned int size_##n##_irx
 DECLARE_DRIVER(bdm);
@@ -50,12 +50,13 @@ static const char *card_drivers = "nenhum";
    (tested on a CRT and on a flat TV). 480i: the same 224 lines shown in both
    fields of an interlaced picture, for TVs that do not show 240p; flat TVs
    deinterlace it and it comes out softer. 480p: component or HDMI adapter; there each
-   SNES line becomes two TV lines, and optional scanlines darken every
-   second line like a CRT fed with RGB. suave: 0 sharp (default: over the AV
+   SNES line becomes two TV lines, and optional scanlines (off by default,
+   AJUSTES or L2+R2+Square) darken every second line like a CRT fed with
+   RGB. suave: 0 sharp (default: over the AV
    cable the TV already softens the picture), 1 medium, 2 strong (GS bilinear
    filter). */
 static struct { int modo; bool p480, scanlines, wide, compat; int suave; } video = {
-    SMW_VIDEO_240P, false, true, false, false, 0};
+    SMW_VIDEO_240P, false, false, false, false, 0};
 static SmwOptions opcoes;  /* what is saved in SMW.OPT */
 /* Image columns and row length in pixels: 256/256 (4:3) or 342/384 (16:9). */
 static unsigned screen_w = SMW_WIDTH, screen_pitch = SMW_WIDTH;
@@ -440,7 +441,7 @@ static void set_aspect(bool wide) {
   texture.TBW = screen_pitch / 64;
 }
 
-/* L2+R2 + Square: scanlines on/off (480p). L2+R2 + Circle: smoothing
+/* L2+R2 + Square: scanlines on/off (only in 480p). L2+R2 + Circle: smoothing
    (off, medium, strong).
    L2+R2 + Triangle: performance meter. L2+R2 + Cross: 4:3 / 16:9. While
    L2+R2 are held the pad sends nothing to the game. */
@@ -448,8 +449,12 @@ static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
   uint16_t pressed = raw & ~*previous;
   *previous = raw;
   if ((raw & (PAD_L2 | PAD_R2)) != (PAD_L2 | PAD_R2)) return game;
-  if (pressed & PAD_SQUARE) {
+  /* Only in 480p, where the change shows; elsewhere it would change a saved
+     setting without any visible effect. */
+  if ((pressed & PAD_SQUARE) && video.p480) {
     video.scanlines = !video.scanlines;
+    opcoes.scanlines = video.scanlines;
+    smw_options_changed(&opcoes);  /* saved with the next game save */
     smw_log("L2+R2+QUADRADO: scanlines %s", video.scanlines ? "ligadas" : "desligadas");
   }
   if (pressed & PAD_CIRCLE) {
@@ -549,8 +554,9 @@ static int outro_video(int v, int dir) {
 /* Tela AJUSTES. contagem: comeca sozinha em 5 s (ajustes ja salvos) ate o
    jogador apertar um botao. Volta com X ou START (ou no fim da contagem). */
 static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const char *situacao) {
-  Ajustes a = {contagem ? AJUSTE_JOGAR : AJUSTE_VIDEO, o->video, o->tela, o->suave, o->idioma,
-               -1, aviso, situacao};
+  Ajustes a = {.linha = contagem ? AJUSTE_JOGAR : AJUSTE_VIDEO, .video = o->video, .tela = o->tela,
+               .suave = o->suave, .scanlines = o->scanlines == 1, .idioma = o->idioma,
+               .segundos = -1, .aviso = aviso, .situacao = situacao};
   unsigned held = botoes();
   int saindo = -1;
   bool sozinho = false;
@@ -569,6 +575,7 @@ static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const 
         if (a.linha == AJUSTE_VIDEO) a.video = outro_video(a.video, dir);
         if (a.linha == AJUSTE_TELA) a.tela = !a.tela;
         if (a.linha == AJUSTE_SUAVE) a.suave = (a.suave + 3 + dir) % 3;
+        if (a.linha == AJUSTE_SCAN) a.scanlines = !a.scanlines;
         if (a.linha == AJUSTE_IDIOMA) a.idioma = !a.idioma;
         a.aviso = NULL;
         smw_blip(sound);
@@ -586,6 +593,7 @@ static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const 
     mostra_quadro(bright < 0 ? 0 : bright);
   }
   o->video = a.video, o->tela = a.tela, o->suave = a.suave, o->idioma = a.idioma;
+  o->scanlines = a.scanlines;
   return sozinho;
 }
 
@@ -606,20 +614,23 @@ static bool confirma_video(int idioma) {
   return false;
 }
 
-/* "tela=4:3 video=240p suavizacao=nao idioma=pt saida=1280"; "-" = sem valor. */
+/* "tela=4:3 video=240p suavizacao=nao scanlines=nao idioma=pt saida=1280";
+   "-" = sem valor. */
 static void texto_opcoes(const SmwOptions *o, char *out, size_t size) {
   static const char *const suaves[] = {"nao", "media", "forte"};
-  snprintf(out, size, "tela=%s video=%s suavizacao=%s idioma=%s saida=%s",
+  snprintf(out, size, "tela=%s video=%s suavizacao=%s scanlines=%s idioma=%s saida=%s",
            o->tela < 0 ? "-" : o->tela ? "16:9" : "4:3",
            o->video < 0 ? "-" : nome_video(o->video),
            o->suave < 0 || o->suave > 2 ? "-" : suaves[o->suave],
+           o->scanlines < 0 ? "-" : o->scanlines ? "sim" : "nao",
            o->idioma < 0 ? "-" : o->idioma ? "en" : "pt",
            o->compat < 0 ? "-" : o->compat ? "512" : "1280");
 }
 
 static bool mesmas_opcoes(const SmwOptions *a, const SmwOptions *b) {
   return a->tela == b->tela && a->video == b->video && a->idioma == b->idioma &&
-         a->suave == b->suave && (a->compat == 1) == (b->compat == 1);
+         a->suave == b->suave && (a->compat == 1) == (b->compat == 1) &&
+         (a->scanlines == 1) == (b->scanlines == 1);
 }
 
 int main(int argc, char **argv) {
@@ -683,7 +694,8 @@ int main(int argc, char **argv) {
   smw_log("SMW.CFG (Gravador): %s", msg);
   texto_opcoes(&salvo, msg, sizeof(msg));
   smw_log("SMW.OPT (escolha no PS2): %s", tem_opt ? msg : "nao existe");
-  opcoes = (SmwOptions){0, SMW_VIDEO_240P, 0, 0, 0};
+  opcoes = (SmwOptions){.tela = 0, .video = SMW_VIDEO_240P, .idioma = 0, .suave = 0, .compat = 0,
+                        .scanlines = 0};
   const SmwOptions *fontes[2] = {&cfg, &salvo};
   for (int i = 0; i < 2; ++i) {
     if (fontes[i]->tela >= 0) opcoes.tela = fontes[i]->tela;
@@ -691,6 +703,7 @@ int main(int argc, char **argv) {
     if (fontes[i]->idioma >= 0) opcoes.idioma = fontes[i]->idioma;
     if (fontes[i]->suave >= 0) opcoes.suave = fontes[i]->suave;
     if (fontes[i]->compat >= 0) opcoes.compat = fontes[i]->compat;
+    if (fontes[i]->scanlines >= 0) opcoes.scanlines = fontes[i]->scanlines;
   }
   const bool conhecido = salvo.video >= 0 && salvo.tela >= 0 && salvo.suave >= 0;
   const SmwOptions inicio = opcoes;
@@ -747,6 +760,7 @@ int main(int argc, char **argv) {
   smw_log_grava();
   g_ptbr = opcoes.idioma != 1;
   video.suave = opcoes.suave;
+  video.scanlines = opcoes.scanlines == 1;
 
   smw_intro(gs, video.p480, sound, SMW_VERSAO, video.suave);
   set_aspect(opcoes.tela == 1);

@@ -20,6 +20,12 @@ extern uint8 g_largo;
    jogo e de novo antes de desenhar. */
 void LargoAtualiza(void);
 
+/* Colunas extras desenhadas à esquerda e à direita neste quadro (v0.13.5).
+   Nas pontas da fase as colunas extras mostrariam o que fica fora dela
+   (antes do começo ou depois do fim), aonde o Mario não pode ir; ali elas
+   ficam pretas. Chamado depois do quadro do jogo, antes de desenhar. */
+void LargoColunas(uint8 *esq, uint8 *dir);
+
 /* x relativo à câmera (camada 1) visível na área larga, contando a largura
    do objeto à esquerda. Com g_largo = 0 equivale a 0 <= dx < 256. */
 static inline bool LargoNaTela(int dx, int largura) {

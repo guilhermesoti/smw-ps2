@@ -19,6 +19,32 @@ void LargoAtualiza(void) {
   g_largo = (g_largo_max && cena_fase) ? g_largo_max : 0;
 }
 
+/* A câmera do original (camada 1) vai do começo da fase (x = 0) até o fim
+   menos uma tela (HandleStandardLevelCameraScroll): fase horizontal com
+   camera_last_screen_horiz telas de 256 pixels (com 0 telas a câmera vai
+   até 128), fase vertical com duas telas de largura (câmera de 0 a 256).
+   As salas de chefe em modo 7 (Iggy, Larry, Reznor, Bowser) são uma tela
+   só. Cada coluna extra só é desenhada se cair dentro da fase; longe das
+   pontas, as duas ficam com g_largo. */
+void LargoColunas(uint8 *esq, uint8 *dir) {
+  *esq = *dir = g_largo;
+  if (!g_largo)
+    return;
+  int fim;
+  if (misc_nmito_use_flag & 0x80)
+    fim = 256;
+  else if (misc_level_layout_flags & 1)
+    fim = 512;
+  else if (camera_last_screen_horiz)
+    fim = camera_last_screen_horiz << 8;
+  else
+    fim = 128 + 256;
+  int cam = (int16)mirror_current_layer1_xpos;
+  int e = cam, d = fim - 256 - cam;
+  *esq = e <= 0 ? 0 : e >= g_largo ? g_largo : (uint8)e;
+  *dir = d <= 0 ? 0 : d >= g_largo ? g_largo : (uint8)d;
+}
+
 /* Fumaças na tela larga: por espaço, a fumaça que está lá (tipo e byte
    baixo de X), o dx visto por último e o quadro em que foi visto. */
 static struct {

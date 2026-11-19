@@ -1,7 +1,7 @@
 /* Telas da abertura: carregando, AJUSTES e o teste do modo de video.
  *
  * AJUSTES troca a antiga tela de texto do comeco: video (240p, 480i ou
- * 480p), tela (4:3 ou 16:9), suavizacao e idioma, com o jogo comecando
+ * 480p), tela (4:3 ou 16:9), suavizacao, scanlines e idioma, com o jogo comecando
  * sozinho quando os ajustes ja estao salvos. Mesmo visual da tela de apoio
  * (intro.c): fundo azul com estrelas e moldura dourada dupla.
  *
@@ -171,15 +171,15 @@ static void seta(int x, int cy, int dir, uint32_t cor) {
 /* ---- AJUSTES ---- */
 
 typedef struct {
-  const char *titulo, *jogar, *rotulo[4], *suave[3], *idioma[2], *rodape, *contagem, *video_txt[3][2],
-      *tela_txt[2], *redondo[2], *suave_txt[3], *suave_bom, *suave_ve, *idioma_txt[2], *idioma_tela, *jogar_txt[3],
-      *aplica;
+  const char *titulo, *jogar, *rotulo[AJUSTE_JOGAR], *suave[3], *scan[2], *idioma[2], *rodape, *contagem, *video_txt[3][2],
+      *tela_txt[2], *redondo[2], *suave_txt[3], *suave_bom, *suave_ve, *scan_txt[2], *scan_480, *scan_jogo,
+      *idioma_txt[2], *idioma_tela, *jogar_txt[3], *aplica;
 } Textos;
 
 static const Textos kTextos[2] = {
   {
-    "AJUSTES", "JOGAR", {"Vídeo", "Tela", "Suavização", "Idioma"},
-    {"Desligada", "Média", "Forte"}, {"Português", "English"},
+    "AJUSTES", "JOGAR", {"Vídeo", "Tela", "Suavização", "Scanlines", "Idioma"},
+    {"Desligada", "Média", "Forte"}, {"Desligadas", "Ligadas"}, {"Português", "English"},
     "Direcional: escolhe e muda  -  X: joga", "Começa em %d s. Aperte um botão para mudar.",
     {{"240p: cabo AV, em qualquer TV.", "O mais nítido, igual ao SNES."},
      {"480p: cabo componente ou adaptador HDMI.", "No cabo AV não aparece; volta sozinho."},
@@ -188,14 +188,16 @@ static const Textos kTextos[2] = {
     {"O círculo fica redondo", "com a TV no modo certo."},
     {"Pixels nítidos, como no cartucho.", "Pixels um pouco mais macios.", "Pixels macios, sem serrilhado."},
     "No cabo AV a TV já deixa macio.", "Esta tela já mostra o efeito.",
+    {"Sem linhas escuras: imagem cheia.", "Linhas escuras, como numa TV de tubo."},
+    "Só no 480p (componente ou HDMI).", "No jogo, L2+R2+Quadrado troca.",
     {"Textos do jogo em português.", "Textos do jogo em inglês (original)."}, "Esta tela também muda.",
     {"X ou START começa. Fica tudo salvo.", "No jogo, L2+R2+X troca a tela e",
      "L2+R2+Círculo troca a suavização."},
     "Muda quando você apertar X.",
   },
   {
-    "SETTINGS", "PLAY", {"Video", "Screen", "Smoothing", "Language"},
-    {"Off", "Medium", "Strong"}, {"Português", "English"},
+    "SETTINGS", "PLAY", {"Video", "Screen", "Smoothing", "Scanlines", "Language"},
+    {"Off", "Medium", "Strong"}, {"Off", "On"}, {"Português", "English"},
     "D-pad: choose and change  -  X: play", "Starts in %d s. Press a button to change.",
     {{"240p: AV cable, any TV.", "The sharpest, like the SNES."},
      {"480p: component cable or HDMI adapter.", "Not on the AV cable; it comes back."},
@@ -204,6 +206,8 @@ static const Textos kTextos[2] = {
     {"The circle is round", "in the right TV mode."},
     {"Sharp pixels, like the cartridge.", "Slightly softer pixels.", "Soft pixels, no jagged edges."},
     "Over AV the TV already softens it.", "This screen already shows it.",
+    {"No dark lines: full picture.", "Dark lines, like a CRT TV."},
+    "Only in 480p (component or HDMI).", "In game, L2+R2+SQUARE changes it.",
     {"Game texts in Portuguese.", "Game texts in English (original)."}, "This screen changes too.",
     {"X or START begins. Everything is saved.", "In game, L2+R2+X changes the screen",
      "and L2+R2+CIRCLE the smoothing."},
@@ -211,7 +215,10 @@ static const Textos kTextos[2] = {
   },
 };
 
-enum { LX = 28, LW = W - 56, LINHA_Y = 42, LINHA_H = 16, LINHA_PASSO = 18, VALOR_X = 152 };
+/* Cinco linhas de ajuste, o botao JOGAR, o painel de ajuda e o rodape. */
+enum { LX = 28, LW = W - 56, LINHA_Y = 40, LINHA_H = 16, LINHA_PASSO = 17, VALOR_X = 152,
+       JOGAR_Y = LINHA_Y + AJUSTE_JOGAR * LINHA_PASSO + 3, PAINEL_Y = JOGAR_Y + LINHA_H + 3,
+       PAINEL_H = 40, RODAPE_Y = PAINEL_Y + PAINEL_H + 4 };
 
 static const char *valor(const Textos *t, const Ajustes *a, int linha) {
   static const char *const videos[] = {"240p", "480p", "480i"};
@@ -219,6 +226,7 @@ static const char *valor(const Textos *t, const Ajustes *a, int linha) {
   case AJUSTE_VIDEO: return videos[a->video];
   case AJUSTE_TELA: return a->tela ? "16:9" : "4:3";
   case AJUSTE_SUAVE: return t->suave[a->suave];
+  case AJUSTE_SCAN: return t->scan[a->scanlines == 1];
   default: return t->idioma[a->idioma];
   }
 }
@@ -238,7 +246,7 @@ static void linha_ajuste(const Textos *t, const Ajustes *a, int linha, int frame
 }
 
 static void botao_jogar(const Textos *t, const Ajustes *a, int frame) {
-  int w = 96, x = (W - w) / 2, y = LINHA_Y + 4 * LINHA_PASSO + 4;
+  int w = 96, x = (W - w) / 2, y = JOGAR_Y;
   bool marcado = a->linha == AJUSTE_JOGAR;
   fill(x, y, w, LINHA_H, marcado ? 0x3A2A08 : CAIXA);
   contorno(x, y, w, LINHA_H, marcado ? 2 : 1, marcado ? DOURADO : BORDA);
@@ -248,10 +256,10 @@ static void botao_jogar(const Textos *t, const Ajustes *a, int frame) {
 
 /* Painel de ajuda da linha marcada. */
 static void painel(const Textos *t, const Ajustes *a) {
-  const int x = LX, y = 140, w = LW, h = 42;
+  const int x = LX, y = PAINEL_Y, w = LW, h = PAINEL_H;
   fill(x, y, w, h, CAIXA);
   contorno(x, y, w, h, 1, BORDA);
-  int tx = x + 8, l1 = y + 6, l2 = y + 17, l3 = y + 28;
+  int tx = x + 8, l1 = y + 5, l2 = y + 16, l3 = y + 27;
   switch (a->linha) {
   case AJUSTE_VIDEO:
     texto(tx, l1, t->video_txt[a->video][0], BRANCO, 1);
@@ -277,6 +285,11 @@ static void painel(const Textos *t, const Ajustes *a) {
     texto(tx, l2, t->suave_bom, TEXTO, 1);
     texto(tx, l3, t->suave_ve, CINZA, 1);
     break;
+  case AJUSTE_SCAN:
+    texto(tx, l1, t->scan_txt[a->scanlines == 1], BRANCO, 1);
+    texto(tx, l2, t->scan_480, TEXTO, 1);
+    texto(tx, l3, t->scan_jogo, CINZA, 1);
+    break;
   case AJUSTE_IDIOMA:
     texto(tx, l1, t->idioma_txt[a->idioma], BRANCO, 1);
     texto(tx, l2, t->idioma_tela, TEXTO, 1);
@@ -296,18 +309,18 @@ void formato_ajustes(uint32_t *destino, const unsigned char *letras, const Ajust
   fundo(frame);
   texto_sombra(17, t->titulo, DOURADO, 2);
   fill(W / 2 - 80, 35, 160, 1, 0xC8962E);
-  for (int l = 0; l < 4; l++) linha_ajuste(t, a, l, frame);
+  for (int l = 0; l < AJUSTE_JOGAR; l++) linha_ajuste(t, a, l, frame);
   botao_jogar(t, a, frame);
   painel(t, a);
-  texto_em(0, W, 188, t->rodape, BRANCO);
+  texto_em(0, W, RODAPE_Y, t->rodape, BRANCO);
   char linha[64];
   if (a->aviso) {
-    texto_em(0, W, 199, a->aviso, LARANJA);
+    texto_em(0, W, RODAPE_Y + 11, a->aviso, LARANJA);
   } else if (a->segundos >= 0) {
     snprintf(linha, sizeof(linha), t->contagem, a->segundos);
-    texto_em(0, W, 199, linha, DOURADO);
+    texto_em(0, W, RODAPE_Y + 11, linha, DOURADO);
   } else if (a->situacao) {
-    texto_em(0, W, 199, a->situacao, CINZA);
+    texto_em(0, W, RODAPE_Y + 11, a->situacao, CINZA);
   }
   if (a->segundos >= 0) {
     snprintf(linha, sizeof(linha), "%d", a->segundos % 100);

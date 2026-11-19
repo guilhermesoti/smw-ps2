@@ -14,19 +14,37 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+/* ---- pendrive: pasta temporaria, com recusa de gravacao opcional ---- */
+static char usb_dir[256];
+/* A pasta do pendrive simulado faz o papel do "mass:" (bdmfs_fatfs). */
+#define SMW_TESTE_FATFS(path) (strncmp((path), usb_dir, strlen(usb_dir)) == 0)
 #include "../Fonte/ps2/files.c"
 #include "mc_mock.h"
 
-/* ---- pendrive: pasta temporaria, com recusa de gravacao opcional ---- */
-static char usb_dir[256];
 static int usb_denied;  /* fopen para gravar devolve EACCES (como o FR_DENIED, errno 7) */
+/* Como o bdmfs_fatfs do PS2: arquivo que nao existe da errno 4 (FR_NO_FILE)
+   e pasta que nao existe, errno 5 (FR_NO_PATH), em vez de ENOENT. */
+static int usb_fatfs;
+/* Outra pasta de jogo que nao e o pendrive (por exemplo o HD), com SMW.SRM
+   que existe e da erro de leitura (errno 5 = EIO) nas proximas hdd_eio
+   leituras (o carregamento e a leitura do save antes de gravar). */
+static char hdd_dir[256];
+static int hdd_eio;
 FILE *__real_fopen(const char *path, const char *mode);
 FILE *__wrap_fopen(const char *path, const char *mode) {
-  if (usb_denied && strchr(mode, 'w') && !strncmp(path, usb_dir, strlen(usb_dir))) {
+  if (hdd_eio > 0 && mode[0] == 'r' && !strncmp(path, hdd_dir, strlen(hdd_dir)) && strstr(path, "SMW.SRM")) {
+    --hdd_eio;
+    errno = 5;
+    return NULL;
+  }
+  bool usb = !strncmp(path, usb_dir, strlen(usb_dir));
+  if (usb_denied && strchr(mode, 'w') && usb) {
     errno = 7;
     return NULL;
   }
-  return __real_fopen(path, mode);
+  FILE *f = __real_fopen(path, mode);
+  if (!f && usb && usb_fatfs && errno == ENOENT) errno = strchr(path + strlen(usb_dir), '/') ? 5 : 4;
+  return f;
 }
 static void usb_put(const char *name, const void *data, size_t size) {
   char p[512];
@@ -88,6 +106,7 @@ static void fresh(void) {
   mc_reset();
   usb_clear();
   usb_denied = 0;
+  usb_fatfs = 0;
 }
 
 static int checks;
@@ -295,6 +314,72 @@ int main(void) {
     mc_put(0, "/SMWPS2/SMW.SRM", m6, SAVE_BYTES);
     reboot();
     CHECK(load_info.store == STORE_FOLDER && load_info.generation == 7);
+  }
+
+  /* 9. Pendrive de verdade (bdmfs_fatfs): arquivo que falta da errno 4, nao
+        ENOENT. Pendrive vazio, sem Memory Card: nada conta como ilegivel e
+        o save vai para o pendrive (antes parava em ERR_PRESERVE). */
+  fresh();
+  usb_fatfs = 1;
+  mc_present[0] = 0;
+  reboot();
+  CHECK(load_info.store == -1 && load_info.bad == 0);
+  {
+    /* Pasta que nao existe dentro do pendrive: errno 5 (FR_NO_PATH). */
+    char p[512];
+    uint8_t um[1];
+    snprintf(p, sizeof(p), "%snao_existe/SMW.SRM", usb_dir);
+    CHECK(file_read(p, um, sizeof(um)) == FILE_ABSENT);
+  }
+  CHECK(smw_save_progress(yellow) && !error_text[0]);
+  CHECK(!strcmp(notice, "SALVO: PENDRIVE"));
+  CHECK(usb_get("SMW.SRM", buf, sizeof(buf)) == SAVE_BYTES);
+  CHECK(usb_get("SMW.TMP", buf, sizeof(buf)) < 0);
+  reboot();
+  CHECK(load_info.store == STORE_FOLDER && load_info.bad == 0 && !memcmp(g_test_sram, yellow, SMW_SRAM_BYTES));
+  /* O segundo save faz o SMW.BAK e continua sem nada ilegivel. */
+  CHECK(smw_save_progress(stale) && !error_text[0]);
+  CHECK(usb_get("SMW.BAK", buf, sizeof(buf)) == SAVE_BYTES);
+  reboot();
+  CHECK(load_info.store == STORE_FOLDER && load_info.bad == 0 && !memcmp(g_test_sram, stale, SMW_SRAM_BYTES));
+  /* Arquivo que existe mas esta estragado continua sendo preservado. */
+  usb_put("SMW.SRM", "lixo", 4);
+  reboot();
+  CHECK(load_info.bad == 1 && load_info.bad_state[0] == COPY_CORRUPT);
+  CHECK(smw_save_progress(yellow) && !error_text[0]);
+  CHECK(usb_get("SMW_S1.BAD", buf, sizeof(buf)) == 4);
+
+  /* 10. Fora do pendrive, errno 5 e erro de leitura (EIO), nao "nao existe":
+         o SMW.SRM que existe e nao abre continua sendo preservado como .BAD
+         antes do save gravar por cima. */
+  fresh();
+  mc_present[0] = 0;
+  snprintf(hdd_dir, sizeof(hdd_dir), "/tmp/smw_hdd_%d/", (int)getpid());
+  mkdir(hdd_dir, 0777);
+  {
+    char p[512];
+    snprintf(p, sizeof(p), "%sSMW.SRM", hdd_dir);
+    FILE *f = __real_fopen(p, "wb");
+    CHECK(f && fwrite(stale, 1, SMW_SRAM_BYTES, f) == SMW_SRAM_BYTES);
+    fclose(f);
+    hdd_eio = 2;
+    active_store = -1;
+    max_generation = 0;
+    memset(g_test_sram, 0, sizeof(g_test_sram));
+    snprintf(folder_dir, sizeof(folder_dir), "%s", hdd_dir);
+    smw_load_progress(g_test_sram);
+    CHECK(load_info.bad == 1 && load_info.bad_state[0] == COPY_UNREADABLE);
+    CHECK(smw_save_progress(yellow) && !error_text[0] && hdd_eio == 0);
+    snprintf(p, sizeof(p), "%sSMW_S1.BAD", hdd_dir);
+    FILE *bad = __real_fopen(p, "rb");
+    CHECK(bad && fread(buf, 1, sizeof(buf), bad) == SMW_SRAM_BYTES && !memcmp(buf, stale, SMW_SRAM_BYTES));
+    fclose(bad);
+    static const char *const nomes[] = {"SMW.SRM", "SMW.TMP", "SMW.BAK", "SMW_S1.BAD"};
+    for (size_t i = 0; i < sizeof(nomes) / sizeof(nomes[0]); ++i) {
+      snprintf(p, sizeof(p), "%s%s", hdd_dir, nomes[i]);
+      unlink(p);
+    }
+    rmdir(hdd_dir);
   }
 
   printf("Saves entre midias: %d verificacoes OK.\n", checks);

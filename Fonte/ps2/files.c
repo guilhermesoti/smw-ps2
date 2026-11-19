@@ -341,6 +341,16 @@ static bool card_write(int port, const char *name, const uint8_t *buf, int size)
 #endif
 
 
+/* Caminho no pendrive pelo bdmfs_fatfs (o driver do proprio ELF). Os testes
+   no PC trocam por uma pasta deles com SMW_TESTE_FATFS. */
+static bool caminho_fatfs(const char *path) {
+#ifdef SMW_TESTE_FATFS
+  return SMW_TESTE_FATFS(path);
+#else
+  return strncmp(path, "mass", 4) == 0;
+#endif
+}
+
 static int file_read(const char *path, uint8_t *buf, int cap) {
 #ifdef _EE
   int port;
@@ -351,6 +361,15 @@ static int file_read(const char *path, uint8_t *buf, int cap) {
   FILE *f = fopen(path, "rb");
   if (!f) {
     if (errno == ENOENT || errno == 0) return FILE_ABSENT;
+    /* v0.13.5: o driver do pendrive (bdmfs_fatfs, "mass:") devolve o codigo
+       do FatFs negativo e a libc do PS2SDK poe esse numero em errno:
+       FR_NO_FILE (4) para arquivo que nao existe e FR_NO_PATH (5) para pasta
+       que nao existe. Antes eles contavam como "nao pode ser lido" (SMW_LOG.TXT
+       da v0.13.4 no console) e, com o SMW.TMP sempre faltando, o save no
+       pendrive parava em ERR_PRESERVE e ia para o Memory Card. Em outros
+       drivers 5 pode ser EIO (erro de leitura): la nada muda. */
+    enum { FR_NO_FILE = 4, FR_NO_PATH = 5 };  /* FRESULT do FatFs (ff.h) */
+    if (caminho_fatfs(path) && (errno == FR_NO_FILE || errno == FR_NO_PATH)) return FILE_ABSENT;
     usb_fail(path, 5, errno);
     return FILE_ERROR;
   }
@@ -886,7 +905,7 @@ static char *trim(char *s) {
 }
 
 void smw_options_clear(SmwOptions *o) {
-  o->tela = o->video = o->idioma = o->suave = o->compat = SMW_OPT_ASK;
+  o->tela = o->video = o->idioma = o->suave = o->compat = o->scanlines = SMW_OPT_ASK;
 }
 
 static void parse_options(char *text, SmwOptions *o) {
@@ -914,6 +933,9 @@ static void parse_options(char *text, SmwOptions *o) {
         if (same_word(value, "nao") || same_word(value, "desligada") || same_word(value, "0")) o->suave = 0;
         else if (same_word(value, "media") || same_word(value, "1")) o->suave = 1;
         else if (same_word(value, "forte") || same_word(value, "sim") || same_word(value, "2")) o->suave = 2;
+      } else if (same_word(key, "scanlines")) {
+        if (same_word(value, "nao") || same_word(value, "desligadas") || same_word(value, "0")) o->scanlines = 0;
+        else if (same_word(value, "sim") || same_word(value, "ligadas") || same_word(value, "1")) o->scanlines = 1;
       } else if (same_word(key, "saida")) {
         if (same_word(value, "1280")) o->compat = 0;
         else if (same_word(value, "512")) o->compat = 1;
@@ -968,6 +990,7 @@ static int options_text(const SmwOptions *o, char *text, size_t size) {
   if (o->tela >= 0) n += snprintf(text + n, size - n, "tela=%s\n", o->tela ? "16:9" : "4:3");
   if (o->video >= 0 && o->video <= 2) n += snprintf(text + n, size - n, "video=%s\n", videos[o->video]);
   if (o->suave >= 0 && o->suave <= 2) n += snprintf(text + n, size - n, "suavizacao=%s\n", suaves[o->suave]);
+  if (o->scanlines >= 0) n += snprintf(text + n, size - n, "scanlines=%s\n", o->scanlines ? "sim" : "nao");
   if (o->idioma >= 0) n += snprintf(text + n, size - n, "idioma=%s\n", o->idioma ? "en" : "pt");
   if (o->compat == 1) n += snprintf(text + n, size - n, "saida=512\n");
   return n;

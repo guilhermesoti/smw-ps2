@@ -162,6 +162,10 @@ struct Ppu {
   int16_t wideOamX[128];
   bool wideOamValid[128];
   uint8_t extraLeftCur, extraRightCur, extraLeftRight;
+  /* Port SMW PS2 (v0.13.5): colunas extras da cena (g_largo). extraLeftCur e
+     extraRightCur dizem quanto desenhar de cada lado e podem ser 0 numa cena
+     larga (pontas da fase); o resto do desenho largo segue largoCena. */
+  uint8_t largoCena;
   uint8_t lastMosaicModulo;
   uint8_t lastBrightnessMult;
   bool lineHasSprites;
