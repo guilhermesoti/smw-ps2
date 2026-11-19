@@ -415,6 +415,8 @@ superior com pycdlib instalado:
 
   python3 Fonte/gerar_iso.py
 
+Também aceita os caminhos: gerar_iso.py [SMW.ELF] [jogo.zip] [saida.iso].
+
 O Gravador (Gravador_SMW_PS2.html) é gerado do código em Gravador/, com
 o SMW.ELF já compilado dentro (não usa a ROM):
 

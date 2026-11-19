@@ -23,3 +23,8 @@ __pycache__/
 # Gravador gerado (tem o SMW.ELF dentro)
 /Gravador_SMW_PS2.html
 node_modules/
+
+# Pastas locais da organização do projeto (não vão para o GitHub):
+# cópias da biblioteca, material de referência da tradução e modelos.
+/Biblioteca/
+/Tradução ptbr/
