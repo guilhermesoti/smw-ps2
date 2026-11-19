@@ -26,7 +26,8 @@ def main():
     engine = fonte / "engine"
     integracao = fonte / "ps2"
     unidades = sorted((engine / "src").rglob("*.c"))
-    unidades += [integracao / "files.c", integracao / "game.c", testes / "percurso.c"]
+    unidades += [integracao / "files.c", integracao / "game.c", integracao / "registro.c",
+                 testes / "percurso.c"]
     cc = os.environ.get("CC", "cc")
     cflags = ["-O1", "-g", "-std=gnu11", "-fno-strict-aliasing", "-fwrapv",
               "-ffunction-sections", "-fdata-sections"]

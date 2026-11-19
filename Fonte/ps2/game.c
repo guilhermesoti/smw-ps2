@@ -1,4 +1,6 @@
 #include "game.h"
+#include "files.h"
+#include "registro.h"
 #include "src/common_cpu_infra.h"
 #include "src/smw_rtl.h"
 #include "src/smw_spc_player.h"
@@ -22,8 +24,21 @@ void SmwDrawPpuFrame(bool draw_pixels);
 void RtlApuLock(void) {}
 void RtlApuUnlock(void) {}
 
+/* Each save goes to the log; the file itself is written after the first
+   save (and after the next ones until a write works) and after a failed
+   one: writing it stops the game for a moment. */
 void RtlWriteSram(void) {
+  static unsigned saves;
+  static bool pending = true;
+  unsigned start = smw_log_ms();
   smw_save_error = !smw_save_progress(g_sram);
+  unsigned ms = smw_log_ms() - start;
+  ++saves;
+  if (smw_save_error)
+    smw_log("Save %u: ERRO AO SALVAR %s (%u ms)", saves, smw_save_error_text(), ms);
+  else
+    smw_log("Save %u: ok, %s (%u ms)", saves, smw_save_location(), ms);
+  if (pending || smw_save_error) pending = !smw_log_grava();
 }
 
 void smw_start(uint8_t *rom, uint32_t *pixels) {

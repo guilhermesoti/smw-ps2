@@ -1003,3 +1003,49 @@ void smw_options_changed(const SmwOptions *o) {
   pending_options = *o;
   options_pending = true;
 }
+
+/* ------------------------------------------------------------- log --- */
+
+void smw_log_order(int order[3]) {
+  order[0] = 0;
+  order[1] = active_store == STORE_MC1 ? 2 : 1;  /* o cartao do save primeiro */
+  order[2] = order[1] == 1 ? 2 : 1;
+}
+
+bool smw_log_place(const char *boot, int id, char path[SMW_PATH]) {
+  if (id == 0) {
+    const char *dir = folder_dir[0] ? folder_dir
+                      : (boot && *boot && !smw_path_is_disc(boot)) ? boot : NULL;
+    return dir && join_path(path, dir, "SMW_LOG.TXT");  /* caminho longo: nao cabe */
+  }
+  if (id != 1 && id != 2) return false;
+  return store_check(STORE_MC0 + id - 1) == 0 && join_path(path, kCardDirs[id - 1], "SMW_LOG.TXT");
+}
+
+static bool write_log_file(const char *path, const char *text, int size) {
+#ifdef _EE
+  int port;
+  const char *name;
+  if (card_path(path, &port, &name)) {
+    /* Em qualquer pasta do cartao o log nunca toma o lugar do save: como o
+       icone, so grava se sobrar a reserva de ICON_SPARE_KB para o progresso. */
+    card_state(port);  /* atualiza o espaco livre */
+    if (card_free_kb[port] < (size + 1023) / 1024 + 2 + ICON_SPARE_KB) return false;
+    const char *dir = kCardDirs[port];
+    bool save_dir = strncmp(path, dir, strlen(dir)) == 0;
+    if (save_dir) make_folder(dir);  /* pasta SMWPS2 e icone, como o save */
+    if (!file_write(path, (const uint8_t *)text, size)) return false;
+    if (save_dir) write_card_icon(dir, port);
+    return true;
+  }
+#endif
+  return file_write(path, (const uint8_t *)text, size);
+}
+
+bool smw_write_log(const char *path, const char *text, int size) {
+  bool recording = card_recording;
+  card_recording = false;  /* falha no log nao entra no ERRO AO SALVAR */
+  bool ok = write_log_file(path, text, size);
+  card_recording = recording;
+  return ok;
+}

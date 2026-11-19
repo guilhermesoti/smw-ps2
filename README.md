@@ -2,7 +2,7 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.13.3 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
+**Versão 0.13.4 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
 - Tela AJUSTES no começo: vídeo 240p (cabo AV, qualquer TV; o recomendado), 480i (só para TV que não mostra 240p) ou 480p com scanlines (componente/HDMI), tela 4:3 ou 16:9, suavização (desligada, média, forte; desligada por padrão) e idioma. Vídeo novo só fica se você confirmar que a imagem apareceu.
@@ -11,6 +11,7 @@ Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do p
 - **Gravador SMW PS2**: um HTML que abre em qualquer navegador, confere a cópia do jogo e grava o aplicativo, a ISO ou os dois no pendrive.
 - Em português do Brasil: mensagens, nomes das fases e textos dos castelos. Segure SELECT na abertura para jogar em inglês.
 - Grava no pendrive ou no Memory Card (pasta `SMWPS2`, com ícone 3D no navegador do PS2).
+- Log do console (`SMW_LOG.TXT`, ao lado do ELF ou no Memory Card): drivers, vídeo testado e confirmado, saves e erros.
 - Abre pelo OPL como aplicativo (ELF) ou como ISO na lista de jogos.
 - Testado num PS2 de verdade pelo OPL.
 
@@ -31,7 +32,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.13.3 obtido com o ps2dev v2.0.0 foi `9024b152d73b8d36785bfab822e8399b17049ecc6aea1396cbaafba5b09f543e`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.13.4 obtido com o ps2dev v2.0.0 foi `0ff45a78e69e0cc4b9d3f4dde9506f7964b9536470f65d2580550da07ae89d58`.
 
 ## Gravador SMW PS2 (programa no PC)
 
@@ -131,7 +132,7 @@ teste acusa sprites que aparecem ou desaparecem longe das bordas). Rode numa pas
 ```sh
 cc -O1 -std=gnu11 -fno-strict-aliasing -fwrapv -ffunction-sections -fdata-sections -Wl,--gc-sections \
    -IFonte/engine -IFonte/ps2 $(pkg-config --cflags minizip zlib) \
-   $(find Fonte/engine/src -name '*.c') Fonte/ps2/files.c Fonte/ps2/game.c testes/aparecer.c \
+   $(find Fonte/engine/src -name '*.c') Fonte/ps2/files.c Fonte/ps2/game.c Fonte/ps2/registro.c testes/aparecer.c \
    $(pkg-config --libs minizip zlib) -lm -o /tmp/smw-aparecer
 /tmp/smw-aparecer /caminho/da/pasta/com/o/jogo/ 1 600 \
    $(python3 -c 'import json; print(*["0x"+s["hex"] for s in json.load(open("testes/salas.json"))["salas"]])')
@@ -145,7 +146,7 @@ Volta da câmera no mapa depois de olhar em volta com START (deslocamentos de at
 ```sh
 cc -O1 -std=gnu11 -fno-strict-aliasing -fwrapv -ffunction-sections -fdata-sections -Wl,--gc-sections \
    -fsanitize=address,undefined -IFonte/engine -IFonte/ps2 $(pkg-config --cflags minizip zlib) \
-   $(find Fonte/engine/src -name '*.c') Fonte/ps2/files.c Fonte/ps2/game.c testes/camera_mapa.c \
+   $(find Fonte/engine/src -name '*.c') Fonte/ps2/files.c Fonte/ps2/game.c Fonte/ps2/registro.c testes/camera_mapa.c \
    $(pkg-config --libs minizip zlib) -lm -o /tmp/smw-camera
 ASAN_OPTIONS=detect_leaks=0 /tmp/smw-camera /caminho/da/pasta/com/o/jogo/
 ```
@@ -157,6 +158,8 @@ cd testes
 P="$(pkg-config --cflags minizip zlib)"; L="$(pkg-config --libs minizip zlib)"
 # fallback entre mídias + reinício, saves antigos, corrompidos, falha de leitura, cartão cheio
 cc -std=gnu11 -D_EE -Imocks -I../Fonte/ps2 $P save_midias.c -Wl,--wrap=fopen $L -o /tmp/smw-save-midias && /tmp/smw-save-midias
+# log do console (SMW_LOG.TXT): pendrive, Memory Card pela ISO, pendrive recusando, memória cheia
+cc -std=gnu11 -D_EE -Imocks -I../Fonte/ps2 $P registro.c -Wl,--wrap=fopen $L -o /tmp/smw-registro && /tmp/smw-registro
 # ícone do save e arquivos antigos com permissões erradas
 cc -std=gnu11 -D_EE -Imocks -I../Fonte/ps2 $P memory_card_icon.c $L -o /tmp/smw-icone && /tmp/smw-icone
 # abertura/gravação de um arquivo no MCSERV (sequência de chamadas)
@@ -169,7 +172,7 @@ Regressão do Palácio Amarelo com o motor do jogo (precisa da sua cópia: crie 
 cd ..
 cc -O1 -std=gnu11 -D_EE -fno-strict-aliasing -fwrapv -ffunction-sections -fdata-sections -Wl,--gc-sections \
    -Itestes/mocks -IFonte/engine -IFonte/engine/src -IFonte/ps2 $(pkg-config --cflags minizip zlib) \
-   $(find Fonte/engine/src -name '*.c') Fonte/ps2/game.c testes/palacio_amarelo.c \
+   $(find Fonte/engine/src -name '*.c') Fonte/ps2/game.c Fonte/ps2/registro.c testes/palacio_amarelo.c \
    -Wl,--wrap=fopen $(pkg-config --libs minizip zlib) -o /tmp/smw-palacio
 /tmp/smw-palacio /caminho/da/pasta/com/o/jogo/
 ```

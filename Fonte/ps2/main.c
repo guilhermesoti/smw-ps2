@@ -1,6 +1,7 @@
 #include "files.h"
 #include "formato.h"
 #include "intro.h"
+#include "registro.h"
 #include "src/ptbr.h"
 #include <audsrv.h>
 #include <debug.h>
@@ -19,7 +20,7 @@
 #include <timer.h>
 #include <unistd.h>
 
-#define SMW_VERSAO "0.13.3"
+#define SMW_VERSAO "0.13.4"
 
 #define DECLARE_DRIVER(n) extern unsigned char n##_irx[]; extern unsigned int size_##n##_irx
 DECLARE_DRIVER(bdm);
@@ -73,7 +74,8 @@ static struct {
 static void stop_with(const char *reason) {
   init_scr();
   scr_printf("RETROGAMES  |  SUPER MARIO WORLD  |  PS2 v" SMW_VERSAO "\n\n%s\n", reason);
-  printf("SMW: %s\n", reason);
+  smw_log("ERRO: %s", reason);
+  smw_log_grava();
   for (;;) SleepThread();
 }
 
@@ -85,18 +87,33 @@ static bool load_driver(void *image, unsigned int size, const char *name) {
   /* A removable resident module is also ready to use (IOP modload >= 1.3). */
   if (id >= 0 && (status == 0 || status == 2)) return true;
   if (SifSearchModuleByName(name) > 0) return true;
-  printf("SMW: %s: id %d, status %d\n", name, id, status);
+  smw_log("IOP: %s nao carregou (id %d, status %d)", name, id, status);
   return false;
 }
 #define LOAD(n) load_driver(n##_irx, size_##n##_irx, #n)
 
 static bool start_audio(void) {
-  if (SifLoadModule("rom0:LIBSD", 0, NULL) < 0 && !LOAD(freesd)) return false;
-  if (!LOAD(audsrv) || audsrv_init() != 0) return false;
+  bool libsd = SifLoadModule("rom0:LIBSD", 0, NULL) >= 0;
+  if (!libsd && !LOAD(freesd)) return false;
+  if (!LOAD(audsrv)) return false;
+  int r = audsrv_init();
+  if (r != 0) { smw_log("Som: audsrv_init devolveu %d", r); return false; }
   struct audsrv_fmt_t fmt = {.freq = 32000, .bits = 16, .channels = 2};
-  if (audsrv_set_format(&fmt) != 0 || audsrv_set_volume(MAX_VOLUME) != 0) return false;
+  if ((r = audsrv_set_format(&fmt)) != 0 || (r = audsrv_set_volume(MAX_VOLUME)) != 0) {
+    smw_log("Som: formato ou volume recusado (%d)", r);
+    return false;
+  }
   audio_capacity = audsrv_available();  /* empty ring = its capacity */
+  smw_log("Som: %s + audsrv, buffer de %d bytes", libsd ? "LIBSD da BIOS" : "freesd embutido",
+          audio_capacity);
   return audio_capacity >= SMW_MAX_SAMPLES * 4 * 2;
+}
+
+/* While the log file is written the game stops for a moment; audsrv would
+   keep replaying its ring buffer, so the sound is muted until the next
+   audsrv_play_audio. */
+static void som_mudo(void) {
+  if (sound) audsrv_stop_audio();
 }
 
 static void start_drivers(bool from_disc) {
@@ -115,8 +132,11 @@ static void start_drivers(bool from_disc) {
     bool fat = LOAD(bdmfs_fatfs);
     bool usb = LOAD(usbd);
     bool storage = LOAD(usbmass_bd);
-    if (!(block && fat && usb && storage))
-      printf("SMW: USB: tentando os dispositivos ja montados.\n");
+    smw_log("USB: bdm %s, bdmfs_fatfs %s, usbd %s, usbmass_bd %s", block ? "ok" : "falhou",
+            fat ? "ok" : "falhou", usb ? "ok" : "falhou", storage ? "ok" : "falhou");
+    if (!(block && fat && usb && storage)) smw_log("USB: tentando os dispositivos ja montados.");
+  } else {
+    smw_log("USB: nao carregado (jogo aberto pela ISO; o pendrive fica com o OPL)");
   }
   /* Controller and memory card drivers: the console's own BIOS modules
      first, exactly like commercial games load them. OPL's ISO mode is made
@@ -144,12 +164,33 @@ static void start_drivers(bool from_disc) {
     cards = cards && LOAD(mcserv);
     card_drivers = "embutidos";
   }
+  smw_log("Controle e Memory Card: drivers %s, drivers do cartao %s", card_drivers,
+          cards ? "ok" : "falharam");
   if (padInit(0) < 0) stop_with("Falha ao iniciar o controle.");
   for (int i = 0; i < 2; ++i) pad_open[i] = padPortOpen(i, 0, pad_buf[i]) != 0;
-  cards = cards && mcInit(MC_TYPE_XMC) >= 0;
+  smw_log("Controle: porta 1 %s, porta 2 %s", pad_open[0] ? "aberta" : "falhou",
+          pad_open[1] ? "aberta" : "falhou");
+  if (cards) {
+    int r = mcInit(MC_TYPE_XMC);
+    if (r < 0) smw_log("Memory Card: mcInit devolveu %d", r);
+    cards = r >= 0;
+  }
   smw_enable_memory_card(cards);
 
   sound = start_audio();
+  if (!sound) smw_log("Som: indisponivel, continuando sem som.");
+}
+
+/* BIOS version (for example 0220HD20060905), to know which console made the log. */
+static void log_console(void) {
+  char ver[32] = "";
+  FILE *f = fopen("rom0:ROMVER", "r");
+  if (f) {
+    if (!fgets(ver, sizeof(ver), f)) ver[0] = '\0';
+    fclose(f);
+  }
+  ver[strcspn(ver, "\r\n")] = '\0';
+  smw_log("Console: ROMVER %s", ver[0] ? ver : "(nao foi lido)");
 }
 
 /* The input word uses SNES serial order, bit 0 = B and bit 11 = R. */
@@ -201,6 +242,16 @@ extern unsigned char msx[];  /* PS2SDK libdebug 8x8 font */
    compat: the old widths (512, or 640 in 480p) for a TV that does not show
    1280. */
 enum { VIDEO_AJUSTES = 100 };
+
+static const char *nome_video(int modo) {
+  switch (modo) {
+  case SMW_VIDEO_240P: return "240p";
+  case SMW_VIDEO_480P: return "480p";
+  case SMW_VIDEO_480I: return "480i";
+  case VIDEO_AJUSTES: return "AJUSTES (480i)";
+  default: return "?";
+  }
+}
 
 static void video_abre(int modo, bool compat) {
   static bool dma_ready;
@@ -261,6 +312,9 @@ static void video_abre(int modo, bool compat) {
   video.modo = modo;
   video.p480 = modo == SMW_VIDEO_480P;
   video.compat = compat;
+  smw_log("GS: %s, quadro %dx%d de %d bits, MAGH %d MAGV %d, DW %d DH %d, inicio X %d Y %d",
+          nome_video(modo), gs->Width, gs->Height, gs->PSM == GS_PSM_CT16 ? 16 : 32,
+          gs->MagH, gs->MagV, gs->DW, gs->DH, gs->StartX, gs->StartY);
 }
 
 /* Menus (carregando, AJUSTES, "A IMAGEM APARECEU?"): the IOP side of
@@ -394,17 +448,25 @@ static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
   uint16_t pressed = raw & ~*previous;
   *previous = raw;
   if ((raw & (PAD_L2 | PAD_R2)) != (PAD_L2 | PAD_R2)) return game;
-  if (pressed & PAD_SQUARE) video.scanlines = !video.scanlines;
+  if (pressed & PAD_SQUARE) {
+    video.scanlines = !video.scanlines;
+    smw_log("L2+R2+QUADRADO: scanlines %s", video.scanlines ? "ligadas" : "desligadas");
+  }
   if (pressed & PAD_CIRCLE) {
     video.suave = (video.suave + 1) % 3;
     opcoes.suave = video.suave;
     smw_options_changed(&opcoes);  /* saved with the next game save */
+    smw_log("L2+R2+CIRCULO: suavizacao %s", video.suave == 0 ? "desligada" : video.suave == 1 ? "media" : "forte");
   }
-  if (pressed & PAD_TRIANGLE) perf.on = !perf.on, perf.text[0] = 0;
+  if (pressed & PAD_TRIANGLE) {
+    perf.on = !perf.on, perf.text[0] = 0;
+    smw_log("L2+R2+TRIANGULO: medidor %s", perf.on ? "ligado" : "desligado");
+  }
   if (pressed & PAD_CROSS) {
     set_aspect(!video.wide);
     opcoes.tela = video.wide;
     smw_options_changed(&opcoes);  /* fica gravado junto com o proximo save */
+    smw_log("L2+R2+X: tela %s", video.wide ? "16:9" : "4:3");
   }
   return 0;
 }
@@ -451,8 +513,14 @@ static uint32_t measure_field(void) {
   uint32_t start = cpu_ticks();
   for (int i = 0; i < 16; ++i) gsKit_vsync_wait();
   uint32_t field = (cpu_ticks() - start) / 16;
+  unsigned hz100 = field ? (unsigned)(29491200000ull / field) : 0;
+  smw_log("TV: um quadro = %lu ciclos do EE (%u.%02u por segundo)", (unsigned long)field,
+          hz100 / 100, hz100 % 100);
   /* 294.912 MHz / 59.83 Hz (NTSC 240p); used if the measure looks wrong. */
-  if (field < 4000000 || field > 6500000) field = 4929000;
+  if (field < 4000000 || field > 6500000) {
+    field = 4929000;
+    smw_log("TV: medida fora do normal; usando 59.83 por segundo");
+  }
   return field;
 }
 
@@ -480,11 +548,12 @@ static int outro_video(int v, int dir) {
 
 /* Tela AJUSTES. contagem: comeca sozinha em 5 s (ajustes ja salvos) ate o
    jogador apertar um botao. Volta com X ou START (ou no fim da contagem). */
-static void tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const char *situacao) {
+static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const char *situacao) {
   Ajustes a = {contagem ? AJUSTE_JOGAR : AJUSTE_VIDEO, o->video, o->tela, o->suave, o->idioma,
                -1, aviso, situacao};
   unsigned held = botoes();
   int saindo = -1;
+  bool sozinho = false;
   for (int frame = 0;; ++frame) {
     unsigned agora = botoes(), apertou = agora & ~held;
     held = agora;
@@ -505,7 +574,7 @@ static void tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const 
         smw_blip(sound);
       }
     }
-    if (saindo < 0 && contagem && frame >= 5 * 60) saindo = frame;
+    if (saindo < 0 && contagem && frame >= 5 * 60) saindo = frame, sozinho = true;
     a.segundos = contagem ? 5 - frame / 60 : -1;
     formato_ajustes(quadro, msx, &a, frame);
     video.suave = a.suave;  /* the screen itself shows the smoothing */
@@ -517,6 +586,7 @@ static void tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const 
     mostra_quadro(bright < 0 ? 0 : bright);
   }
   o->video = a.video, o->tela = a.tela, o->suave = a.suave, o->idioma = a.idioma;
+  return sozinho;
 }
 
 /* No modo novo: X ou START em 10 s confirma que a TV mostra a imagem. */
@@ -525,11 +595,26 @@ static bool confirma_video(int idioma) {
   for (int frame = 0; frame < 10 * 60; ++frame) {
     unsigned agora = botoes(), apertou = agora & ~held;
     held = agora;
-    if (frame > 20 && (apertou & (PAD_CROSS | PAD_START))) return true;
+    if (frame > 20 && (apertou & (PAD_CROSS | PAD_START))) {
+      smw_log("Video: confirmado pelo jogador em %d.%d s", frame / 60, frame % 60 / 6);
+      return true;
+    }
     formato_confirma(quadro, msx, video.modo, idioma, 10 - frame / 60, frame);
     mostra_quadro(frame < 15 ? frame * 128 / 15 : 128);
   }
+  smw_log("Video: sem resposta em 10 s");
   return false;
+}
+
+/* "tela=4:3 video=240p suavizacao=nao idioma=pt saida=1280"; "-" = sem valor. */
+static void texto_opcoes(const SmwOptions *o, char *out, size_t size) {
+  static const char *const suaves[] = {"nao", "media", "forte"};
+  snprintf(out, size, "tela=%s video=%s suavizacao=%s idioma=%s saida=%s",
+           o->tela < 0 ? "-" : o->tela ? "16:9" : "4:3",
+           o->video < 0 ? "-" : nome_video(o->video),
+           o->suave < 0 || o->suave > 2 ? "-" : suaves[o->suave],
+           o->idioma < 0 ? "-" : o->idioma ? "en" : "pt",
+           o->compat < 0 ? "-" : o->compat ? "512" : "1280");
 }
 
 static bool mesmas_opcoes(const SmwOptions *a, const SmwOptions *b) {
@@ -541,18 +626,29 @@ int main(int argc, char **argv) {
   char folder[SMW_PATH] = "", actual[SMW_PATH] = "", report[1024], msg[256];
   if (argc && argv && argv[0]) smw_boot_folder(argv[0], folder);
   bool from_disc = smw_path_is_disc(folder);
+  smw_log_inicia(folder);
+  smw_log_antes_de_gravar(som_mudo);
+  smw_log("Super Mario World PS2 v" SMW_VERSAO " - RetroGames");
+  smw_log("ELF: %s (%s)", argc && argv && argv[0] ? argv[0] : "(sem nome)",
+          from_disc ? "aberto pela ISO" : "aberto como aplicativo");
   video_abre(VIDEO_AJUSTES, false);
   carregando(from_disc ? "Controles e Memory Card..." : "Pendrive, controles e Memory Card...", 1);
   start_drivers(from_disc);
-  if (!sound) printf("SMW: audio indisponivel, continuando.\n");
+  log_console();
   carregando("Procurando o jogo...", 2);
   uint8_t *rom = NULL;
   uint32_t crc = 0;
   RomResult result = ROM_MISSING;
+  unsigned busca = smw_log_ms();
+  int tentativas = 0;
   for (int i = 0; i < 25 && result == ROM_MISSING; ++i) {
+    ++tentativas;
     result = smw_find_rom(folder, &rom, actual, &crc);
     if (result == ROM_MISSING) usleep(200000);
   }
+  if (result == ROM_GOOD)
+    smw_log("Jogo: %s (CRC32 %08lX), %d tentativa(s), %u ms", actual, (unsigned long)crc,
+            tentativas, smw_log_ms() - busca);
   if (result == ROM_MISSING)
     stop_with("Coloque Super Mario World (USA).zip ou SMW.SFC\nem APPS/SMW no pendrive FAT32 e abra o ELF de novo.");
   if (result != ROM_GOOD) {
@@ -571,9 +667,9 @@ int main(int argc, char **argv) {
   smw_start(rom, pixels);
   free(rom);
   smw_storage_report(report, sizeof(report));
-  printf("SMW: drivers de controle e Memory Card: %s\n%s", card_drivers, report);
+  smw_log("%s", report);
   smw_load_report(report, sizeof(report));
-  printf("SMW: %sNovos saves vao para: %s\n", report, smw_save_location());
+  smw_log("%sNovos saves vao para: %s", report, smw_save_location());
   carregando("Pronto!", 4);
 
   /* Ajustes: o padrao, depois o SMW.CFG (Gravador no PC) e por cima o
@@ -582,7 +678,11 @@ int main(int argc, char **argv) {
   SmwOptions cfg, salvo;
   smw_read_config(&cfg);
   smw_options_clear(&salvo);
-  smw_read_saved_options(&salvo);
+  bool tem_opt = smw_read_saved_options(&salvo);
+  texto_opcoes(&cfg, msg, sizeof(msg));
+  smw_log("SMW.CFG (Gravador): %s", msg);
+  texto_opcoes(&salvo, msg, sizeof(msg));
+  smw_log("SMW.OPT (escolha no PS2): %s", tem_opt ? msg : "nao existe");
   opcoes = (SmwOptions){0, SMW_VIDEO_240P, 0, 0, 0};
   const SmwOptions *fontes[2] = {&cfg, &salvo};
   for (int i = 0; i < 2; ++i) {
@@ -602,7 +702,9 @@ int main(int argc, char **argv) {
   bool contagem = conhecido;
   for (;;) {
     video.suave = opcoes.suave;
-    tela_ajustes(&opcoes, contagem, aviso, situacao);
+    bool sozinho = tela_ajustes(&opcoes, contagem, aviso, situacao);
+    texto_opcoes(&opcoes, msg, sizeof(msg));
+    smw_log("AJUSTES: %s (%s)", msg, sozinho ? "contagem de 5 s" : "o jogador escolheu");
     contagem = false;
     aviso = NULL;
     /* O modo que ja foi confirmado nesta TV entra direto; um modo novo
@@ -610,31 +712,47 @@ int main(int argc, char **argv) {
        a largura antiga (512, ou 640 no 480p) antes de voltar para os
        ajustes. */
     if (conhecido && opcoes.video == salvo.video) {
+      smw_log("Video: %s ja confirmado nesta TV, entra direto", nome_video(opcoes.video));
       video_abre(opcoes.video, opcoes.compat == 1);
       break;
     }
     opcoes.compat = 0;
+    /* Gravado antes de trocar: se a TV ficar preta e o console for
+       desligado, o log mostra o que foi tentado. */
+    smw_log("Video: tentando %s com %d pontos por linha", nome_video(opcoes.video), 1280);
+    smw_log_grava();
     video_abre(opcoes.video, false);
     if (confirma_video(opcoes.idioma)) break;
+    smw_log("Video: tentando %s com a largura antiga (%d pontos)", nome_video(opcoes.video),
+            opcoes.video == SMW_VIDEO_480P ? 640 : 512);
+    smw_log_grava();
     video_abre(opcoes.video, true);
     if (confirma_video(opcoes.idioma)) {
       opcoes.compat = 1;
       break;
     }
-    static const char *const nomes[] = {"240p", "480p", "480i"};
+    smw_log("Video: a TV nao mostrou o %s; volta para os ajustes", nome_video(opcoes.video));
     snprintf(aviso_texto, sizeof(aviso_texto),
              opcoes.idioma == 1 ? "The TV did not show %s. Pick another." : "A TV não mostrou o %s. Escolha outro.",
-             nomes[opcoes.video]);
+             nome_video(opcoes.video));
     aviso = aviso_texto;
     video_abre(VIDEO_AJUSTES, false);
   }
-  if (!conhecido || !mesmas_opcoes(&opcoes, &inicio)) smw_save_options(&opcoes);
+  smw_log("Video em uso: %s com %d pontos por linha%s", nome_video(opcoes.video), gs->Width,
+          opcoes.compat == 1 ? " (largura antiga: saida=512 no SMW.OPT)" : "");
+  if (!conhecido || !mesmas_opcoes(&opcoes, &inicio))
+    smw_log("SMW.OPT: %s", smw_save_options(&opcoes) ? "gravado" : "nao gravado (sem lugar para salvar)");
+  else
+    smw_log("SMW.OPT: sem mudanca");
+  smw_log_grava();
   g_ptbr = opcoes.idioma != 1;
   video.suave = opcoes.suave;
 
   smw_intro(gs, video.p480, sound, SMW_VERSAO, video.suave);
   set_aspect(opcoes.tela == 1);
   const uint32_t field = measure_field();
+  smw_log("Jogo comecou.");
+  smw_log_fixa();
   uint32_t last = cpu_ticks();
   int pending = 0, debt = 0;
   for (;;) {

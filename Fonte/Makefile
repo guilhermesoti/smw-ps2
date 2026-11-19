@@ -6,7 +6,8 @@ GSKIT ?= $(PS2DEV)/gsKit
 include $(PS2SDK)/samples/Makefile.pref
 OUT := build
 ENGINE := $(wildcard engine/src/*.c engine/src/snes/*.c)
-PORT := ps2/main.c ps2/game.c ps2/files.c ps2/intro.c ps2/formato.c
+# Todos os .c de ps2/ (um arquivo novo entra sozinho).
+PORT := $(sort $(wildcard ps2/*.c))
 DRIVERS := bdm bdmfs_fatfs usbd usbmass_bd sio2man padman mcman mcserv freesd audsrv
 OBJECTS := $(addprefix $(OUT)/,$(ENGINE:.c=.o) $(PORT:.c=.o))
 OBJECTS += $(addprefix $(OUT)/irx/,$(addsuffix .o,$(DRIVERS)))

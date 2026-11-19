@@ -7,6 +7,14 @@ proporção (a imagem que o GS do PS2 manda para a TV), Memory Card novo a
 cada rodada (o jogo sempre começa na tela AJUSTES).
 
     python3 pcsx2_auto.py --iso JOGO.iso --saida PASTA --roteiro ROTEIRO
+    python3 pcsx2_auto.py --elf SMW.ELF --saida PASTA --roteiro ROTEIRO
+
+--elf roda o ELF direto, com o HostFS ligado (host: = pasta do ELF; o jogo
+precisa estar nessa pasta). --cartao ARQUIVO copia o Memory Card 1
+(Mcd001.ps2) para ARQUIVO no fim, para ler o que o jogo gravou (por exemplo
+com o mymcplus: SMWPS2/SMW_LOG.TXT). --cartao-inicial ARQUIVO usa uma cópia
+desse cartão no lugar do novo (o PCSX2 cria o cartão novo sem formatação;
+um formatado sai com "mymcplus cartao.ps2 format").
 
 ROTEIRO é uma lista de passos separados por vírgula:
     esperar:SEG    espera SEG segundos
@@ -42,7 +50,7 @@ TECLAS = {"cima": "Up", "baixo": "Down", "esquerda": "Left", "direita": "Right",
           "foto": "F8"}
 
 
-def preparar_config(base: Path) -> Path:
+def preparar_config(base: Path, hostfs=False) -> Path:
     """Copia o PCSX2.ini do usuário e troca só o necessário para o teste."""
     cfg = base / "config"
     inis = cfg / "PCSX2/inis"
@@ -58,7 +66,7 @@ def preparar_config(base: Path) -> Path:
                "SetupWizardIncomplete": "false", "StartPaused": "false"},
         "Folders": {"Bios": str(BIOS), "MemoryCards": str(base / "memcards"),
                     "Snapshots": str(base / "snaps")},
-        "EmuCore": {"EnableFastBoot": "true", "HostFs": "false"},
+        "EmuCore": {"EnableFastBoot": "true", "HostFs": "true" if hostfs else "false"},
         "EmuCore/GS": {"Renderer": "13", "ScreenshotSize": "2", "ScreenshotFormat": "0",
                        "deinterlace_mode": "1", "linear_present_mode": "0",
                        "upscale_multiplier": "1", "OrganizeScreenshotsByGame": "false"},
@@ -94,12 +102,16 @@ def abrir_tela():
     return f":{numero}", p
 
 
+# Começo do título da janela de jogo: "SMWG..." (código do disco) ou o nome do ELF.
+TITULOS = ["SMWG"]
+
+
 def janela_pcsx2(d):
-    """A janela de jogo do PCSX2: a de título "SMWG..." (o código do disco)."""
+    """A janela de jogo do PCSX2 (título em TITULOS)."""
     for w in d.screen().root.query_tree().children:
         try:
             nome = w.get_wm_name() or ""
-            if nome.startswith("SMWG") and w.get_attributes().map_state == X.IsViewable:
+            if nome.startswith(tuple(TITULOS)) and w.get_attributes().map_state == X.IsViewable:
                 return w
         except Exception:
             pass
@@ -163,13 +175,26 @@ def ler_roteiro(texto):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--iso", required=True, type=Path)
+    origem = ap.add_mutually_exclusive_group(required=True)
+    origem.add_argument("--iso", type=Path)
+    origem.add_argument("--elf", type=Path)
+    ap.add_argument("--cartao", type=Path)
+    ap.add_argument("--cartao-inicial", type=Path)
     ap.add_argument("--saida", required=True, type=Path)
     ap.add_argument("--roteiro", required=True)
     ap.add_argument("--trabalho", type=Path, default=Path("/tmp/smw_teste_video"))
     a = ap.parse_args()
-    if not a.iso.is_file():
-        raise SystemExit(f"ISO não encontrada: {a.iso}")
+    jogo = (a.iso or a.elf).resolve()
+    if not jogo.is_file():
+        raise SystemExit(f"Arquivo não encontrado: {jogo}")
+    if a.elf:
+        TITULOS.append(jogo.name)
+    if a.cartao and a.cartao.exists():
+        raise SystemExit(f"O arquivo do cartão já existe: {a.cartao}")
+    if a.cartao and not a.cartao.resolve().parent.is_dir():
+        raise SystemExit(f"A pasta do arquivo do cartão não existe: {a.cartao.parent}")
+    if a.cartao_inicial and not a.cartao_inicial.is_file():
+        raise SystemExit(f"Cartão inicial não encontrado: {a.cartao_inicial}")
     passos = ler_roteiro(a.roteiro)
     # As capturas desta rodada vão para uma pasta nova; capturas velhas não se misturam.
     if a.saida.exists() and any(a.saida.iterdir()):
@@ -186,7 +211,9 @@ def main():
     # o TemporaryDirectory apaga só ela, mesmo se algo der erro.
     with log, tempfile.TemporaryDirectory(prefix="rodada_", dir=a.trabalho) as tmp:
         base = Path(tmp)
-        cfg = preparar_config(base)
+        cfg = preparar_config(base, hostfs=a.elf is not None)
+        if a.cartao_inicial:
+            shutil.copyfile(a.cartao_inicial, base / "memcards" / "Mcd001.ps2")
         tela, xvfb = abrir_tela()
         p = None
         try:
@@ -196,7 +223,8 @@ def main():
                        LANG="C.UTF-8", LC_ALL="C.UTF-8",
                        VK_ICD_FILENAMES="/usr/share/vulkan/icd.d/lvp_icd.json",
                        VK_DRIVER_FILES="/usr/share/vulkan/icd.d/lvp_icd.json")
-            p = subprocess.Popen([str(PCSX2), "-batch", "-nogui", "-fastboot", "--", str(a.iso)],
+            origem = ["-elf", str(jogo)] if a.elf else ["--", str(jogo)]
+            p = subprocess.Popen([str(PCSX2), "-batch", "-nogui", "-fastboot", *origem],
                                  env=env, stdout=log, stderr=subprocess.STDOUT)
             d = display.Display(tela)
             t0 = time.time()
@@ -240,6 +268,29 @@ def main():
             except subprocess.TimeoutExpired:
                 xvfb.kill()
                 xvfb.wait()
+            # Log do PCSX2 (inclui o printf do jogo: "SMW: ...").
+            emulog = cfg / "PCSX2" / "logs" / "emulog.txt"
+            if emulog.is_file():
+                shutil.copyfile(emulog, a.saida / "emulog.txt")
+            cartao = base / "memcards" / "Mcd001.ps2"
+            if a.cartao and cartao.is_file():
+                # Com o PCSX2 fechado o cartão já foi gravado no disco.
+                # Copia para um temporário na mesma pasta e só então publica com
+                # os.link, que não sobrescreve: nem cópia pela metade, nem duas
+                # rodadas gravando o mesmo arquivo.
+                parcial = a.cartao.with_name(a.cartao.name + f".parcial{os.getpid()}")
+                try:
+                    with open(cartao, "rb") as origem_cartao, open(parcial, "xb") as destino:
+                        shutil.copyfileobj(origem_cartao, destino)
+                    os.link(parcial, a.cartao)
+                except OSError as e:
+                    print(f"  ! não consegui guardar o cartão em {a.cartao}: {e}", file=sys.stderr)
+                    falhas += 1
+                finally:
+                    parcial.unlink(missing_ok=True)
+            elif a.cartao:
+                print(f"  ! o PCSX2 não criou {cartao.name}", file=sys.stderr)
+                falhas += 1
     if falhas:
         raise SystemExit(f"{falhas} falha(s) nesta rodada")
 

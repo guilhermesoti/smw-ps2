@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.13.3 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
+Retrogames Patos de Minas | v0.13.4 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
 
 O QUE VOCÊ PRECISA
 
@@ -216,6 +216,29 @@ Dá para editar no Bloco de Notas. O que foi escolhido no próprio PS2
 a tela AJUSTES começa em 240p, 4:3, suavização desligada e português, e
 espera você apertar X.
 
+LOG DO CONSOLE (SMW_LOG.TXT)
+
+O jogo anota o que acontece num texto, SMW_LOG.TXT, refeito a cada vez
+que ele abre. Se algo der errado, mande esse arquivo junto com a
+descrição do problema.
+- Pelo ELF: em APPS/SMW no pendrive, ao lado do SMW.ELF. Se o pendrive
+  recusar a gravação, ele vai para o Memory Card, como o save.
+- Pela ISO: no Memory Card, pasta SMWPS2 (o pendrive fica com o OPL).
+  Para levar para o computador, copie mc0:/SMWPS2/SMW_LOG.TXT (Memory
+  Card 1; mc1: é o cartão 2) para o pendrive com o wLaunchELF.
+
+O que fica anotado: a versão do jogo e a da BIOS do console (ROMVER),
+os drivers carregados, onde o jogo e o save foram achados, a escolha
+da tela AJUSTES, cada vídeo testado (com a largura usada: 1280 pontos
+ou a antiga, 512 / 640 no 480p) e se você confirmou a imagem, os saves
+(onde gravou, ou o código do erro) e os erros que param o jogo.
+
+Cada gravação do arquivo para o jogo por um instante (o som fica mudo
+nessa hora). Por isso ele é gravado só antes de testar um vídeo novo,
+depois de confirmar o vídeo, no primeiro save, em cada save com erro e
+quando um erro para o jogo. Os saves que dão certo depois do primeiro
+ficam anotados e entram no arquivo na próxima vez que ele for gravado.
+
 SOBRE ESTA VERSÃO
 
 A lógica do jogo foi compilada em C para o Emotion Engine do PS2. Os
@@ -223,6 +246,11 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.13.4 (beta):
+- Log do console, SMW_LOG.TXT (veja LOG DO CONSOLE). Entre outras
+  coisas, ele mostra se o vídeo ficou com 1280 pontos por linha ou com
+  a largura antiga.
 
 Mudanças da v0.13.3 (beta):
 - 480p com 1280 pontos por linha: antes, com 640, cada pixel do SNES

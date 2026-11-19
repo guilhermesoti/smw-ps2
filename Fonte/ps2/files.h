@@ -41,4 +41,15 @@ bool smw_read_saved_options(SmwOptions *o);
 bool smw_save_options(const SmwOptions *o);
 /* Troca feita no jogo (L2+R2+X, L2+R2+CIRCULO): vai junto com o proximo save. */
 void smw_options_changed(const SmwOptions *o);
+
+/* SMW_LOG.TXT (registro.c). Lugares: 0 = a pasta do jogo (pendrive; antes
+   de achar o jogo, a pasta do ELF; pela ISO nao ha), 1 = Memory Card 1,
+   2 = Memory Card 2. smw_log_order: a ordem de tentativa (pasta, o cartao do
+   save, o outro), sem ler nada. smw_log_place: o caminho do lugar id, se ele
+   estiver pronto (confere o cartao uma vez). */
+void smw_log_order(int order[3]);
+bool smw_log_place(const char *boot, int id, char path[SMW_PATH]);
+/* Grava o arquivo inteiro. Falhas aqui nao entram no ERRO AO SALVAR. Em
+   qualquer pasta do Memory Card so grava se sobrar a reserva do save. */
+bool smw_write_log(const char *path, const char *text, int size);
 #endif

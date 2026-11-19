@@ -17,7 +17,8 @@ from tempfile import TemporaryDirectory
 def compilar(pasta, testes, cc, sanitizar):
     fonte = testes.parent / "Fonte"
     unidades = sorted((fonte / "engine" / "src").rglob("*.c"))
-    unidades += [fonte / "ps2" / "files.c", fonte / "ps2" / "game.c", testes / "salas.c"]
+    unidades += [fonte / "ps2" / "files.c", fonte / "ps2" / "game.c", fonte / "ps2" / "registro.c",
+                 testes / "salas.c"]
     cflags = ["-O1", "-g", "-std=gnu11", "-fno-strict-aliasing", "-fwrapv",
               "-ffunction-sections", "-fdata-sections"]
     if sanitizar:
