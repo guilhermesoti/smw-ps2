@@ -5,7 +5,8 @@ do SNES (em pontos do PS2), bordas pretas e linhas repetidas.
     python3 analisar.py PASTA_RESULTADOS
 
 Para cada modo, olha a tela "A IMAGEM APARECEU?" e os quadros do jogo
-(4_jogo_*): o primeiro quadro do jogo que tenha conteúdo (não preto).
+(4_jogo_*): os dois últimos quadros do jogo que tenham conteúdo (não pretos),
+quando a tela de título já está parada.
 """
 import sys
 from collections import Counter
@@ -39,7 +40,7 @@ def linhas_iguais(img):
     px = img.load()
     iguais = 0
     for y in range(0, h - 1, 2):
-        if all(px[x, y] == px[x, y + 1] for x in range(0, w, 3)):
+        if all(px[x, y] == px[x, y + 1] for x in range(w)):
             iguais += 1
     return iguais, h // 2
 
