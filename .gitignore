@@ -29,3 +29,6 @@ node_modules/
 /Biblioteca/
 /Tradução ptbr/
 /assets/
+
+# Revisões do Gemini e do Codex (~/PROJETOS/revisar.sh)
+revisoes/
