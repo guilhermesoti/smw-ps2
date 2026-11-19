@@ -4,7 +4,6 @@
 # modos: 240p 240p_169 480i 480i_169 480p 480p_169 240p_media 240p_forte
 set -u
 ISO="$1"; SAIDA="$2"; shift 2
-mkdir -p "$SAIDA"
 AQUI="$(dirname "$0")"
 [ $# -eq 0 ] && set -- 240p 240p_169 480i 480i_169 480p 480p_169
 for modo in "$@"; do
@@ -13,6 +12,7 @@ for modo in "$@"; do
     *) echo "modo desconhecido: $modo" >&2; exit 2 ;;
   esac
 done
+mkdir -p "$SAIDA"
 falhas=0
 for modo in "$@"; do
   case "$modo" in
@@ -31,4 +31,7 @@ for modo in "$@"; do
   python3 -u "$AQUI/pcsx2_auto.py" --iso "$ISO" --saida "$SAIDA/$modo" --roteiro "$roteiro" \
     > "$SAIDA/$modo.txt" 2>&1 || { falhas=$((falhas + 1)); echo "   FALHOU (veja $SAIDA/$modo.txt)"; }
 done
-exit "$falhas"
+if [ "$falhas" -gt 0 ]; then
+  echo "$falhas modo(s) falharam" >&2
+  exit 1
+fi

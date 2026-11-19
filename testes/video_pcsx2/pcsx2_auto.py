@@ -78,23 +78,20 @@ def preparar_config(base: Path) -> Path:
 
 
 def abrir_tela():
-    """Abre um Xvfb num número de display livre (cada rodada tem o seu)."""
-    for n in range(77, 120):
-        if not Path(f"/tmp/.X11-unix/X{n}").exists() and not Path(f"/tmp/.X{n}-lock").exists():
-            tela = f":{n}"
-            p = subprocess.Popen(["Xvfb", tela, "-screen", "0", "1600x1000x24", "-nolisten", "tcp"],
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            for _ in range(50):
-                time.sleep(0.1)
-                try:
-                    display.Display(tela).close()
-                    return tela, p
-                except Exception:
-                    if p.poll() is not None:
-                        break
-            p.kill()
-            p.wait()
-    raise SystemExit("Não consegui abrir o Xvfb.")
+    """Abre um Xvfb e deixa ele mesmo escolher um display livre (-displayfd):
+    duas rodadas ao mesmo tempo nunca dividem a mesma tela."""
+    ler, escrever = os.pipe()
+    p = subprocess.Popen(["Xvfb", "-displayfd", str(escrever), "-screen", "0", "1600x1000x24",
+                          "-nolisten", "tcp"], pass_fds=(escrever,),
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    os.close(escrever)
+    with os.fdopen(ler) as f:
+        numero = f.readline().strip()
+    if not numero.isdigit():
+        p.kill()
+        p.wait()
+        raise SystemExit("Não consegui abrir o Xvfb.")
+    return f":{numero}", p
 
 
 def janela_pcsx2(d):
@@ -138,6 +135,32 @@ def foto(d, snaps: Path, saida: Path, nome: str):
     return False
 
 
+# Quantos argumentos cada passo do roteiro leva.
+ARGUMENTOS = {"esperar": 1, "tecla": 1, "foto": 1, "raiz": 1, "janelas": 0, "filme": 3}
+
+
+def ler_roteiro(texto):
+    passos = [passo.strip().split(":") for passo in texto.split(",") if passo.strip()]
+    for partes in passos:
+        nome, args = partes[0], partes[1:]
+        if nome not in ARGUMENTOS or len(args) != ARGUMENTOS[nome]:
+            raise SystemExit(f"Passo inválido no roteiro: {':'.join(partes)}")
+        if nome == "tecla" and args[0] not in TECLAS:
+            raise SystemExit(f"Tecla desconhecida: {args[0]}")
+        try:
+            if nome == "esperar":
+                ok = 0 <= float(args[0]) < 3600
+            elif nome == "filme":
+                ok = 0 < int(args[1]) <= 1000 and 0 <= float(args[2]) < 3600
+            else:
+                ok = all(args) and not any("/" in a or a.startswith(".") for a in args)
+        except ValueError:
+            ok = False
+        if not ok:
+            raise SystemExit(f"Passo inválido no roteiro: {':'.join(partes)}")
+    return passos
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--iso", required=True, type=Path)
@@ -147,40 +170,37 @@ def main():
     a = ap.parse_args()
     if not a.iso.is_file():
         raise SystemExit(f"ISO não encontrada: {a.iso}")
-    passos = [passo.strip().split(":") for passo in a.roteiro.split(",") if passo.strip()]
-    for partes in passos:
-        if partes[0] not in ("esperar", "tecla", "foto", "raiz", "janelas", "filme"):
-            raise SystemExit(f"Passo desconhecido no roteiro: {':'.join(partes)}")
-        if partes[0] == "tecla" and partes[1] not in TECLAS:
-            raise SystemExit(f"Tecla desconhecida: {partes[1]}")
-    # Pasta de trabalho exclusiva desta rodada (config, Memory Card, capturas).
-    a.trabalho.mkdir(parents=True, exist_ok=True)
-    base = Path(tempfile.mkdtemp(prefix="rodada_", dir=a.trabalho))
+    passos = ler_roteiro(a.roteiro)
     # As capturas desta rodada vão para uma pasta nova; capturas velhas não se misturam.
     if a.saida.exists() and any(a.saida.iterdir()):
         raise SystemExit(f"A pasta de saída já tem arquivos: {a.saida}")
     a.saida.mkdir(parents=True, exist_ok=True)
-    cfg = preparar_config(base)
-    falhas = 0
-    tela, xvfb = abrir_tela()
-    p = None
     try:
-        # Só o Vulkan por software (lavapipe): o Xvfb não tem DRI3 para a GPU, e com
-        # o lavapipe o PCSX2 apresenta o renderizador por software pelo OpenGL do Mesa.
-        env = dict(os.environ, DISPLAY=tela, XDG_CONFIG_HOME=str(cfg), QT_QPA_PLATFORM="xcb",
-                   LANG="C.UTF-8", LC_ALL="C.UTF-8",
-                   VK_ICD_FILENAMES="/usr/share/vulkan/icd.d/lvp_icd.json",
-                   VK_DRIVER_FILES="/usr/share/vulkan/icd.d/lvp_icd.json")
-        with open(a.saida / "pcsx2.log", "w") as log:
+        # Criação exclusiva: se outra rodada já pegou esta pasta, esta para aqui.
+        log = open(a.saida / "pcsx2.log", "x")
+    except FileExistsError:
+        raise SystemExit(f"Outra rodada já usa a pasta de saída: {a.saida}")
+    a.trabalho.mkdir(parents=True, exist_ok=True)
+    falhas = 0
+    # Pasta de trabalho exclusiva desta rodada (config, Memory Card, capturas);
+    # o TemporaryDirectory apaga só ela, mesmo se algo der erro.
+    with log, tempfile.TemporaryDirectory(prefix="rodada_", dir=a.trabalho) as tmp:
+        base = Path(tmp)
+        cfg = preparar_config(base)
+        tela, xvfb = abrir_tela()
+        p = None
+        try:
+            # Só o Vulkan por software (lavapipe): o Xvfb não tem DRI3 para a GPU, e com
+            # o lavapipe o PCSX2 apresenta o renderizador por software pelo OpenGL do Mesa.
+            env = dict(os.environ, DISPLAY=tela, XDG_CONFIG_HOME=str(cfg), QT_QPA_PLATFORM="xcb",
+                       LANG="C.UTF-8", LC_ALL="C.UTF-8",
+                       VK_ICD_FILENAMES="/usr/share/vulkan/icd.d/lvp_icd.json",
+                       VK_DRIVER_FILES="/usr/share/vulkan/icd.d/lvp_icd.json")
             p = subprocess.Popen([str(PCSX2), "-batch", "-nogui", "-fastboot", "--", str(a.iso)],
                                  env=env, stdout=log, stderr=subprocess.STDOUT)
             d = display.Display(tela)
             t0 = time.time()
             for partes in passos:
-                if p.poll() is not None:
-                    print("PCSX2 fechou antes do fim do roteiro", file=sys.stderr)
-                    falhas += 1
-                    break
                 if partes[0] == "esperar":
                     time.sleep(float(partes[1]))
                 elif partes[0] == "tecla":
@@ -189,8 +209,11 @@ def main():
                 elif partes[0] == "foto":
                     falhas += not foto(d, base / "snaps", a.saida, partes[1])
                 elif partes[0] == "raiz":
-                    subprocess.run(["import", "-display", tela, "-window", "root",
-                                    str(a.saida / f"{partes[1]}.png")])
+                    r = subprocess.run(["import", "-display", tela, "-window", "root",
+                                        str(a.saida / f"{partes[1]}.png")])
+                    if r.returncode != 0:
+                        print(f"  ! captura da tela inteira falhou: {partes[1]}", file=sys.stderr)
+                        falhas += 1
                 elif partes[0] == "janelas":
                     listar_janelas(d)
                 elif partes[0] == "filme":
@@ -198,21 +221,25 @@ def main():
                         falhas += not foto(d, base / "snaps", a.saida, f"{partes[1]}_{i:02d}")
                         time.sleep(float(partes[3]))
                 print(f"{time.time() - t0:6.1f}s  {':'.join(partes)}", flush=True)
-    finally:
-        if p is not None:
-            p.terminate()
+                # Confere depois de cada passo: se o PCSX2 caiu, a rodada falhou.
+                if p.poll() is not None:
+                    print("PCSX2 fechou antes do fim do roteiro", file=sys.stderr)
+                    falhas += 1
+                    break
+        finally:
+            if p is not None:
+                p.terminate()
+                try:
+                    p.wait(10)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                    p.wait()
+            xvfb.terminate()
             try:
-                p.wait(10)
+                xvfb.wait(5)
             except subprocess.TimeoutExpired:
-                p.kill()
-                p.wait()
-        xvfb.terminate()
-        try:
-            xvfb.wait(5)
-        except subprocess.TimeoutExpired:
-            xvfb.kill()
-            xvfb.wait()
-        shutil.rmtree(base, ignore_errors=True)
+                xvfb.kill()
+                xvfb.wait()
     if falhas:
         raise SystemExit(f"{falhas} falha(s) nesta rodada")
 
