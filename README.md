@@ -2,7 +2,7 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.13.5 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
+**Versão 0.13.6 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
 - Tela AJUSTES no começo: vídeo 240p (cabo AV, qualquer TV; o recomendado), 480i (só para TV que não mostra 240p) ou 480p (componente/HDMI), tela 4:3 ou 16:9, suavização (desligada, média, forte; desligada por padrão), scanlines (só no 480p; desligadas por padrão) e idioma. Vídeo novo só fica se você confirmar que a imagem apareceu.
@@ -32,7 +32,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.13.5 obtido com o ps2dev v2.0.0 foi `0a07bb488621fea9d070174e8518f550289716d388c67ad4978da74057311727`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.13.6 obtido com o ps2dev v2.0.0 foi `8bde9289877426f9ae1eed17a0a1e5582704d22df739d16a500672222ce18ebe`.
 
 ## Gravador SMW PS2 (programa no PC)
 
@@ -93,6 +93,19 @@ Copie `CD/SMWG_000.01.Super Mario World.iso` para a pasta `CD/` do pendrive e at
 | L2 + R2 + △ / □ / ○ | Medidor de desempenho / scanlines (480p) / suavização (desligada, média, forte) |
 
 ## Repetir o teste de regressão
+
+Todos os testes do PC de uma vez (cada um numa pasta temporária com uma cópia do jogo; no fim, um resumo com
+OK, FALHOU ou PULADO e a pasta com as saídas completas). Leva uns 5 minutos; `--rapido` pula as 235 salas e as
+telas do Gravador, `--so saves,largo_169` roda só os escolhidos e `--lista` mostra os nomes:
+
+```sh
+python3 testes/rodar_todos.py "/caminho/Super Mario World (USA).zip"
+```
+
+Os testes do Gravador usam o `APPS/SMW/SMW.ELF` (compile antes) e o Node; o núcleo também o `python3` com o
+`pycdlib`; as telas também o `puppeteer-core` (`NODE_PATH`) e um Chrome (`CHROME=`). O que faltar na máquina
+aparece como PULADO. Os programas compilados ficam numa pasta temporária apagada no fim; as saídas ficam em
+`/tmp/smw-testes-*`. Os comandos de cada teste, um por um:
 
 Em Linux x86-64, instale um compilador C, Python 3, `pkg-config` e os pacotes de desenvolvimento do zlib e do MiniZip clássico. Em Debian e Ubuntu, esses pacotes são `build-essential`, `pkg-config`, `zlib1g-dev` e `libminizip-dev`. Execute a partir da raiz, indicando o caminho para sua própria cópia.
 
@@ -195,6 +208,28 @@ cc -O1 -std=gnu11 -D_EE -fno-strict-aliasing -fwrapv -ffunction-sections -fdata-
 ```
 
 O ícone é gerado por `python3 Fonte/gerar_icone.py`, que reescreve `Fonte/ps2/smw_icon.h`.
+
+## Montar os pacotes de uma versão
+
+Com a pasta do projeto organizada (`Codigo`, `ROM`, `ELF OU ISO TESTE`, `Github`), o ELF da versão compilado em
+`APPS/SMW/SMW.ELF` e o commit feito, de dentro de `Codigo`:
+
+```sh
+python3 Fonte/fazer_pacotes.py --simular   # confere e mostra o que vai fazer
+python3 Fonte/fazer_pacotes.py
+```
+
+Ele confere a ROM (ZIP com o cartucho americano, CRC32 `B19ED489`, com as mesmas regras do carregador do jogo),
+a versão (`SMW_VERSAO`, `LEIA-ME.txt`, `README.md` e a que está dentro do ELF), o SHA-256 do ELF (tem de ser o
+que este README registra para a versão) e o git sem mudanças; monta numa pasta temporária o Gravador, o pacote
+do jogo, o do código (`git archive` do HEAD) e a ISO de teste (essa tem a ROM e fica só no PC); confere que
+nenhum pacote tem a ROM: arquivo com extensão de jogo, conteúdo igual ao da ROM (com ou sem cabeçalho), um
+pedaço dela de 8 KiB ou mais, a ROM em base64, ou qualquer disso dentro de ZIP, gzip, bzip2 ou xz (até 4
+níveis); o que não der para conferir (7z, RAR, arquivo grande demais) também para tudo. Só então copia cada
+arquivo para `ELF OU ISO TESTE` e `Github` (para um nome temporário, conferido, e troca todos de uma vez,
+voltando os antigos se uma troca falhar), move os pacotes da versão anterior para `Github/versoes-anteriores` e
+mostra o SHA-256 de tudo. Os arquivos de `ELF OU ISO TESTE` são substituídos pelos da versão nova; fora isso,
+não apaga nada. Se algo não bater, para antes de mexer nas pastas.
 
 ## Créditos
 

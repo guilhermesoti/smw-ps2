@@ -30,6 +30,20 @@ void LargoColunas(uint8 *esq, uint8 *dir) {
   *esq = *dir = g_largo;
   if (!g_largo)
     return;
+  /* Câmera parada na horizontal (sala sem rolagem no cabeçalho, luta do
+     Morton/Roy/Ludwig, camada 2 que cai): o original só mostra a tela da
+     câmera, e o Mario não passa dela. As rolagens automáticas da camada 1
+     (variável e regular: 1 e 0x0C) movem a câmera e ficam com as colunas.
+     No fim da fase o jogo também para a rolagem (caminhada até a pose de
+     vitória); ali a imagem fica como estava. */
+  enum { ROLAGEM_VARIAVEL = 0x01, ROLAGEM_REGULAR = 0x0C };  /* kProcessScrollSprites_Ptrs05BC87 */
+  uint8 automatica = l1_l2_scroll_spr_spriteid[0];
+  if (!flag_layer1_horiz_scroll_level_setting && automatica != ROLAGEM_VARIAVEL &&
+      automatica != ROLAGEM_REGULAR &&
+      !timer_end_level && !flag_show_victory_pose_during_level_end) {
+    *esq = *dir = 0;
+    return;
+  }
   int fim;
   if (misc_nmito_use_flag & 0x80)
     fim = 256;

@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.13.5 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
+Retrogames Patos de Minas | v0.13.6 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
 
 O QUE VOCÊ PRECISA
 
@@ -197,7 +197,8 @@ ou volte para 4:3 com L2 + R2 + CRUZ.
 - No começo e no fim de cada fase, o que fica fora dela aparece preto
   (o Mario não pode ir até lá). A faixa preta diminui aos poucos quando
   a câmera anda. Nas salas de uma tela só (casa do Yoshi, salas dos
-  chefes) a imagem fica como no 4:3.
+  chefes) e nas que a câmera não anda para os lados, a imagem fica como
+  no 4:3.
 - Título, menus, mapa e telas de transição: continuam em 4:3, com
   faixas pretas dos lados (o jogo não tem desenho além da borda nessas
   telas).
@@ -254,6 +255,12 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.13.6 (beta):
+- Tela 16:9: nas salas em que a câmera não anda para os lados (por
+  exemplo salas do castelo do Morton), as colunas extras mostravam um
+  pedaço da fase aonde o Mario não chega. Agora ficam pretas, como no
+  começo e no fim das fases. Nas fases que andam sozinhas nada mudou.
 
 Mudanças da v0.13.5 (beta):
 - Suavização mais nítida. Antes, o filtro lia o quadro meio ponto
