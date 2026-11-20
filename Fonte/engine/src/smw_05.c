@@ -2093,7 +2093,11 @@ void ShowCourseClearText() {  // 05cc66
   }
   ++pointer_current_overworld_process;
   timer_display_bonus_stars = 40;
-  LOBYTE(stripe_image_upload) = stripe_image_upload + 75;
+  /* v0.17: FASE COMPLETA! numa faixa a mais, no lugar do 0xFF (ptbr.c). O
+     0xFF esta onde a copia acima o pos (indice de 16 bits); a faixa so entra
+     se couber ate 0xFF, entao o LOBYTE abaixo nao da a volta por causa dela. */
+  uint16 extra = g_ptbr ? PtbrFimDeFaseTexto((uint16)(stripe_image_upload + 74)) : 0;
+  LOBYTE(stripe_image_upload) = stripe_image_upload + 75 + extra;
 }
 
 void DisplayCourseClearTextBonusStars() {  // 05cd76
@@ -2114,7 +2118,11 @@ void DisplayCourseClearTextBonusStars() {  // 05cd76
       stripe_image_upload_data[v2 + 22] = kDisplayCourseClearTextBonusStars_DATA_05CD62[v4 + 1];
       stripe_image_upload_data[v2 + 30] = kDisplayCourseClearTextBonusStars_DATA_05CD62[v4];
     }
-    LOBYTE(stripe_image_upload) = stripe_image_upload + 35;
+    /* v0.17: o acento de BÔNUS! numa faixa a mais (ptbr.c), no lugar do 0xFF
+       que a copia acima pos. Com o indice de 16 bits: se a copia deu a volta
+       no byte, a faixa nao cabe ate 0xFF e nada e escrito. */
+    uint16 extra = g_ptbr ? PtbrFimDeFaseBonus((uint16)(stripe_image_upload + 34)) : 0;
+    LOBYTE(stripe_image_upload) = stripe_image_upload + 35 + extra;
   }
   if ((--timer_wait_before_score_tally & 0x80) != 0) {
     timer_display_bonus_stars = counter_bonus_stars_earned;

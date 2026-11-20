@@ -2,7 +2,7 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.16 (beta) · NTSC 240p/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
+**Versão 0.17 (beta) · NTSC 240p/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
 - Tela AJUSTES no começo: vídeo 240p (cabo AV, qualquer TV; o recomendado) ou 480p (componente/HDMI), tela 4:3 ou 16:9 e idioma, sempre com os pixels nítidos. Vídeo novo só fica se você confirmar que a imagem apareceu.
@@ -13,7 +13,7 @@ Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do p
 - Trapaças (códigos Pro Action Replay) num texto, `TRAPACAS.TXT`: liga e desliga na tela AJUSTES ou com L2 + R2 + SELECT no jogo. O pacote traz 13, conferidas no jogo, todas desligadas.
 - Roda os 60 quadros por segundo e desenha um sim, outro não (30 imagens por segundo), sempre no mesmo ritmo, com a velocidade e a música corretas.
 - **Gravador SMW PS2**: um HTML que abre em qualquer navegador, confere a cópia do jogo e grava o aplicativo, a ISO ou os dois no pendrive.
-- Em português do Brasil: mensagens, nomes das fases e textos dos castelos. O inglês (o original) se escolhe na tela AJUSTES.
+- Em português do Brasil: mensagens, nomes das fases, textos dos castelos e as palavras grandes (VAMOS, MARIO!, FIM DE JOGO, TEMPO ESGOTADO!, JOGO BÔNUS, com letras desenhadas pelo port, e FASE COMPLETA!). Ainda em inglês: os menus do título, dos arquivos, de continuar e de salvar, e o TIME do placar. O inglês (o original) se escolhe na tela AJUSTES.
 - Grava no pendrive ou no Memory Card (pasta `SMWPS2`, com ícone 3D no navegador do PS2).
 - Log do console (`SMW_LOG.TXT`, ao lado do ELF ou no Memory Card): drivers, vídeo testado e confirmado, saves e erros.
 - Abre pelo OPL como aplicativo (ELF) ou como ISO na lista de jogos.
@@ -36,7 +36,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.16 obtido com o ps2dev v2.0.0 foi `7167a9a56440d04cf20a11a42d608a35e6cb8f417762fe93274f6984868a29ab`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.17 obtido com o ps2dev v2.0.0 foi `ecea6b3ca15f50471a1a3fbc9bc5f809a2664a6dd61d1965d57833519913b643`.
 
 ## Gravador SMW PS2 (programa no PC)
 
@@ -118,7 +118,7 @@ A lista `APPS/SMW/TRAPACAS.TXT` (ao lado do ELF) também entra na ISO; sem ela, 
 ## Repetir o teste de regressão
 
 Todos os testes do PC de uma vez (cada um numa pasta temporária com uma cópia do jogo; no fim, um resumo com
-OK, FALHOU ou PULADO e a pasta com as saídas completas). Leva uns 5 minutos; `--rapido` pula as 235 salas e as
+OK, FALHOU ou PULADO e a pasta com as saídas completas). Leva uns 8 minutos; `--rapido` pula as 235 salas e as
 telas do Gravador, `--so saves,largo_169` roda só os escolhidos e `--lista` mostra os nomes:
 
 ```sh
@@ -252,6 +252,17 @@ cc -O1 -std=gnu11 -D_EE -fno-strict-aliasing -fwrapv -ffunction-sections -fdata-
    $(find Fonte/engine/src -name '*.c') Fonte/ps2/game.c Fonte/ps2/registro.c testes/palacio_amarelo.c \
    -Wl,--wrap=fopen $(pkg-config --libs minizip zlib) -o /tmp/smw-palacio
 /tmp/smw-palacio /caminho/da/pasta/com/o/jogo/
+```
+
+Palavras grandes (MARIO START!, GAME OVER, TIME UP!, COURSE CLEAR!) em inglês e português, com o motor e a sua cópia
+(cada corrida numa pasta temporária nova; a sua pasta não recebe nada):
+
+```sh
+cc -O1 -std=gnu11 -fno-strict-aliasing -fwrapv -ffunction-sections -fdata-sections -Wl,--gc-sections \
+   -fsanitize=address,undefined -fno-sanitize-recover=all -IFonte/engine -IFonte/ps2 $(pkg-config --cflags minizip zlib) \
+   $(find Fonte/engine/src -name '*.c') Fonte/ps2/files.c Fonte/ps2/game.c Fonte/ps2/registro.c \
+   testes/palavras_grandes.c $(pkg-config --libs minizip zlib) -lm -o /tmp/smw-palavras
+ASAN_OPTIONS=detect_leaks=0 /tmp/smw-palavras /caminho/da/pasta/com/o/jogo/
 ```
 
 O ícone é gerado por `python3 Fonte/gerar_icone.py`, que reescreve `Fonte/ps2/smw_icon.h`.

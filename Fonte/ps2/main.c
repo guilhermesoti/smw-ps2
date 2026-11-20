@@ -22,7 +22,7 @@
 #include <timer.h>
 #include <unistd.h>
 
-#define SMW_VERSAO "0.16"
+#define SMW_VERSAO "0.17"
 
 #define DECLARE_DRIVER(n) extern unsigned char n##_irx[]; extern unsigned int size_##n##_irx
 DECLARE_DRIVER(bdm);

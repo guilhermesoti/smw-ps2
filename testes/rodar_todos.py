@@ -200,6 +200,14 @@ def t_trapacas(ctx, base):
     return rc == 0 and "TRAPACAS: OK" in out, out
 
 
+def t_palavras(ctx, base):
+    b = _com_motor("palavras", "palavras_grandes.c", sanitizar=True)(ctx, base)
+    # Este solta cada motor: com detect_leaks=1 ele também guarda a N23
+    # (ROM e SRAM do cartucho perdidas a cada restart_engine).
+    rc, out = rodar([b, str(ctx.pasta_com_jogo(base)) + "/"], base, {"ASAN_OPTIONS": "detect_leaks=1"})
+    return rc == 0 and "PALAVRAS: OK" in out, out
+
+
 def t_aparecer(ctx, base):
     b = _com_motor("aparecer", "aparecer.c")(ctx, base)
     rc, out = rodar([b, str(ctx.pasta_com_jogo(base)) + "/", "1", "600", *todas_as_salas()], base)
@@ -302,6 +310,7 @@ LISTA = [
     ("camera", "câmera do mapa", t_camera, False),
     ("trapacas", "trapaças (TRAPACAS.TXT e cada uma no motor)", t_trapacas, False),
     ("percurso", "percurso de regressão (CRC d1ac4ce4)", t_percurso, False),
+    ("palavras", "palavras grandes (MARIO START!, GAME OVER) em inglês e português", t_palavras, False),
     ("aparecer", "objetos surgindo/sumindo em 16:9", t_aparecer, False),
     ("largo_169", "Mario na borda e PPU em 16:9", _largo(True), False),
     ("largo_43", "Mario na borda em 4:3", _largo(False), False),

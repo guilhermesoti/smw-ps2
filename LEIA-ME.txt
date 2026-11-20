@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.16 (beta) | NTSC 240p/480p | 4:3 ou 16:9 | Português
+Retrogames Patos de Minas | v0.17 (beta) | NTSC 240p/480p | 4:3 ou 16:9 | Português
 
 O QUE VOCÊ PRECISA
 
@@ -355,6 +355,20 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.17 (beta):
+- Em português, também as palavras grandes: VAMOS, MARIO! (e VAMOS,
+  LUIGI!) antes da fase, JOGO BÔNUS, FIM DE JOGO e TEMPO ESGOTADO!, com
+  letras desenhadas pelo port no estilo das do jogo (as cores vêm da sua
+  cópia do jogo). No fim da fase: FASE COMPLETA! e BÔNUS!. Continuam em
+  inglês os menus do título, dos arquivos, de continuar e de salvar, e o
+  TIME do placar.
+- Corrigido: GAME OVER e TIME UP! mostravam só 2 letras (as de cada
+  metade ficavam uma sobre a outra). Agora as palavras entram inteiras,
+  como no SNES, também em inglês.
+- Corrigido (achado nos testes do PC): três tabelas dos eventos do mapa
+  tinham menos valores do que o jogo lê; agora têm os mesmos da cópia
+  do jogo.
 
 Mudanças da v0.16 (beta):
 - As telas antes do jogo (AJUSTES, trapaças, "A IMAGEM APARECEU?",

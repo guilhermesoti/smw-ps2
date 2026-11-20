@@ -1,5 +1,6 @@
 #include "ptbr.h"
 #include "common_rtl.h"
+#include "smw_rtl.h"
 #include "variables.h"
 #include "funcs.h"
 #include <string.h>
@@ -8,6 +9,7 @@ bool g_ptbr = true;
 uint16 g_smw_extra_font[64 * 8];
 
 #include "ptbr_levels.h"
+#include "ptbr_letras.h"
 
 /* ------------------------------------------------------------------ font --- */
 
@@ -71,6 +73,13 @@ void PtbrInit(void) {
     for (int r = 0; r < 5; r++) PutRow(upper, 2 + r, kBase[b][kCapRows[r]]);
     PutRow(upper, 7, "11111111");
   }
+  /* v0.17: circunflexo no estilo da fonte da barra de status (contorno 1,
+     tinta 3), na peca de cima do O de BONUS! (BG3 0x3D8). */
+  static const char *const kCircunflexoStatus[8] = {
+    "00000000", "00000000", "00000000", "00000000",
+    "00111100", "01333310", "13311331", "11100111"};
+  for (int r = 0; r < 8; r++) PutRow(g_smw_extra_font + kPtbrPecaCircunflexo * 8, r, kCircunflexoStatus[r]);
+  PtbrLetrasGrandesZera();
 }
 
 /* --------------------------------------------------------------- encoding --- */
@@ -249,5 +258,232 @@ bool PtbrStripeImage(uint8 index) {
   WriteText(buf + 4, text, 24);
   buf[52] = 0xFF;
   LoadStripeImage_UploadToVRAM(buf);
+  return true;
+}
+
+/* --------------------------------------------------- fim de fase --- */
+
+/* v0.17: COURSE CLEAR! vira FASE COMPLETA! (as letras da barra de status,
+   A=0x0A ... Z=0x23, ! = 0x28, espaco 0xFC). A faixa do jogo tem 13 pecas
+   e as seguintes dependem do tamanho dela, entao a frase vai numa faixa a
+   mais na mesma linha (camada 3, linha 10, colunas 9-22), escrita depois. */
+/* Como o jogo nessas duas rotinas, a posicao na fila cabe em 1 byte: se a
+   faixa e o 0xFF nao couberem ate 0xFF, nada e escrito (fica o ingles). */
+static uint16 PtbrPoeFaixa(uint16 pos, uint16 vram, const uint8 *pecas, int n, uint8 prop) {
+  if (n <= 0 || pos + 4 + n * 2 + 1 > 0xFF) return 0;
+  stripe_image_upload_data[pos] = vram >> 8;
+  stripe_image_upload_data[pos + 1] = vram & 0xff;
+  stripe_image_upload_data[pos + 2] = 0;
+  stripe_image_upload_data[pos + 3] = n * 2 - 1;
+  for (int i = 0; i < n; i++) {
+    stripe_image_upload_data[pos + 4 + i * 2] = pecas[i];
+    stripe_image_upload_data[pos + 5 + i * 2] = prop;
+  }
+  stripe_image_upload_data[pos + 4 + n * 2] = 0xFF;
+  return 4 + n * 2;
+}
+
+uint16 PtbrFimDeFaseTexto(uint16 pos) {
+  static const char kTexto[] = "FASE COMPLETA!";
+  uint8 pecas[sizeof(kTexto) - 1];
+  for (size_t i = 0; i < sizeof(pecas); i++)
+    pecas[i] = kTexto[i] == ' ' ? 0xFC : kTexto[i] == '!' ? 0x28 : 0x0A + (kTexto[i] - 'A');
+  return PtbrPoeFaixa(pos, 0x5149, pecas, sizeof(pecas), 0x38);
+}
+
+/* BONUS! fica BÔNUS!: o circunflexo vai na linha de cima, sobre o O (camada 3,
+   linha 15, coluna 11), com a peca 0x3D8 da fonte extra. */
+uint16 PtbrFimDeFaseBonus(uint16 pos) {
+  const uint8 peca = (0x3C0 + kPtbrPecaCircunflexo) & 0xff;
+  return PtbrPoeFaixa(pos, 0x51EB, &peca, 1, 0x38 | ((0x3C0 + kPtbrPecaCircunflexo) >> 8));
+}
+
+/* ------------------------------------------------- palavras grandes --- */
+
+/* v0.17: as palavras grandes das telas de carregar e de morte (MARIO START!,
+   LUIGI START!, BONUS GAME, GAME OVER, TIME UP!) com letras desenhadas pelo
+   port (ptbr_letras.h). A frase vira uma imagem de 16 linhas cortada em
+   colunas de 8 pontos; cada coluna sao 2 sprites 8x8 (em cima e embaixo),
+   como no jogo. '|' separa as duas metades que entram de lados opostos na
+   tela de morte; '^' poe circunflexo na letra seguinte. */
+
+static const char *const kPtbrGrandeFrases[kPtbrGrandeTotal] = {
+  [kPtbrGrandeMario] = "VAMOS, MARIO!",
+  [kPtbrGrandeLuigi] = "VAMOS, LUIGI!",
+  [kPtbrGrandeBonus] = "JOGO B^ONUS",
+  [kPtbrGrandeFimDeJogo] = "FIM DE|JOGO",
+  [kPtbrGrandeTempo] = "TEMPO|ESGOTADO!",
+};
+
+/* As mesmas 24 pecas de sprite que o jogo usa para as letras dele (as 12
+   do Mario sao reenviadas todo quadro e o jogo devolve as outras 12 depois,
+   em RestoreSP1AfterMarioStart). Pecas repetidas sao aproveitadas: a frase
+   mais longa, TEMPO ESGOTADO!, usa as 24 (o teste do percurso confere). */
+static const uint8 kPtbrGrandePecas[24] = {
+  0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15,
+  0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F,
+};
+enum {
+  kGrandePecas = sizeof(kPtbrGrandePecas),
+  kGrandeSprites = 40,
+  kGrandeLargura = 192,
+  kGrandeEspaco = 6,            /* espaco entre palavras */
+  kGrandeVao = 8,               /* entre as metades da tela de morte */
+  kGrandeOam = 68,              /* primeira entrada de OAM, como no jogo */
+};
+_Static_assert(kGrandeLargura % 8 == 0, "a imagem da frase e cortada em colunas de 8");
+_Static_assert(sizeof(kPtbrCircunflexo) - 1 == 64, "circunflexo: 8 linhas de 8");
+
+static struct {
+  bool pronto;
+  uint8 npecas, nsprites, faltaram;
+  uint8 pecas[kGrandePecas][32];          /* 4bpp, formato do SNES */
+  struct { int16 x; uint8 y, peca, metade; } spr[kGrandeSprites];
+} g_grande;
+
+static const PtbrLetra *PtbrLetraDe(char c) {
+  for (size_t i = 0; i < sizeof(kPtbrLetras) / sizeof(kPtbrLetras[0]); i++)
+    if (kPtbrLetras[i].c == c) return &kPtbrLetras[i];
+  return NULL;
+}
+
+static uint8 PtbrCorGrande(char px, int y) {
+  if (px == '.') return 0;
+  if (px == '+') return 2;
+  return (y <= 3 || y >= 12) ? 4 : (y <= 6 || y >= 9) ? 5 : 1;
+}
+
+/* Converte 8x8 cores (0-7) para uma peca 4bpp do SNES. */
+static void PtbrPeca4bpp(uint8 *dst, const uint8 px[8][8]) {
+  memset(dst, 0, 32);
+  for (int y = 0; y < 8; y++)
+    for (int x = 0; x < 8; x++) {
+      uint8 v = px[y][x], bit = 0x80 >> x;
+      if (v & 1) dst[y * 2] |= bit;
+      if (v & 2) dst[y * 2 + 1] |= bit;
+      if (v & 4) dst[16 + y * 2] |= bit;
+    }
+}
+
+/* Guarda uma peca (repetidas reaproveitam a mesma) e devolve o indice, ou
+   -1 se a peca for vazia ou nao couber. */
+static int PtbrGuardaPeca(const uint8 px[8][8]) {
+  uint8 bits[32];
+  PtbrPeca4bpp(bits, px);
+  static const uint8 kVazia[32];
+  if (!memcmp(bits, kVazia, 32)) return -1;
+  for (int i = 0; i < g_grande.npecas; i++)
+    if (!memcmp(g_grande.pecas[i], bits, 32)) return i;
+  if (g_grande.npecas >= kGrandePecas) { g_grande.faltaram++; return -1; }
+  memcpy(g_grande.pecas[g_grande.npecas], bits, 32);
+  return g_grande.npecas++;
+}
+
+static void PtbrPoeSprite(int x, int y, int peca, int metade) {
+  if (peca < 0) return;
+  if (g_grande.nsprites >= kGrandeSprites) { g_grande.faltaram++; return; }
+  g_grande.spr[g_grande.nsprites].x = x;
+  g_grande.spr[g_grande.nsprites].y = y;
+  g_grande.spr[g_grande.nsprites].peca = peca;
+  g_grande.spr[g_grande.nsprites].metade = metade;
+  g_grande.nsprites++;
+}
+
+/* Largura em pontos de um pedaco da frase (ate '|' ou o fim). */
+static int PtbrLarguraGrande(const char *s) {
+  int w = 0;
+  for (; *s && *s != '|'; s++) {
+    const PtbrLetra *l = (*s == ' ') ? NULL : PtbrLetraDe(*s);
+    w += (*s == ' ') ? kGrandeEspaco : (l && strlen(l->px) == (size_t)l->w * 16) ? l->w : 0;
+  }
+  return w;
+}
+
+int PtbrLetrasGrandes(int frase) {
+  g_grande.pronto = false;
+  if (frase < 0 || frase >= kPtbrGrandeTotal) return -1;
+  g_grande.npecas = g_grande.nsprites = g_grande.faltaram = 0;
+  const char *s = kPtbrGrandeFrases[frase];
+  const char *barra = strchr(s, '|');
+  /* Largura de cada metade; uma que passe da imagem e cortada e conta como
+     perdida (o teste exige 0). */
+  int w[2] = {PtbrLarguraGrande(s), barra ? PtbrLarguraGrande(barra + 1) : 0};
+  for (int m = 0; m < 2; m++)
+    if (w[m] > kGrandeLargura) w[m] = kGrandeLargura, g_grande.faltaram++;
+  int x0 = 128 - (w[0] + (barra ? kGrandeVao + w[1] : 0)) / 2;
+  for (int metade = 0; metade < (barra ? 2 : 1); metade++) {
+    static uint8 img[16][kGrandeLargura];
+    int x = 0;
+    memset(img, 0, sizeof(img));
+    bool circunflexo = false;
+    for (; *s && *s != '|'; s++) {
+      if (*s == '^') { circunflexo = true; continue; }
+      if (*s == ' ') {
+        if (circunflexo) g_grande.faltaram++, circunflexo = false;  /* '^' sem letra */
+        x += kGrandeEspaco;
+        continue;
+      }
+      const PtbrLetra *l = PtbrLetraDe(*s);
+      /* Letra que falta ou desenho com tamanho errado: conta como perdida
+         (o teste das palavras grandes exige 0). */
+      if (!l || strlen(l->px) != (size_t)l->w * 16) {
+        g_grande.faltaram += 1 + circunflexo;
+        circunflexo = false;
+        continue;
+      }
+      for (int yy = 0; yy < 16; yy++)
+        for (int xx = 0; xx < l->w && x + xx < kGrandeLargura; xx++)
+          img[yy][x + xx] = PtbrCorGrande(l->px[yy * l->w + xx], yy);
+      if (circunflexo) {
+        uint8 px[8][8];
+        for (int yy = 0; yy < 8; yy++)
+          for (int xx = 0; xx < 8; xx++)
+            px[yy][xx] = kPtbrCircunflexo[yy * 8 + xx] == '.' ? 0 :
+                         kPtbrCircunflexo[yy * 8 + xx] == '+' ? 2 : 5;
+        PtbrPoeSprite(x0 + x + (l->w - 8) / 2, 96, PtbrGuardaPeca(px), metade);
+        circunflexo = false;
+      }
+      x += l->w;
+    }
+    if (circunflexo) g_grande.faltaram++;  /* '^' no fim da metade */
+    for (int c = 0; c * 8 < w[metade]; c++)
+      for (int linha = 0; linha < 2; linha++) {
+        uint8 px[8][8];
+        for (int yy = 0; yy < 8; yy++)
+          for (int xx = 0; xx < 8; xx++)
+            px[yy][xx] = img[linha * 8 + yy][c * 8 + xx];
+        PtbrPoeSprite(x0 + c * 8, 104 + linha * 8, PtbrGuardaPeca(px), metade);
+      }
+    x0 += w[metade] + kGrandeVao;
+    if (*s == '|') s++;
+  }
+  g_grande.pronto = true;
+  return g_grande.faltaram;
+}
+
+/* desloca: tela de morte, a metade 0 vem da esquerda e a 1 da direita. */
+void PtbrLetrasGrandesDesenha(uint8 desloca) {
+  if (!g_grande.pronto) return;
+  for (int i = 0; i < g_grande.nsprites; i++) {
+    int e = kGrandeOam + i;
+    if (e >= 128) break;
+    int x = g_grande.spr[i].x + (g_grande.spr[i].metade ? desloca : -desloca);
+    OamEnt *o = &oam_buf[e];
+    o->xpos = x & 0xff;
+    o->ypos = g_grande.spr[i].y;
+    o->charnum = kPtbrGrandePecas[g_grande.spr[i].peca];
+    o->flags = 0x34;
+    sprites_oamtile_size_buffer[e] = (x & 0x100) >> 8;  /* 9o bit do x */
+  }
+}
+
+void PtbrLetrasGrandesZera(void) {
+  memset(&g_grande, 0, sizeof(g_grande));
+}
+
+bool PtbrLetrasGrandesEnvia(void) {
+  if (!g_ptbr || !g_grande.pronto) return false;
+  for (int i = 0; i < g_grande.npecas; i++)
+    SmwCopyToVram(0x6000 + kPtbrGrandePecas[i] * 16, g_grande.pecas[i], 32);
   return true;
 }

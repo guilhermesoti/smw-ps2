@@ -2,6 +2,7 @@
 #include "common_cpu_infra.h"
 #include "smw_spc_player.h"
 #include "snes/snes.h"
+#include "ptbr.h"
 
 uint8 g_ram[0x20000];
 uint8 *g_sram;
@@ -135,6 +136,7 @@ void RtlReiniciaEstado(void) {
   g_apu_write_ent_pos = g_apu_queue_size = g_apu_time_since_empty = 0;
   g_is_uploading_apu = false;
   g_did_finish_level_hook = false;
+  PtbrLetrasGrandesZera();  /* v0.17 */
 }
 
 void RtlSetUploadingApu(bool uploading) {

@@ -933,6 +933,13 @@ void DrawLoadingLetters() {  // 0091b1
     v0 = 38;
     v1 = -92;
   }
+  if (g_ptbr) {  /* v0.17: frase em portugues (ptbr.c) */
+    PtbrLetrasGrandes(flag_active_bonus_game ? kPtbrGrandeBonus :
+                      player_current_character ? kPtbrGrandeLuigi : kPtbrGrandeMario);
+    PtbrLetrasGrandesDesenha(0);
+    CompressOamEntExt();
+    return;
+  }
   uint16 r0w = v1;
   uint8 v2 = 112;
   do {
@@ -1359,6 +1366,8 @@ PairU16 OwPrompt03_OverworldLifeExchanger_00974C(uint8 a) {  // 00974c
 void GameMode16_LoadDeathMessage() {  // 009750
   ClearLayer3Tilemap();
   BufferLoadingLetterTiles();
+  if (g_ptbr)  /* v0.17: FIM DE JOGO / TEMPO ESGOTADO! (ptbr.c) */
+    PtbrLetrasGrandes(misc_death_message_to_display == 29 ? kPtbrGrandeTempo : kPtbrGrandeFimDeJogo);
   GameMode00_LoadNintendoPresents_0093CA();
 }
 
@@ -1383,13 +1392,21 @@ void GameMode17_ShowDeathMessage() {  // 009759
     return;
   }
   timer_display_death_message_animation = v0;
+  if (g_ptbr) {  /* v0.17: as duas metades entram como no jogo */
+    PtbrLetrasGrandesDesenha(v0);
+    CompressOamEntExt();
+    return;
+  }
   uint16 r0w = v0 + 0xa0;
   uint8 v2 = misc_death_message_to_display;
   uint8 v3 = 72;
   do {
     if (v3 == 40)
       r0w = 120 - timer_display_death_message_animation;
-    DrawLoadingLetters_Draw(v2++, v3, r0w);
+    /* v0.17 (port): o original guarda o x da proxima coluna ($00) a cada
+       letra; sem pegar o retorno, todas as colunas de cada metade caiam no
+       mesmo x e "GAME OVER"/"TIME UP!" mostravam so 2 letras. */
+    r0w = DrawLoadingLetters_Draw(v2++, v3, r0w);
     v3 -= 8;
   } while (v3);
   CompressOamEntExt();
@@ -2572,6 +2589,8 @@ void GameMode11_LoadSublevel_00A796() {  // 00a796
 }
 
 void UploadLoadingLettersTiles() {  // 00a7c2
+  if (PtbrLetrasGrandesEnvia())  /* v0.17: letras da traducao */
+    return;
   SmwCopyToVram(0x6000, g_ram + 0x1977b, 0xc0);
   SmwCopyToVram(0x6100, g_ram + 0x1983B, 0xc0);
   SmwCopyToVram(0x64a0, g_ram + 0x198fB, 0xc0);
