@@ -83,12 +83,14 @@ static void restart_engine(void) {
   Snes *s = snes_init(g_ram);
   cart_load(s->cart, 1, old->cart->rom, SMW_ROM_BYTES, SMW_SRAM_BYTES);
   memcpy(s->cart->ram, old->cart->ram, SMW_SRAM_BYTES);
-  snes_free(old);
-  g_snes = s;
-  snes_reset(g_snes, true);
+  /* v0.17: os ponteiros vao para o cartucho novo antes de soltar o velho
+     (snes_free agora solta a ROM e a SRAM dele). */
   g_rom = s->cart->rom;
   g_sram = s->cart->ram;
   g_sram_size = s->cart->ramSize;
+  snes_free(old);
+  g_snes = s;
+  snes_reset(g_snes, true);
   dsp_free(g_spc_player->dsp);
   free(g_spc_player);
   g_spc_player = SmwSpcPlayer_Create();

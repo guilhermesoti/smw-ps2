@@ -24,6 +24,10 @@ Cart* cart_init(Snes* snes) {
 }
 
 void cart_free(Cart* cart) {
+  /* v0.17 (port): a ROM e a SRAM que o cart_load alocou tambem (o
+     restart_engine do PS2 perdia ~514 KB a cada vez; o ASan acusou). */
+  free(cart->rom);
+  free(cart->ram);
   free(cart);
 }
 
