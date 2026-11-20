@@ -3,6 +3,7 @@
 #include "smw_icon.h"
 #endif
 #include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1064,16 +1065,18 @@ static char *trim(char *s) {
 }
 
 void smw_options_clear(SmwOptions *o) {
-  o->tela = o->video = o->idioma = o->compat = o->largura = o->altura = SMW_OPT_ASK;
+  o->tela = o->video = o->idioma = o->compat = SMW_OPT_ASK;
+  o->pos_x = o->pos_y = SMW_POSICAO_NADA;
 }
 
-/* "94" -> 94; fora de SMW_TAMANHO_MIN..SMW_TAMANHO_MAX (ou nao numero) ->
-   SMW_OPT_ASK. A faixa e conferida ainda em long: convertido antes para int,
-   um numero enorme como 4294967390 viraria 94 num PC de 64 bits. */
-static int tamanho_de(const char *s) {
+/* "-4" ou "+6" -> -4 ou 6; fora de -SMW_POSICAO_MAX..SMW_POSICAO_MAX (ou nao
+   numero) -> SMW_POSICAO_NADA. A faixa e conferida ainda em long: convertido
+   antes para int, um numero enorme como 4294967300 viraria 4 num PC de 64
+   bits. */
+static int posicao_de(const char *s) {
   char *fim;
   long v = strtol(s, &fim, 10);
-  if (fim == s || *fim != '\0' || v < SMW_TAMANHO_MIN || v > SMW_TAMANHO_MAX) return SMW_OPT_ASK;  /* s ja vem sem espacos */
+  if (fim == s || *fim != '\0' || v < -SMW_POSICAO_MAX || v > SMW_POSICAO_MAX) return SMW_POSICAO_NADA;  /* s ja vem sem espacos */
   return (int)v;
 }
 
@@ -1101,12 +1104,12 @@ static void parse_options(char *text, SmwOptions *o) {
       } else if (same_word(key, "saida")) {
         if (same_word(value, "1280")) o->compat = 0;
         else if (same_word(value, "512")) o->compat = 1;
-      } else if (same_word(key, "largura")) {
-        int v = tamanho_de(value);
-        if (v != SMW_OPT_ASK) o->largura = v;
-      } else if (same_word(key, "altura")) {
-        int v = tamanho_de(value);
-        if (v != SMW_OPT_ASK) o->altura = v;
+      } else if (same_word(key, "posicao_x")) {
+        int v = posicao_de(value);
+        if (v != SMW_POSICAO_NADA) o->pos_x = v;
+      } else if (same_word(key, "posicao_y")) {
+        int v = posicao_de(value);
+        if (v != SMW_POSICAO_NADA) o->pos_y = v;
       }
     }
     line = next;
@@ -1150,17 +1153,34 @@ bool smw_read_saved_options(SmwOptions *o) {
   return false;
 }
 
-/* Texto do SMW.OPT: so os campos com valor. */
+/* Acrescenta ao texto do SMW.OPT; false se nao couber (nada passa do fim:
+   o snprintf devolve o que caberia, nao o que escreveu). */
+static bool opcao_acrescenta(char *text, size_t size, size_t *n, const char *fmt, ...) {
+  if (*n >= size) return false;
+  va_list ap;
+  va_start(ap, fmt);
+  int k = vsnprintf(text + *n, size - *n, fmt, ap);
+  va_end(ap);
+  if (k < 0 || (size_t)k >= size - *n) return false;
+  *n += (size_t)k;
+  return true;
+}
+
+/* Texto do SMW.OPT: so os campos com valor; -1 se nao couber em size. O mais
+   longo tem 69 bytes (tela=16:9, video=480p, idioma=pt, saida=512,
+   posicao_x=-16, posicao_y=-16); quem chama passa 128. */
 static int options_text(const SmwOptions *o, char *text, size_t size) {
   static const char *const videos[] = {"240p", "480p", "480i"};
-  int n = 0;
-  if (o->tela >= 0) n += snprintf(text + n, size - n, "tela=%s\n", o->tela ? "16:9" : "4:3");
-  if (o->video >= 0 && o->video <= 2) n += snprintf(text + n, size - n, "video=%s\n", videos[o->video]);
-  if (o->idioma >= 0) n += snprintf(text + n, size - n, "idioma=%s\n", o->idioma ? "en" : "pt");
-  if (o->compat == 1) n += snprintf(text + n, size - n, "saida=512\n");
-  if (smw_tamanho_valido(o->largura)) n += snprintf(text + n, size - n, "largura=%d\n", o->largura);
-  if (smw_tamanho_valido(o->altura)) n += snprintf(text + n, size - n, "altura=%d\n", o->altura);
-  return n;
+  size_t n = 0;
+  bool ok = size > 0;
+  if (ok) text[0] = '\0';
+  if (ok && o->tela >= 0) ok = opcao_acrescenta(text, size, &n, "tela=%s\n", o->tela ? "16:9" : "4:3");
+  if (ok && o->video >= 0 && o->video <= 2) ok = opcao_acrescenta(text, size, &n, "video=%s\n", videos[o->video]);
+  if (ok && o->idioma >= 0) ok = opcao_acrescenta(text, size, &n, "idioma=%s\n", o->idioma ? "en" : "pt");
+  if (ok && o->compat == 1) ok = opcao_acrescenta(text, size, &n, "saida=512\n");
+  if (ok && smw_posicao_valida(o->pos_x)) ok = opcao_acrescenta(text, size, &n, "posicao_x=%d\n", o->pos_x);
+  if (ok && smw_posicao_valida(o->pos_y)) ok = opcao_acrescenta(text, size, &n, "posicao_y=%d\n", o->pos_y);
+  return ok ? (int)n : -1;
 }
 
 static bool write_options_to(int store, const SmwOptions *o) {
@@ -1171,7 +1191,7 @@ static bool write_options_to(int store, const SmwOptions *o) {
   card_recording = false;  /* falha aqui nao entra no ERRO AO SALVAR */
   if (store != STORE_FOLDER) make_folder(dir);
   int n = options_text(o, text, sizeof(text));
-  bool ok = file_write(path, (const uint8_t *)text, n);
+  bool ok = n >= 0 && file_write(path, (const uint8_t *)text, n);
   card_recording = recording;
   if (ok && store != STORE_FOLDER) write_card_icon(dir, store - STORE_MC0);
   return ok;

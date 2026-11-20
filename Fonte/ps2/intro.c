@@ -12,7 +12,6 @@
 #include "intro.h"
 #include "formato.h"
 #include "intro_qr.h"
-#include "files.h"  /* SMW_TAMANHO_*, smw_tamanho_limita */
 #include <audsrv.h>
 #include <kernel.h>
 #include <libpad.h>
@@ -197,51 +196,15 @@ static unsigned read_buttons(void) {
   return now;
 }
 
-/* v0.14.1: tamanho da imagem na TV, largura e altura em % (como no port do
-   Yu-Gi-Oh): pelo AV a TV corta as bordas (overscan). */
-static int tamanho_h = SMW_TAMANHO_MAX, tamanho_v = SMW_TAMANHO_MAX;
-
-void smw_set_tamanho(int largura, int altura) {
-  tamanho_h = smw_tamanho_limita(largura);
-  tamanho_v = smw_tamanho_limita(altura);
-}
-
 /* Desenha a textura t na tela, de (x0, y0) a (x1, y1), usando u1 x v1 texels,
    com os pixels nitidos. A suavizacao (filtro bilinear do GS) e as scanlines
-   sairam na v0.13.7: no console ficavam piores que a imagem nitida.
-   Com o tamanho abaixo de 100% (v0.14.1) o retangulo encolhe em volta do
-   proprio centro, com borda preta (o gsKit_clear de cada quadro), e o GS usa
-   o filtro bilinear: o PCRTC so amplia por inteiros, e sem filtro linhas e
-   colunas inteiras do jogo sumiriam (224 linhas em 200, por exemplo). */
+   sairam na v0.13.7: no console ficavam piores que a imagem nitida. */
 void smw_desenha_textura(GSGLOBAL *gs, GSTEXTURE *t, float x0, float y0, float x1, float y1, float u1,
                          float v1) {
   u8 enabled = gs->PrimAlphaEnable;
-  const u64 cor = GS_SETREG_RGBAQ(128, 128, 128, 128, 0);
   gs->PrimAlphaEnable = GS_SETTING_OFF;
-  /* O filtro bilinear le o texel vizinho: na borda, repete a ultima coluna e
-     a ultima linha usadas em vez de ler o que vem depois na VRAM (v0.13.5).
-     Posto em todo desenho, porque o recorte vale para os seguintes: todo
-     desenho com textura do port passa por esta funcao. */
-  gs->Clamp->MINU = 0, gs->Clamp->MAXU = (int)u1 - 1;
-  gs->Clamp->MINV = 0, gs->Clamp->MAXV = (int)v1 - 1;
-  gsKit_set_clamp(gs, GS_CMODE_REGION_CLAMP);
-  const float w = x1 - x0, h = y1 - y0;
-  const float nw = (float)((int)(w * (float)tamanho_h / 100.0f) & ~1);
-  const float nh = (float)((int)(h * (float)tamanho_v / 100.0f) & ~1);
-  /* nw e nh de pelo menos 2: um retangulo minusculo nao divide por zero. */
-  if ((tamanho_h < SMW_TAMANHO_MAX || tamanho_v < SMW_TAMANHO_MAX) && nw >= 2 && nh >= 2) {
-    x0 += (float)(int)((w - nw) / 2), y0 += (float)(int)((h - nh) / 2);
-    x1 = x0 + nw, y1 = y0 + nh;
-    /* O GS amostra cada ponto no canto e o bilinear centra o texel em
-       i + 0,5: as coordenadas andam meio ponto da tela, para cada ponto ler o
-       quadro no centro dele (o mesmo da suavizacao da v0.13.5, N5). */
-    const float du = 0.5f * u1 / nw, dv = 0.5f * v1 / nh;
-    t->Filter = GS_FILTER_LINEAR;
-    gsKit_prim_sprite_texture(gs, t, x0, y0, du, dv, x1, y1, u1 + du, v1 + dv, 1, cor);
-  } else {
-    t->Filter = GS_FILTER_NEAREST;
-    gsKit_prim_sprite_texture(gs, t, x0, y0, 0, 0, x1, y1, u1, v1, 1, cor);
-  }
+  t->Filter = GS_FILTER_NEAREST;
+  gsKit_prim_sprite_texture(gs, t, x0, y0, 0, 0, x1, y1, u1, v1, 1, GS_SETREG_RGBAQ(128, 128, 128, 128, 0));
   gs->PrimAlphaEnable = enabled;
 }
 

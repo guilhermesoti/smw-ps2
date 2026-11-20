@@ -13,19 +13,9 @@ void smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version, cons
                const uint32_t *fundo_apoio);
 
 /* Desenha a textura t de (x0, y0) a (x1, y1), usando u1 x v1 texels, com os
-   pixels nitidos (sem filtro). Com o tamanho abaixo de 100% o retangulo
-   encolhe em volta do proprio centro, com o filtro bilinear (v0.14.1): feito
-   para o quadro da tela inteira (o jogo, os menus, a abertura); um desenho
-   menor por cima de outro nao ficaria no lugar certo. u1 e v1 >= 1. */
+   pixels nitidos (sem filtro). */
 void smw_desenha_textura(GSGLOBAL *gs, GSTEXTURE *t, float x0, float y0, float x1, float y1, float u1,
                          float v1);
-
-/* v0.14.1: tamanho da imagem na TV, largura e altura em % (SMW_TAMANHO_MIN a
-   SMW_TAMANHO_MAX, files.h), para todos os desenhos de smw_desenha_textura:
-   o jogo, as telas antes dele e a abertura. Como o ajuste de tela de um
-   monitor. As telas de carregamento de antes da leitura dos ajustes (ate
-   "Lendo o save...") ficam em 100%. */
-void smw_set_tamanho(int largura, int altura);
 
 /* Mostra um quadro 0x00RRGGBB do tamanho de tex (que aponta para ele) com o
    brilho 0..128 e espera a TV (um quadro). O quadro e convertido no lugar

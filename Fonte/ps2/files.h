@@ -28,24 +28,36 @@ const char *smw_save_error_text(void);
    tela: 0 = 4:3, 1 = 16:9 (desde a v0.14.1 so vale com o video 480p; nos
    outros o jogo fica em 4:3 e a escolha fica guardada). video: SMW_VIDEO_*.
    idioma: 0 = portugues, 1 = ingles. compat: 1 = saida de 512 colunas (TV
-   ou adaptador que nao aceitou a de 1280). largura, altura (v0.14.1): o
-   tamanho da imagem na TV, em %, de SMW_TAMANHO_MIN a SMW_TAMANHO_MAX (como o ajuste de
-   tela de um monitor, para a TV nao cortar as bordas). SMW_OPT_ASK = sem
-   valor (o jogador escolhe na tela de ajustes). As chaves suavizacao= e
-   scanlines= de arquivos antigos (ate a v0.13.6) sao ignoradas. */
+   ou adaptador que nao aceitou a de 1280). pos_x, pos_y (v0.14.2): a
+   posicao da imagem na TV, em pixels e linhas do SNES, de -SMW_POSICAO_MAX
+   a SMW_POSICAO_MAX (como o ajuste de posicao de um monitor, para
+   centralizar; como no port do Yu-Gi-Oh); x positivo = direita, y positivo
+   = para baixo; SMW_POSICAO_NADA = sem valor (fora da faixa; o 0 e o
+   centro, entao um SmwOptions zerado tem posicao: comece com
+   smw_options_clear). SMW_OPT_ASK = sem valor nos
+   outros (o jogador escolhe na tela de ajustes). As chaves suavizacao= e
+   scanlines= (ate a v0.13.6) e largura= e altura= (o tamanho da v0.14.1,
+   que saiu) de arquivos antigos sao ignoradas. */
 enum { SMW_OPT_ASK = -1 };
 enum { SMW_VIDEO_240P = 0, SMW_VIDEO_480P = 1, SMW_VIDEO_480I = 2 };
-enum { SMW_TAMANHO_MIN = 80, SMW_TAMANHO_MAX = 100, SMW_TAMANHO_PASSO = 2 };
-typedef struct { int tela, video, idioma, compat, largura, altura; } SmwOptions;
-/* Um tamanho (largura ou altura) que vale: de SMW_TAMANHO_MIN a SMW_TAMANHO_MAX. */
-static inline bool smw_tamanho_valido(int v) { return v >= SMW_TAMANHO_MIN && v <= SMW_TAMANHO_MAX; }
-/* O tamanho trazido para dentro de SMW_TAMANHO_MIN..SMW_TAMANHO_MAX. */
-static inline int smw_tamanho_limita(int v) {
-  return v < SMW_TAMANHO_MIN ? SMW_TAMANHO_MIN : v > SMW_TAMANHO_MAX ? SMW_TAMANHO_MAX : v;
+enum { SMW_POSICAO_MAX = 16, SMW_POSICAO_PASSO = 2, SMW_POSICAO_NADA = -(SMW_POSICAO_MAX + 1) };
+typedef struct { int tela, video, idioma, compat, pos_x, pos_y; } SmwOptions;
+/* Uma posicao (x ou y) que vale: de -SMW_POSICAO_MAX a SMW_POSICAO_MAX. */
+static inline bool smw_posicao_valida(int v) { return v >= -SMW_POSICAO_MAX && v <= SMW_POSICAO_MAX; }
+/* A posicao trazida para dentro de -SMW_POSICAO_MAX..SMW_POSICAO_MAX. */
+static inline int smw_posicao_limita(int v) {
+  return v < -SMW_POSICAO_MAX ? -SMW_POSICAO_MAX : v > SMW_POSICAO_MAX ? SMW_POSICAO_MAX : v;
+}
+/* Um toque de seta: v + passo, dentro da faixa. Uma posicao impar (escrita a
+   mao no SMW.OPT ou no SMW.CFG) para no 0 ao passar por ele, para o centro
+   continuar a um toque (revisao do Codex). */
+static inline int smw_posicao_anda(int v, int passo) {
+  int n = smw_posicao_limita(v + passo);
+  return (v > 0 && n < 0) || (v < 0 && n > 0) ? 0 : n;
 }
 /* O 16:9 so vale com o video 480p (v0.14.1). */
 static inline bool smw_16_9_vale(int video) { return video == SMW_VIDEO_480P; }
-/* Todos os campos em SMW_OPT_ASK. */
+/* Todos os campos sem valor (SMW_OPT_ASK; a posicao, SMW_POSICAO_NADA). */
 void smw_options_clear(SmwOptions *o);
 /* SMW.CFG do Gravador (pasta do jogo ou ISO). Depois de smw_find_rom. */
 void smw_read_config(SmwOptions *o);

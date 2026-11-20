@@ -18,7 +18,9 @@ um formatado sai com "mymcplus cartao.ps2 format"); --cartao2-inicial faz o
 mesmo no Memory Card 2 (sem ele, o cartão 2 novo e sem formatação aparece no
 log como arquivos que não podem ser lidos). --audio grava o som que
 o SPU2 gera em WAV: "tecla:gravar" liga e desliga a captura, e cada trecho
-sai como audio_NN.wav na pasta de saída.
+sai como audio_NN.wav na pasta de saída. --pcrtc liga o "Screen Offsets"
+do PCSX2 (pcrtc_offsets): a captura mostra onde o PCRTC começa a mostrar a
+imagem, para conferir a posição da v0.14.2 (sem ele o PCSX2 centraliza).
 
 ROTEIRO é uma lista de passos separados por vírgula:
     esperar:SEG    espera SEG segundos
@@ -56,7 +58,7 @@ TECLAS = {"cima": "Up", "baixo": "Down", "esquerda": "Left", "direita": "Right",
           "foto": "F8", "gravar": "F9"}
 
 
-def preparar_config(base: Path, hostfs=False, audio=False, cartao2=False) -> Path:
+def preparar_config(base: Path, hostfs=False, audio=False, cartao2=False, pcrtc=False) -> Path:
     """Copia o PCSX2.ini do usuário e troca só o necessário para o teste."""
     cfg = base / "config"
     inis = cfg / "PCSX2/inis"
@@ -81,6 +83,9 @@ def preparar_config(base: Path, hostfs=False, audio=False, cartao2=False) -> Pat
         # Sem som: no Xvfb não há saída de áudio e o aviso de erro roubaria o foco.
         "SPU2/Output": {"Backend": "Null"},
     }
+    # A posição do DISPLAY do PCRTC só aparece na captura com --pcrtc; sem
+    # ele fica desligada mesmo se o PCSX2.ini do usuário a ligar (revisão do Codex).
+    trocas["EmuCore/GS"]["pcrtc_offsets"] = "true" if pcrtc else "false"
     if cartao2:  # o cartão 2 da rodada (--cartao2-inicial); sem ele, o do PCSX2.ini do usuário
         trocas["MemoryCards"].update({"Slot2_Enable": "true", "Slot2_Filename": "Mcd002.ps2"})
     if audio:
@@ -240,6 +245,7 @@ def main():
     ap.add_argument("--cartao-inicial", type=Path)
     ap.add_argument("--cartao2-inicial", type=Path)
     ap.add_argument("--audio", action="store_true")
+    ap.add_argument("--pcrtc", action="store_true")
     ap.add_argument("--saida", required=True, type=Path)
     ap.add_argument("--roteiro", required=True)
     ap.add_argument("--trabalho", type=Path, default=Path("/tmp/smw_teste_video"))
@@ -278,7 +284,7 @@ def main():
     with log, tempfile.TemporaryDirectory(prefix="rodada_", dir=a.trabalho) as tmp:
         base = Path(tmp)
         cfg = preparar_config(base, hostfs=a.elf is not None, audio=a.audio,
-                              cartao2=a.cartao2_inicial is not None)
+                              cartao2=a.cartao2_inicial is not None, pcrtc=a.pcrtc)
         if a.cartao_inicial:
             shutil.copyfile(a.cartao_inicial, base / "memcards" / "Mcd001.ps2")
         if a.cartao2_inicial:

@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.14.1 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
+Retrogames Patos de Minas | v0.14.2 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
 
 O QUE VOCÊ PRECISA
 
@@ -151,7 +151,7 @@ baixo escolhe a linha, para os lados muda o valor, X ou START começa:
   componente" em "Y Cb/Pb Cr" na Configuração do Sistema.
 - TELA: 4:3 ou 16:9 (veja TELA 16:9 abaixo), com o teste do círculo.
   O 16:9 só existe no 480p: com 240p ou 480i a linha fica em 4:3.
-- TAMANHO: o tamanho da imagem na TV (veja TAMANHO DA IMAGEM NA TV).
+- POSIÇÃO: centraliza a imagem na TV (veja POSIÇÃO DA IMAGEM NA TV).
 - IDIOMA: português do Brasil ou inglês (o original).
 - TRAPAÇAS: quantas estão ligadas; X abre a lista (veja TRAPAÇAS).
 A imagem é sempre com os pixels nítidos, como no cartucho.
@@ -173,10 +173,9 @@ Durante o jogo (segurando L2 + R2):
   com o próximo save). Aparece "TELA 4:3" ou "TELA 16:9" por 5
   segundos, também no começo do jogo, para conferir numa foto. Só no
   480p; nos outros vídeos aparece "16:9 SO NO 480P" e nada muda.
-- L2 + R2 + setas: o tamanho da imagem na TV. Cima e baixo mudam a
-  altura, direita e esquerda a largura, de 2 em 2%, de 80 a 100%.
-  Aparece "TAMANHO 94% X 90%" (por exemplo) por 5 segundos. Fica
-  gravado junto com o próximo save.
+- L2 + R2 + setas: move a imagem na TV, para centralizar. Aparece
+  "POSICAO +4, -2" (por exemplo) ou "POSICAO CENTRO" por 5 segundos.
+  Fica gravado junto com o próximo save.
 - L2 + R2 + SELECT: abre a lista de trapaças. O jogo e a música ficam
   parados até você voltar (CÍRCULO ou SELECT).
 - L2 + R2 + TRIÂNGULO: liga/desliga o medidor de desempenho, no canto
@@ -250,25 +249,26 @@ Dá para editar no Bloco de Notas. O que foi escolhido no próprio PS2
 (SMW.OPT, onde fica o save) vale mais que o SMW.CFG. Sem esses arquivos
 a tela AJUSTES começa em 240p, 4:3 e português, e espera você apertar
 X. As linhas suavizacao= e scanlines= de versões antigas são ignoradas.
-O tamanho na TV fica no SMW.OPT como largura=94 e altura=90 (de 80 a
-100); essas linhas também valem no SMW.CFG.
+A posição na TV fica no SMW.OPT como posicao_x=4 e posicao_y=-2 (de
+-16 a 16); essas linhas também valem no SMW.CFG. As linhas largura= e
+altura= da v0.14.1 são ignoradas.
 
-TAMANHO DA IMAGEM NA TV
+POSIÇÃO DA IMAGEM NA TV
 
-Pelo cabo AV muitas TVs cortam um pedaço das bordas da imagem
-(overscan). A linha TAMANHO da tela AJUSTES deixa a imagem menor, como
-o ajuste de tela de um monitor: aperte X (ou uma seta do lado) e use
-cima e baixo para a altura e esquerda e direita para a largura, de 2 em
-2%, de 100% até 80%. A própria tela AJUSTES muda na hora, com setas
-piscando no meio de cada borda: diminua até ver as quatro setas
-inteiras. X, CÍRCULO ou START terminam o ajuste. Durante o jogo, L2 +
-R2 + as setas fazem o mesmo.
+Pelo cabo AV muitas TVs mostram a imagem um pouco deslocada. A linha
+POSIÇÃO da tela AJUSTES move a imagem, como o ajuste de posição de um
+monitor: aperte X (ou uma seta do lado) e use as setas, de 2 em 2
+pixels do SNES (até 16 para cada lado). A própria tela AJUSTES anda na
+hora, com setas piscando no meio de cada borda: centralize a moldura na
+TV. X, CÍRCULO ou START terminam o ajuste. Durante o jogo, L2 + R2 +
+as setas fazem o mesmo.
 
-Vale para tudo: o jogo, o 16:9, as telas antes do jogo e a abertura. Só
-as primeiras telas de carregamento, até "Lendo o save...", aparecem no
-tamanho todo: o jogo ainda não leu os ajustes. A borda fica preta. Abaixo de 100% o PS2 redesenha cada quadro menor com
-o filtro do GS, então a imagem fica um pouco menos nítida; em 100% ela
-continua com os pixels nítidos, como antes.
+O PS2 só muda onde começa a mostrar a imagem: ela continua com os
+pixels nítidos e o jogo não fica mais pesado. Vale para o jogo, o 16:9,
+as telas antes do jogo e a abertura; só as primeiras telas de
+carregamento, até "Lendo o save...", aparecem no centro, porque o jogo
+ainda não leu os ajustes. O tamanho da imagem (v0.14.1) saiu: pelo AV,
+diminuir a imagem deixava tudo embaçado ou sumia com linhas das letras.
 
 TRAPAÇAS (TRAPACAS.TXT)
 
@@ -359,6 +359,14 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.14.2 (beta):
+- O tamanho da imagem saiu e no lugar ficou a POSIÇÃO, como no port do
+  Yu-Gi-Oh: a linha POSIÇÃO da tela AJUSTES e L2 + R2 + setas no jogo
+  movem a imagem na TV para centralizar, sem perder nitidez (veja
+  POSIÇÃO DA IMAGEM NA TV). Pelo AV, a imagem reduzida ficava embaçada
+  ou perdia linhas das letras.
+- O 16:9 continua só no 480p.
 
 Mudanças da v0.14.1 (beta):
 - 16:9 só no 480p (cabo componente ou HDMI). Com 240p ou 480i o jogo

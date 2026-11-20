@@ -271,7 +271,7 @@
   function atualizarResumo() {
     const a = estado.ajustes;
     const linhas = [
-      'Tela AJUSTES: vídeo, tela, tamanho, idioma e trapaças.',
+      'Tela AJUSTES: vídeo, tela, posição, idioma e trapaças.',
       a.video === 'perguntar' ? 'Você escolhe o vídeo (240p, 480i ou 480p).'
         : 'Já marcado: ' + a.video + (a.video === '240p' ? '.' : ' (se a TV não mostrar, volta para os ajustes).'),
       textoResumoTela(a),

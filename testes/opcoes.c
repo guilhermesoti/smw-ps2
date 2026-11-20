@@ -81,7 +81,9 @@ int main(int argc, char **argv) {
   smw_options_clear(&o);
   CONFERE(!smw_read_saved_options(&o));
   CONFERE(o.tela == SMW_OPT_ASK && o.video == SMW_OPT_ASK);
-  SmwOptions escolha = {.tela = 1, .video = SMW_VIDEO_480I, .idioma = 0, .compat = SMW_OPT_ASK};
+  /* A posicao 0 vale (centro): sem posicao, SMW_POSICAO_NADA */
+  SmwOptions escolha = {.tela = 1, .video = SMW_VIDEO_480I, .idioma = 0, .compat = SMW_OPT_ASK,
+                        .pos_x = SMW_POSICAO_NADA, .pos_y = SMW_POSICAO_NADA};
   CONFERE(smw_save_options(&escolha));
   char texto[128];
   le("SMW.OPT", texto, sizeof(texto));
@@ -111,7 +113,8 @@ int main(int argc, char **argv) {
   CONFERE(o.tela == 0 && o.video == SMW_OPT_ASK && o.idioma == SMW_OPT_ASK && o.compat == SMW_OPT_ASK);
 
   /* Troca no jogo: so grava junto com o proximo save */
-  SmwOptions jogo = {.tela = 0, .video = SMW_VIDEO_240P, .idioma = 1, .compat = SMW_OPT_ASK};
+  SmwOptions jogo = {.tela = 0, .video = SMW_VIDEO_240P, .idioma = 1, .compat = SMW_OPT_ASK,
+                     .pos_x = SMW_POSICAO_NADA, .pos_y = SMW_POSICAO_NADA};
   smw_options_changed(&jogo);
   le("SMW.OPT", texto, sizeof(texto));
   CONFERE(strcmp(texto, "tela=4:3\n") == 0);
@@ -124,38 +127,52 @@ int main(int argc, char **argv) {
   le("SMW.OPT", texto, sizeof(texto));
   CONFERE(strcmp(texto, "tela=16:9\n") == 0);
 
-  /* v0.14.1: tamanho na TV (largura e altura em %, 80 a 100) */
-  grava("SMW.OPT", "tela=16:9\nvideo=240p\nlargura=94\naltura= 90 \n");
+  /* v0.14.2: posicao na TV (pixels e linhas do SNES, -16 a 16) */
+  grava("SMW.OPT", "tela=16:9\nvideo=240p\nposicao_x=-4\nposicao_y= +6 \n");
   smw_options_clear(&o);
-  CONFERE(smw_read_saved_options(&o) && o.largura == 94 && o.altura == 90 && o.tela == 1);
-  grava("SMW.OPT", "largura=79\naltura=101\n");
+  CONFERE(smw_read_saved_options(&o) && o.pos_x == -4 && o.pos_y == 6 && o.tela == 1);
+  grava("SMW.OPT", "posicao_x=-16\nposicao_y=16\n");  /* os dois limites valem */
+  smw_options_clear(&o);
+  CONFERE(smw_read_saved_options(&o) && o.pos_x == -16 && o.pos_y == 16);
+  grava("SMW.OPT", "posicao_x=-17\nposicao_y=17\n");
   smw_options_clear(&o);
   smw_read_saved_options(&o);
-  CONFERE(o.largura == SMW_OPT_ASK && o.altura == SMW_OPT_ASK);
-  grava("SMW.OPT", "largura=9x\naltura=\n");
+  CONFERE(o.pos_x == SMW_POSICAO_NADA && o.pos_y == SMW_POSICAO_NADA);
+  grava("SMW.OPT", "posicao_x=2x\nposicao_y=\n");
   smw_options_clear(&o);
   smw_read_saved_options(&o);
-  CONFERE(o.largura == SMW_OPT_ASK && o.altura == SMW_OPT_ASK);
-  grava("SMW.OPT", "largura=80\naltura=100\n");  /* os dois limites valem */
+  CONFERE(o.pos_x == SMW_POSICAO_NADA && o.pos_y == SMW_POSICAO_NADA);
+  /* 4294967300 = 2^32 + 4: convertido para int antes de conferir, viraria 4 */
+  grava("SMW.OPT", "posicao_x=4294967300\nposicao_y=-4294967300\n");
   smw_options_clear(&o);
-  CONFERE(smw_read_saved_options(&o) && o.largura == 80 && o.altura == 100);
-  CONFERE(smw_tamanho_limita(79) == 80 && smw_tamanho_limita(90) == 90 && smw_tamanho_limita(101) == 100);
+  smw_read_saved_options(&o);
+  CONFERE(o.pos_x == SMW_POSICAO_NADA && o.pos_y == SMW_POSICAO_NADA);
+  /* O tamanho da v0.14.1 saiu: largura= e altura= sao ignoradas */
+  grava("SMW.OPT", "tela=4:3\nlargura=94\naltura=90\n");
+  smw_options_clear(&o);
+  CONFERE(smw_read_saved_options(&o) && o.tela == 0 && o.pos_x == SMW_POSICAO_NADA && o.pos_y == SMW_POSICAO_NADA);
+  CONFERE(smw_posicao_limita(-17) == -16 && smw_posicao_limita(-4) == -4 && smw_posicao_limita(17) == 16);
+  CONFERE(!smw_posicao_valida(SMW_POSICAO_NADA) && smw_posicao_valida(0));
+  /* Um toque de seta: anda 2, para nos limites e no 0 vindo de um impar */
+  CONFERE(smw_posicao_anda(0, 2) == 2 && smw_posicao_anda(-4, 2) == -2 && smw_posicao_anda(16, 2) == 16);
+  CONFERE(smw_posicao_anda(-15, -2) == -16 && smw_posicao_anda(1, -2) == 0 && smw_posicao_anda(-1, 2) == 0);
+  CONFERE(smw_posicao_anda(3, -2) == 1 && smw_posicao_anda(2, -2) == 0);
   CONFERE(!smw_16_9_vale(SMW_VIDEO_240P) && smw_16_9_vale(SMW_VIDEO_480P) && !smw_16_9_vale(SMW_VIDEO_480I));
-  /* 4294967390 = 2^32 + 94: convertido para int antes de conferir, viraria 94 */
-  grava("SMW.OPT", "largura=4294967390\naltura=-90\n");
-  smw_options_clear(&o);
-  smw_read_saved_options(&o);
-  CONFERE(o.largura == SMW_OPT_ASK && o.altura == SMW_OPT_ASK);
-  SmwOptions tamanho = {.tela = 0, .video = SMW_VIDEO_480P, .idioma = 0, .compat = SMW_OPT_ASK, .largura = 92,
-                        .altura = 100};
-  CONFERE(smw_save_options(&tamanho));
+  SmwOptions posicao = {.tela = 0, .video = SMW_VIDEO_480P, .idioma = 0, .compat = SMW_OPT_ASK, .pos_x = 0,
+                        .pos_y = -8};
+  CONFERE(smw_save_options(&posicao));
   le("SMW.OPT", texto, sizeof(texto));
-  CONFERE(strcmp(texto, "tela=4:3\nvideo=480p\nidioma=pt\nlargura=92\naltura=100\n") == 0);
+  CONFERE(strcmp(texto, "tela=4:3\nvideo=480p\nidioma=pt\nposicao_x=0\nposicao_y=-8\n") == 0);
   smw_options_clear(&o);
-  CONFERE(smw_read_saved_options(&o) && o.largura == 92 && o.altura == 100);
-  grava("SMW.CFG", "largura=88\naltura=96\n");
+  CONFERE(smw_read_saved_options(&o) && o.pos_x == 0 && o.pos_y == -8);
+  /* O mais longo (69 bytes) */
+  SmwOptions longo = {.tela = 1, .video = SMW_VIDEO_480P, .idioma = 0, .compat = 1, .pos_x = -16, .pos_y = -16};
+  CONFERE(smw_save_options(&longo));
+  le("SMW.OPT", texto, sizeof(texto));
+  CONFERE(strlen(texto) == 69 && strstr(texto, "posicao_y=-16\n") != NULL);
+  grava("SMW.CFG", "posicao_x=10\nposicao_y=-2\n");
   smw_read_config(&o);
-  CONFERE(o.largura == 88 && o.altura == 96);
+  CONFERE(o.pos_x == 10 && o.pos_y == -2);
 
   /* SMW.OPT estragado: nenhum campo */
   grava("SMW.OPT", "\x01\x02 lixo");

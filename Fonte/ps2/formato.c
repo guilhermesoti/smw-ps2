@@ -11,7 +11,7 @@
  * para a opcao marcada: no 16:9 ele e desenhado espremido, e a TV em modo
  * Wide (que estica a imagem 4:3 em 4/3) o deixa redondo de novo. */
 #include "formato.h"
-#include "files.h"  /* smw_16_9_vale, SMW_TAMANHO_MAX */
+#include "files.h"  /* smw_16_9_vale */
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -207,13 +207,13 @@ static void elipse(int cx, int cy, float rx, float ry, uint32_t cor) {
 typedef struct {
   const char *titulo, *jogar, *rotulo[AJUSTE_JOGAR], *idioma[2], *rodape, *contagem, *video_txt[3][2],
       *aplica, *tela_txt[2], *redondo[2], *so_480p[2], *idioma_txt[2], *idioma_tela, *trapaca_txt[4], *nenhuma,
-      *ligadas, *sem_arquivo, *tamanho_txt[3], *ajustando_txt[3], *rodape_ajuste, *jogar_txt[3];
+      *ligadas, *sem_arquivo, *posicao_txt[3], *ajustando_txt[3], *rodape_ajuste, *jogar_txt[3], *centro;
 } Textos;
 
 /* Cada linha do painel cabe em 34 letras (6 pixels cada). */
 static const Textos kTextos[2] = {
   {
-    "AJUSTES", "JOGAR", {"Vídeo", "Tela", "Tamanho", "Idioma", "Trapaças"}, {"Português", "English"},
+    "AJUSTES", "JOGAR", {"Vídeo", "Tela", "Posição", "Idioma", "Trapaças"}, {"Português", "English"},
     "Direcional: escolhe e muda  X: joga", "Começa em %d s. Um botão muda.",
     {{"240p: cabo AV, em qualquer TV.", "O mais nítido, igual ao SNES."},
      {"480p: cabo componente ou HDMI.", "No cabo AV não aparece; volta."},
@@ -226,14 +226,15 @@ static const Textos kTextos[2] = {
     {"Códigos do arquivo TRAPACAS.TXT", "(ao lado do save). X abre a lista.",
      "No jogo: L2+R2+SELECT.", "Ligadas, mudam o jogo e o save."},
     "nenhuma", "%d ligada%s", "sem arquivo",
-    {"Para a TV não cortar as bordas.", "Aperte X e use as setas.", "No jogo: L2+R2 e as setas."},
-    {"Cima/baixo: altura.", "Esquerda/direita: largura.", "X: pronto. Veja a moldura toda."},
-    "Setas: tamanho  X: pronto",
+    {"Centraliza a imagem na TV.", "Aperte X e use as setas.", "No jogo: L2+R2 e as setas."},
+    {"Setas: movem a imagem.", "Centralize a moldura na TV.", "X: pronto."},
+    "Setas: posição  X: pronto",
     {"X ou START começa. Fica salvo.", "No jogo: L2+R2+X troca 4:3/16:9",
-     "(480p); L2+R2+setas, o tamanho."},
+     "(480p); L2+R2+setas, a posição."},
+    "centro",
   },
   {
-    "SETTINGS", "PLAY", {"Video", "Screen", "Size", "Language", "Cheats"}, {"Português", "English"},
+    "SETTINGS", "PLAY", {"Video", "Screen", "Position", "Language", "Cheats"}, {"Português", "English"},
     "D-pad: choose and change  X: play", "Starts in %d s. Any button stops.",
     {{"240p: AV cable, any TV.", "The sharpest, like the SNES."},
      {"480p: component or HDMI.", "Not on the AV cable; it returns."},
@@ -246,11 +247,12 @@ static const Textos kTextos[2] = {
     {"Codes from the TRAPACAS.TXT file", "(next to the save). X opens it.",
      "In game: L2+R2+SELECT.", "When on, they change the save."},
     "none", "%d on%s", "no file",
-    {"So the TV does not cut the edges.", "Press X and use the D-pad.", "In game: L2+R2 and the D-pad."},
-    {"Up/down: height.", "Left/right: width.", "X: done. See the whole frame."},
-    "D-pad: size  X: done",
+    {"Centers the picture on the TV.", "Press X and use the D-pad.", "In game: L2+R2 and the D-pad."},
+    {"D-pad: moves the picture.", "Center the frame on the TV.", "X: done."},
+    "D-pad: position  X: done",
     {"X or START begins. It is saved.", "In game: L2+R2+X 4:3/16:9 (480p);",
-     "L2+R2+D-pad: the size."},
+     "L2+R2+D-pad: the position."},
+    "center",
   },
 };
 
@@ -270,9 +272,9 @@ static const char *valor(const Textos *t, const Ajustes *a, int linha, char *buf
   switch (linha) {
   case AJUSTE_VIDEO: return videos[a->video];
   case AJUSTE_TELA: return a->tela && !tela_fixa(a) ? "16:9" : "4:3";
-  case AJUSTE_TAMANHO:
-    if (a->largura >= SMW_TAMANHO_MAX && a->altura >= SMW_TAMANHO_MAX) return "100%";
-    snprintf(buf, n, "%d%% x %d%%", a->largura, a->altura);
+  case AJUSTE_POSICAO:
+    if (!a->pos_x && !a->pos_y) return t->centro;
+    snprintf(buf, n, "%+d, %+d", a->pos_x, a->pos_y);
     return buf;
   case AJUSTE_IDIOMA: return t->idioma[a->idioma];
   default:
@@ -299,8 +301,8 @@ static void linha_ajuste(const Textos *t, const Ajustes *a, int linha, int frame
   uint32_t cor = marcada ? OURO : 0x5A6AAA;
   int pulo = marcada && (frame / 15) % 2 ? 1 : 0;
   if (linha == AJUSTE_TELA && tela_fixa(a)) return;  /* sem setas: so 4:3 */
-  /* Tamanho e trapacas: so a seta da direita (X ou as setas entram). */
-  if (linha != AJUSTE_TRAPACAS && linha != AJUSTE_TAMANHO) seta(VALOR_X + 2 - pulo, y + LINHA_H / 2, -1, cor);
+  /* Posicao e trapacas: so a seta da direita (X ou as setas entram). */
+  if (linha != AJUSTE_TRAPACAS && linha != AJUSTE_POSICAO) seta(VALOR_X + 2 - pulo, y + LINHA_H / 2, -1, cor);
   seta(fim - 6 + pulo, y + LINHA_H / 2, 1, cor);  /* trapacas: sem arquivo, X abre a explicacao */
 }
 
@@ -341,8 +343,8 @@ static void painel(const Textos *t, const Ajustes *a) {
     texto(x + 44, l3 + 6, l[1], tela_fixa(a) ? LARANJA : AZUL, 1);
     break;
   }
-  case AJUSTE_TAMANHO: {
-    const char *const *l = a->ajustando ? t->ajustando_txt : t->tamanho_txt;
+  case AJUSTE_POSICAO: {
+    const char *const *l = a->ajustando ? t->ajustando_txt : t->posicao_txt;
     texto(tx, l1, l[0], BRANCO, 1);
     texto(tx, l2, l[1], a->ajustando ? BRANCO : AZUL, 1);
     texto(tx, l3, l[2], a->ajustando ? OURO : CINZA, 1);
@@ -387,12 +389,11 @@ void formato_ajustes(uint32_t *destino, const unsigned char *letras, const Ajust
     snprintf(linha, sizeof(linha), t->contagem, a->segundos);
     l2 = linha, c2 = OURO;
   }
-  /* No ajuste do tamanho a segunda linha sai: ali fica a seta de baixo. */
+  /* No ajuste da posicao a segunda linha sai: ali fica a seta de baixo. */
   rodape(a->ajustando ? t->rodape_ajuste : t->rodape, BRANCO, a->ajustando ? NULL : l2, c2);
   if (a->ajustando) {
-    /* No ajuste do tamanho: setas piscando no meio de cada borda do quadro,
-       para ver se a TV mostra a moldura toda (por ultimo, por cima do
-       rodape). */
+    /* No ajuste da posicao: setas piscando no meio de cada borda do quadro,
+       para centralizar a moldura na TV (por ultimo, por cima do rodape). */
     uint32_t cor = (frame / 15) % 2 ? OURO : BRANCO;
     for (int k = 0; k < 2; k++) {
       seta_v(W / 2, 2 + k * 5, -1, cor);

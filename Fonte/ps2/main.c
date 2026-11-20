@@ -22,7 +22,7 @@
 #include <timer.h>
 #include <unistd.h>
 
-#define SMW_VERSAO "0.14.1"
+#define SMW_VERSAO "0.14.2"
 
 #define DECLARE_DRIVER(n) extern unsigned char n##_irx[]; extern unsigned int size_##n##_irx
 DECLARE_DRIVER(bdm);
@@ -277,6 +277,33 @@ static const char *nome_video(int modo) {
   }
 }
 
+/* v0.14.2: posicao da imagem na TV (como no port do Yu-Gi-Oh), em pixels e
+   linhas do SNES. So muda onde o PCRTC comeca a mostrar o quadro (DISPLAY1
+   e DISPLAY2, gsKit_set_display_offset): nao custa nada e nao perde
+   nitidez. Um pixel do SNES e 10 VCK no NTSC (1280 colunas com MAGH 1, ou
+   512 com MAGH 4) e 5 no 480p (1280 com MAGH 0, ou 640 com MAGH 1). Uma
+   linha e 1 unidade do DY no 240p; 2 no 480i e nos menus (o DY entrelacado
+   conta as linhas do quadro inteiro, e o gsKit o mantem par) e no 480p (o
+   jogo em 448 linhas). A unidade e sempre o pixel do quadro 4:3: no 16:9
+   o mesmo toque anda o mesmo tanto na TV (cerca de 1,34 pixel do quadro
+   de 342 colunas). O gsKit_init_screen zera o deslocamento: video_abre o
+   poe de novo. O comeco nunca passa de 0 (com os inicios do gsKit, de 25 a
+   652, a faixa de 16 cabe com folga; e so a garantia). */
+static int posicao_x, posicao_y;
+static void aplica_posicao(void) {
+  if (!gs) return;
+  const bool p480 = gs->Mode == GS_MODE_DTV_480P;
+  int dx = posicao_x * (p480 ? 5 : 10);
+  int dy = posicao_y * (p480 || gs->Interlace == GS_INTERLACED ? 2 : 1);
+  if (dx < -gs->StartX) dx = -gs->StartX;
+  if (dy < -gs->StartY) dy = -gs->StartY;  /* no entrelacado o StartY e par */
+  gsKit_set_display_offset(gs, dx, dy);
+}
+static void muda_posicao(int x, int y) {
+  posicao_x = smw_posicao_limita(x), posicao_y = smw_posicao_limita(y);
+  aplica_posicao();
+}
+
 static void video_abre(int modo, bool compat) {
   static bool dma_ready;
   if (!dma_ready) {
@@ -313,6 +340,7 @@ static void video_abre(int modo, bool compat) {
   gs->PrimAlphaEnable = GS_SETTING_OFF;
   gsKit_init_screen(gs);
   gsKit_mode_switch(gs, GS_ONESHOT);
+  aplica_posicao();
 
   texture.Width = screen_pitch;
   texture.Height = SMW_HEIGHT;
@@ -336,9 +364,9 @@ static void video_abre(int modo, bool compat) {
   video.modo = modo;
   video.p480 = modo == SMW_VIDEO_480P;
   video.compat = compat;
-  smw_log("GS: %s, quadro %dx%d de %d bits, MAGH %d MAGV %d, DW %d DH %d, inicio X %d Y %d",
+  smw_log("GS: %s, quadro %dx%d de %d bits, MAGH %d MAGV %d, DW %d DH %d, inicio X %d Y %d, deslocamento %+d %+d",
           nome_video(modo), gs->Width, gs->Height, gs->PSM == GS_PSM_CT16 ? 16 : 32,
-          gs->MagH, gs->MagV, gs->DW, gs->DH, gs->StartX, gs->StartY);
+          gs->MagH, gs->MagV, gs->DW, gs->DH, gs->StartX, gs->StartY, gs->StartXOffset, gs->StartYOffset);
 }
 
 /* Menus (carregando, AJUSTES, "A IMAGEM APARECEU?"): the IOP side of
@@ -376,7 +404,7 @@ static unsigned text_width(const char *msg, unsigned scale) {
    progress was loaded from and save confirmations. 3x5 capitals, each dot
    scale x scale pixels. */
 static void draw_text_scaled(unsigned x, unsigned y, const char *msg, uint32_t bg, unsigned scale) {
-  static const char letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:.%";
+  static const char letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:.%+,";
   static const unsigned char glyph[][5] = {
     {2,5,7,5,5},{6,5,6,5,6},{3,4,4,4,3},{6,5,5,5,6},{7,4,6,4,7},{7,4,6,4,4},{3,4,5,5,3},
     {5,5,7,5,5},{7,2,2,2,7},{1,1,1,5,2},{5,5,6,5,5},{4,4,4,4,7},{5,7,7,5,5},{6,5,5,5,5},
@@ -384,7 +412,7 @@ static void draw_text_scaled(unsigned x, unsigned y, const char *msg, uint32_t b
     {5,5,5,5,2},{5,5,7,7,5},{5,5,2,5,5},{5,5,2,2,2},{7,1,2,4,7},
     {7,5,5,5,7},{2,6,2,2,7},{7,1,7,4,7},{7,1,3,1,7},{5,5,7,1,1},
     {7,4,7,1,7},{7,4,7,5,7},{7,1,1,1,1},{7,5,7,5,7},{7,5,7,1,7},
-    {0,0,7,0,0},{0,2,0,2,0},{0,0,0,0,2},{5,1,2,4,5}
+    {0,0,7,0,0},{0,2,0,2,0},{0,0,0,0,2},{5,1,2,4,5},{0,2,7,2,0},{0,0,0,2,4}
   };
   const unsigned s = scale;
   if (!s || x >= screen_w || y + 7 * s > SMW_HEIGHT) return;
@@ -414,7 +442,8 @@ static void draw_text(unsigned x, unsigned y, const char *msg, uint32_t bg) {
 /* v0.13.7: "TELA 4:3" or "TELA 16:9" for 5 s when the game starts and after
    L2+R2+X, at double size under the status bar, so a photo of the TV shows
    which mode it is (EE ticks; 5 s fits before the counter wraps). v0.14.1:
-   also "16:9 SO NO 480P" and the size on the TV ("TAMANHO 94% X 90%"). */
+   also "16:9 SO NO 480P"; v0.14.2: the position on the TV ("POSICAO +2, -4"
+   or "POSICAO CENTRO"). */
 static const uint32_t ASPECT_NOTICE_TICKS = 5u * EE_HZ;
 static bool aspect_notice;
 static uint32_t aspect_notice_start;
@@ -503,16 +532,15 @@ static void set_aspect(bool wide) {
   texture.TBW = screen_pitch / 64;
 }
 
-/* Setas do tamanho (AJUSTES e L2+R2): cima/baixo mudam a altura,
-   direita/esquerda a largura, SMW_TAMANHO_PASSO por toque, dentro de
-   SMW_TAMANHO_MIN..SMW_TAMANHO_MAX. */
-static void passo_tamanho(unsigned apertou, int *largura, int *altura) {
-  int l = *largura, a = *altura;
-  if (apertou & PAD_UP) a += SMW_TAMANHO_PASSO;
-  if (apertou & PAD_DOWN) a -= SMW_TAMANHO_PASSO;
-  if (apertou & PAD_RIGHT) l += SMW_TAMANHO_PASSO;
-  if (apertou & PAD_LEFT) l -= SMW_TAMANHO_PASSO;
-  *largura = smw_tamanho_limita(l), *altura = smw_tamanho_limita(a);
+/* Setas da posicao (AJUSTES e L2+R2): movem a imagem SMW_POSICAO_PASSO por
+   toque (cima sobe, direita vai para a direita), dentro de
+   -SMW_POSICAO_MAX..SMW_POSICAO_MAX (smw_posicao_anda). */
+static void passo_posicao(unsigned apertou, int *x, int *y) {
+  /* Setas opostas no mesmo quadro se anulam (revisao do Codex). */
+  int dx = ((apertou & PAD_RIGHT) ? 1 : 0) - ((apertou & PAD_LEFT) ? 1 : 0);
+  int dy = ((apertou & PAD_DOWN) ? 1 : 0) - ((apertou & PAD_UP) ? 1 : 0);
+  if (dx) *x = smw_posicao_anda(*x, dx * SMW_POSICAO_PASSO);
+  if (dy) *y = smw_posicao_anda(*y, dy * SMW_POSICAO_PASSO);
 }
 
 /* L2+R2 + Triangle: performance meter; each second its line also goes to
@@ -520,11 +548,10 @@ static void passo_tamanho(unsigned apertou, int *largura, int *altura) {
    moment), so the numbers reach the PC (v0.13.8). L2+R2 + Cross: 4:3 / 16:9
    (shows "TELA 4:3" / "TELA 16:9" for 5 s; since v0.14.1 only in 480p,
    otherwise "16:9 SO NO 480P"). L2+R2 + Select: the cheats (v0.14; the game
-   pauses). L2+R2 + D-pad (v0.14.1): the size on the TV, up/down the height
-   and left/right the width, 2% a step, 80 to 100%, like a monitor's screen
-   adjustment (saved with the next save, like the screen). While L2+R2 are
-   held the pad
-   sends nothing to the game. Square and Circle (scanlines and smoothing
+   pauses). L2+R2 + D-pad (v0.14.2): moves the picture on the TV, 2 SNES
+   pixels/lines a step, up to 16 each way, like a monitor's position
+   adjustment (saved with the next save, like the screen; the size of the
+   v0.14.1 is gone). While L2+R2 are held the pad sends nothing to the game. Square and Circle (scanlines and smoothing
    until v0.13.6) do nothing now. The log is written and the pacing told
    about the new screen by the main loop, after its timed part. */
 static bool log_after_loop, aspect_changed, abre_trapacas;
@@ -552,16 +579,17 @@ static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
     smw_log("L2+R2+X: tela %s", video.wide ? "16:9" : "4:3");
   }
   if (pressed & (PAD_UP | PAD_DOWN | PAD_LEFT | PAD_RIGHT)) {
-    int l = opcoes.largura, a = opcoes.altura;
-    passo_tamanho(pressed, &l, &a);
+    int x = opcoes.pos_x, y = opcoes.pos_y;
+    passo_posicao(pressed, &x, &y);
     char texto[sizeof(aspect_notice_text)];
-    snprintf(texto, sizeof(texto), "TAMANHO %d%% X %d%%", l, a);
+    if (!x && !y) snprintf(texto, sizeof(texto), "POSICAO CENTRO");
+    else snprintf(texto, sizeof(texto), "POSICAO %+d, %+d", x, y);
     show_video_notice(texto);  /* also at the limit, so it shows the value */
-    if (l != opcoes.largura || a != opcoes.altura) {
-      opcoes.largura = l, opcoes.altura = a;
-      smw_set_tamanho(l, a);
+    if (x != opcoes.pos_x || y != opcoes.pos_y) {
+      opcoes.pos_x = x, opcoes.pos_y = y;
+      muda_posicao(x, y);
       smw_options_changed(&opcoes);  /* fica gravado junto com o proximo save */
-      smw_log("L2+R2+setas: tamanho %d%% x %d%%", l, a);
+      smw_log("L2+R2+setas: posicao %+d %+d", x, y);
     }
   }
   return 0;
@@ -763,13 +791,12 @@ static void trapacas_no_jogo(int idioma) {
 
 /* Tela AJUSTES. contagem: comeca sozinha em 5 s (ajustes ja salvos) ate o
    jogador apertar um botao. Volta com X ou START (ou no fim da contagem).
-   v0.14.1: a linha Tela so muda no 480p (o 16:9 so vale nele), e na linha
-   Tamanho X (ou uma seta do lado) entra no ajuste: cima/baixo mudam a
-   altura e esquerda/direita a largura, na hora (a propria tela e a previa);
-   X, CIRCULO ou START saem do ajuste. */
+   v0.14.1: a linha Tela so muda no 480p (o 16:9 so vale nele). v0.14.2: na
+   linha Posicao X (ou uma seta do lado) entra no ajuste: as setas movem a
+   imagem na hora (a propria tela e a previa); X, CIRCULO ou START saem. */
 static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const char *situacao) {
   Ajustes a = {.linha = contagem ? AJUSTE_JOGAR : AJUSTE_VIDEO, .video = o->video, .tela = o->tela,
-               .largura = o->largura, .altura = o->altura, .ajustando = false,
+               .pos_x = o->pos_x, .pos_y = o->pos_y, .ajustando = false,
                .idioma = o->idioma, .segundos = -1, .aviso = aviso, .situacao = situacao,
                .trapacas_total = trapacas.n};
   unsigned held = botoes();
@@ -779,16 +806,16 @@ static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const 
     unsigned agora = botoes(), apertou = agora & ~held;
     held = agora;
     if (saindo < 0 && apertou && a.ajustando) {
-      int l = a.largura, h = a.altura;
-      passo_tamanho(apertou, &l, &h);
-      if (l != a.largura || h != a.altura) {
-        a.largura = l, a.altura = h;
-        smw_set_tamanho(l, h);
+      int x = a.pos_x, y = a.pos_y;
+      passo_posicao(apertou, &x, &y);
+      if (x != a.pos_x || y != a.pos_y) {
+        a.pos_x = x, a.pos_y = y;
+        muda_posicao(x, y);
         smw_blip(sound);
       }
       if (apertou & (PAD_CROSS | PAD_CIRCLE | PAD_START)) {
         a.ajustando = false;
-        smw_log("AJUSTES: tamanho %d%% x %d%%", a.largura, a.altura);
+        smw_log("AJUSTES: posicao %+d %+d", a.pos_x, a.pos_y);
         smw_blip(sound);
       }
     } else if (saindo < 0 && apertou) {
@@ -798,7 +825,7 @@ static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const 
         smw_blip(sound);
         tela_trapacas(false, fundo_ajustes, a.idioma);
         held = botoes();
-      } else if (a.linha == AJUSTE_TAMANHO && (apertou & (PAD_CROSS | PAD_LEFT | PAD_RIGHT))) {
+      } else if (a.linha == AJUSTE_POSICAO && (apertou & (PAD_CROSS | PAD_LEFT | PAD_RIGHT))) {
         a.ajustando = true;
         a.aviso = NULL;
         smw_blip(sound);
@@ -827,7 +854,7 @@ static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const 
     mostra_quadro(bright < 0 ? 0 : bright);
   }
   o->video = a.video, o->tela = a.tela, o->idioma = a.idioma;
-  o->largura = a.largura, o->altura = a.altura;
+  o->pos_x = a.pos_x, o->pos_y = a.pos_y;
   return sozinho;
 }
 
@@ -848,16 +875,16 @@ static bool confirma_video(int idioma) {
   return false;
 }
 
-/* "tela=4:3 video=240p idioma=pt saida=1280 tamanho=100x100"; "-" = sem valor. */
+/* "tela=4:3 video=240p idioma=pt saida=1280 posicao=+0,-4"; "-" = sem valor. */
 static void texto_opcoes(const SmwOptions *o, char *out, size_t size) {
-  char l[8] = "-", a[8] = "-";
-  if (smw_tamanho_valido(o->largura)) snprintf(l, sizeof(l), "%d", o->largura);
-  if (smw_tamanho_valido(o->altura)) snprintf(a, sizeof(a), "%d", o->altura);
-  snprintf(out, size, "tela=%s video=%s idioma=%s saida=%s tamanho=%sx%s",
+  char x[8] = "-", y[8] = "-";
+  if (smw_posicao_valida(o->pos_x)) snprintf(x, sizeof(x), "%+d", o->pos_x);
+  if (smw_posicao_valida(o->pos_y)) snprintf(y, sizeof(y), "%+d", o->pos_y);
+  snprintf(out, size, "tela=%s video=%s idioma=%s saida=%s posicao=%s,%s",
            o->tela < 0 ? "-" : o->tela ? "16:9" : "4:3",
            o->video < 0 ? "-" : nome_video(o->video),
            o->idioma < 0 ? "-" : o->idioma ? "en" : "pt",
-           o->compat < 0 ? "-" : o->compat ? "512" : "1280", l, a);
+           o->compat < 0 ? "-" : o->compat ? "512" : "1280", x, y);
 }
 
 /* v0.14.1: o 16:9 so vale no 480p (componente ou HDMI); nos outros videos o
@@ -866,7 +893,7 @@ static bool tela_larga(const SmwOptions *o) { return o->tela == 1 && smw_16_9_va
 
 static bool mesmas_opcoes(const SmwOptions *a, const SmwOptions *b) {
   return a->tela == b->tela && a->video == b->video && a->idioma == b->idioma &&
-         (a->compat == 1) == (b->compat == 1) && a->largura == b->largura && a->altura == b->altura;
+         (a->compat == 1) == (b->compat == 1) && a->pos_x == b->pos_x && a->pos_y == b->pos_y;
 }
 
 int main(int argc, char **argv) {
@@ -934,18 +961,17 @@ int main(int argc, char **argv) {
   smw_log("SMW.CFG (Gravador): %s", msg);
   texto_opcoes(&salvo, msg, sizeof(msg));
   smw_log("SMW.OPT (escolha no PS2): %s", tem_opt ? msg : "nao existe");
-  opcoes = (SmwOptions){.tela = 0, .video = SMW_VIDEO_240P, .idioma = 0, .compat = 0, .largura = SMW_TAMANHO_MAX,
-                          .altura = SMW_TAMANHO_MAX};
+  opcoes = (SmwOptions){.tela = 0, .video = SMW_VIDEO_240P, .idioma = 0, .compat = 0, .pos_x = 0, .pos_y = 0};
   const SmwOptions *fontes[2] = {&cfg, &salvo};
   for (int i = 0; i < 2; ++i) {
     if (fontes[i]->tela >= 0) opcoes.tela = fontes[i]->tela;
     if (fontes[i]->video >= 0) opcoes.video = fontes[i]->video;
     if (fontes[i]->idioma >= 0) opcoes.idioma = fontes[i]->idioma;
     if (fontes[i]->compat >= 0) opcoes.compat = fontes[i]->compat;
-    if (smw_tamanho_valido(fontes[i]->largura)) opcoes.largura = fontes[i]->largura;
-    if (smw_tamanho_valido(fontes[i]->altura)) opcoes.altura = fontes[i]->altura;
+    if (smw_posicao_valida(fontes[i]->pos_x)) opcoes.pos_x = fontes[i]->pos_x;
+    if (smw_posicao_valida(fontes[i]->pos_y)) opcoes.pos_y = fontes[i]->pos_y;
   }
-  smw_set_tamanho(opcoes.largura, opcoes.altura);  /* o Pronto! e a tela AJUSTES ja no tamanho salvo */
+  muda_posicao(opcoes.pos_x, opcoes.pos_y);  /* o Pronto! e a tela AJUSTES ja na posicao salva */
   carregando("Pronto!", 4);
   const bool conhecido = salvo.video >= 0 && salvo.tela >= 0;
   const SmwOptions inicio = opcoes;
