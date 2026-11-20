@@ -258,13 +258,23 @@
     return a.tela !== 'perguntar' || a.video !== 'perguntar';
   }
 
+  /* Linha da tela no resumo. O 16:9 só vale no 480p (v0.14.1). */
+  function textoResumoTela(a) {
+    if (a.tela === 'perguntar') return 'Você escolhe 4:3 ou 16:9 (o 16:9 só no 480p).';
+    if (a.tela === '16:9' && (a.video === '240p' || a.video === '480i')) {
+      return 'Tela 16:9 marcada, mas o 16:9 só vale no 480p: com o ' + a.video + ' o jogo fica em 4:3.';
+    }
+    if (a.tela === '16:9' && a.video === 'perguntar') return 'Já marcado: tela 16:9 (só se você escolher o 480p).';
+    return 'Já marcado: tela ' + a.tela + '.';
+  }
+
   function atualizarResumo() {
     const a = estado.ajustes;
     const linhas = [
-      'Tela AJUSTES: vídeo, tela e idioma.',
+      'Tela AJUSTES: vídeo, tela, tamanho, idioma e trapaças.',
       a.video === 'perguntar' ? 'Você escolhe o vídeo (240p, 480i ou 480p).'
         : 'Já marcado: ' + a.video + (a.video === '240p' ? '.' : ' (se a TV não mostrar, volta para os ajustes).'),
-      a.tela === 'perguntar' ? 'Você escolhe 4:3 ou 16:9.' : 'Já marcado: tela ' + a.tela + '.',
+      textoResumoTela(a),
       a.idioma === 'pt' ? 'Jogo em português.' : 'Jogo em inglês.',
       textoResumoTrapacas(),
       'Abertura Retrogames.',

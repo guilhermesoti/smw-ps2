@@ -2,12 +2,13 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.14 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
+**Versão 0.14.1 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
 - Tela AJUSTES no começo: vídeo 240p (cabo AV, qualquer TV; o recomendado), 480i (só para TV que não mostra 240p) ou 480p (componente/HDMI), tela 4:3 ou 16:9 e idioma, sempre com os pixels nítidos. Vídeo novo só fica se você confirmar que a imagem apareceu.
 - 1280 pontos por linha em todos os vídeos (no 480p, quadro de 16 bits): todo pixel do SNES com a mesma largura, também no 16:9.
-- Tela 16:9 opcional (beta): nas fases mostra 43 colunas a mais de cada lado, para TV no modo widescreen (no começo e no fim da fase, o que fica fora dela aparece preto). Escolha na tela AJUSTES; L2 + R2 + CRUZ troca no jogo e mostra "TELA 4:3" ou "TELA 16:9" por 5 segundos.
+- Tela 16:9 opcional (beta), só no vídeo 480p (componente ou HDMI): nas fases mostra 43 colunas a mais de cada lado, para TV no modo widescreen (no começo e no fim da fase, o que fica fora dela aparece preto). Escolha na tela AJUSTES; L2 + R2 + CRUZ troca no jogo e mostra "TELA 4:3" ou "TELA 16:9" por 5 segundos.
+- Tamanho da imagem na TV (contra o corte das bordas pelo AV), altura e largura de 80 a 100%, como o ajuste de tela de um monitor: linha TAMANHO na tela AJUSTES e L2 + R2 + setas no jogo.
 - Telas de carregamento, AJUSTES e apresentação com um cenário do próprio jogo de fundo (desenhado da cópia do jogador ao abrir) e caixas pretas como as mensagens do jogo.
 - Trapaças (códigos Pro Action Replay) num texto, `TRAPACAS.TXT`: liga e desliga na tela AJUSTES ou com L2 + R2 + SELECT no jogo. O pacote traz 13, conferidas no jogo, todas desligadas.
 - Desenha todos os 60 quadros por segundo quando o quadro cabe no tempo da TV; quando não cabe, um sim, outro não, sempre no mesmo ritmo, com a velocidade e a música corretas.
@@ -35,7 +36,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.14 obtido com o ps2dev v2.0.0 foi `7099dfa7644c2df4ad69dff32161a3200dcb15397723669bc1a17f55ffb82751`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.14.1 obtido com o ps2dev v2.0.0 foi `225a07bb456a0bd29ae65cb8243b3cf93686ed4fa45cbb4da6f182ef88229983`.
 
 ## Gravador SMW PS2 (programa no PC)
 
@@ -61,6 +62,9 @@ O código fica em `Gravador/src/` (`nucleo.js`: ROM, ISO, ZIP, SMW.CFG e o leito
 O Gravador grava `SMW.CFG` ao lado do jogo (ou dentro da ISO), texto com `tela=perguntar|4:3|16:9`,
 `video=perguntar|240p|480i|480p` e `idioma=pt|en`: o que já vem marcado na tela AJUSTES (as linhas `suavizacao=` e
 `scanlines=` de versões antigas são ignoradas). O que foi escolhido no PS2 fica em `SMW.OPT`, no lugar do save, e vale mais que o `SMW.CFG`.
+O `tela=16:9` só vale com `video=480p` (nos outros o jogo fica em 4:3 e a escolha fica guardada). O tamanho na TV
+fica em `largura=` e `altura=` (de 80 a 100, em %; também aceitos no `SMW.CFG`): abaixo de 100 cada quadro é
+desenhado menor e centrado, com o filtro bilinear do GS (`smw_desenha_textura`, `intro.c`).
 
 ### Trapaças
 
@@ -105,7 +109,8 @@ A lista `APPS/SMW/TRAPACAS.TXT` (ao lado do ELF) também entra na ISO; sem ela, 
 | Triângulo (△) | Segunda tecla de corrida e ação (X do SNES) |
 | Start / Select | Pausar ou iniciar / soltar o item da reserva |
 | L1 / R1 | Deslocar a câmera nas fases que permitem |
-| L2 + R2 + × | Trocar entre 4:3 e 16:9 (mostra "TELA 4:3" ou "TELA 16:9" por 5 s) |
+| L2 + R2 + × | Trocar entre 4:3 e 16:9, só no 480p (mostra "TELA 4:3" ou "TELA 16:9" por 5 s; nos outros vídeos, "16:9 SO NO 480P") |
+| L2 + R2 + setas | Tamanho da imagem na TV: cima/baixo a altura, esquerda/direita a largura (2% a cada toque, 80 a 100%) |
 | L2 + R2 + SELECT | Lista de trapaças (o jogo fica parado; ○ ou SELECT volta) |
 | L2 + R2 + △ | Medidor de desempenho (quadros desenhados por segundo e tempos de desenho, envio ao GS e lógica) |
 

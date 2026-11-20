@@ -14,12 +14,14 @@
 enum { FORMATO_W = 256, FORMATO_H = 224 };
 
 /* Linhas da tela AJUSTES, de cima para baixo. */
-enum { AJUSTE_VIDEO, AJUSTE_TELA, AJUSTE_IDIOMA, AJUSTE_TRAPACAS, AJUSTE_JOGAR, AJUSTE_LINHAS };
+enum { AJUSTE_VIDEO, AJUSTE_TELA, AJUSTE_TAMANHO, AJUSTE_IDIOMA, AJUSTE_TRAPACAS, AJUSTE_JOGAR, AJUSTE_LINHAS };
 
 typedef struct {
   int linha;     /* AJUSTE_* marcada */
   int video;     /* 0 = 240p, 1 = 480p, 2 = 480i (os mesmos numeros de files.h) */
-  int tela;      /* 0 = 4:3, 1 = 16:9 */
+  int tela;      /* 0 = 4:3, 1 = 16:9 (escolha guardada; o 16:9 so vale no 480p) */
+  int largura, altura;  /* tamanho na TV, % (v0.14.1) */
+  bool ajustando;       /* no ajuste do tamanho: as setas mudam a imagem */
   int idioma;    /* 0 = portugues, 1 = ingles (os textos da tela tambem) */
   int segundos;  /* comeca sozinho em tantos segundos; < 0 sem contagem */
   int trapacas, trapacas_total;  /* ligadas / no arquivo (0 = sem arquivo) */

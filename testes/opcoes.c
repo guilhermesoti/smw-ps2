@@ -124,6 +124,39 @@ int main(int argc, char **argv) {
   le("SMW.OPT", texto, sizeof(texto));
   CONFERE(strcmp(texto, "tela=16:9\n") == 0);
 
+  /* v0.14.1: tamanho na TV (largura e altura em %, 80 a 100) */
+  grava("SMW.OPT", "tela=16:9\nvideo=240p\nlargura=94\naltura= 90 \n");
+  smw_options_clear(&o);
+  CONFERE(smw_read_saved_options(&o) && o.largura == 94 && o.altura == 90 && o.tela == 1);
+  grava("SMW.OPT", "largura=79\naltura=101\n");
+  smw_options_clear(&o);
+  smw_read_saved_options(&o);
+  CONFERE(o.largura == SMW_OPT_ASK && o.altura == SMW_OPT_ASK);
+  grava("SMW.OPT", "largura=9x\naltura=\n");
+  smw_options_clear(&o);
+  smw_read_saved_options(&o);
+  CONFERE(o.largura == SMW_OPT_ASK && o.altura == SMW_OPT_ASK);
+  grava("SMW.OPT", "largura=80\naltura=100\n");  /* os dois limites valem */
+  smw_options_clear(&o);
+  CONFERE(smw_read_saved_options(&o) && o.largura == 80 && o.altura == 100);
+  CONFERE(smw_tamanho_limita(79) == 80 && smw_tamanho_limita(90) == 90 && smw_tamanho_limita(101) == 100);
+  CONFERE(!smw_16_9_vale(SMW_VIDEO_240P) && smw_16_9_vale(SMW_VIDEO_480P) && !smw_16_9_vale(SMW_VIDEO_480I));
+  /* 4294967390 = 2^32 + 94: convertido para int antes de conferir, viraria 94 */
+  grava("SMW.OPT", "largura=4294967390\naltura=-90\n");
+  smw_options_clear(&o);
+  smw_read_saved_options(&o);
+  CONFERE(o.largura == SMW_OPT_ASK && o.altura == SMW_OPT_ASK);
+  SmwOptions tamanho = {.tela = 0, .video = SMW_VIDEO_480P, .idioma = 0, .compat = SMW_OPT_ASK, .largura = 92,
+                        .altura = 100};
+  CONFERE(smw_save_options(&tamanho));
+  le("SMW.OPT", texto, sizeof(texto));
+  CONFERE(strcmp(texto, "tela=4:3\nvideo=480p\nidioma=pt\nlargura=92\naltura=100\n") == 0);
+  smw_options_clear(&o);
+  CONFERE(smw_read_saved_options(&o) && o.largura == 92 && o.altura == 100);
+  grava("SMW.CFG", "largura=88\naltura=96\n");
+  smw_read_config(&o);
+  CONFERE(o.largura == 88 && o.altura == 96);
+
   /* SMW.OPT estragado: nenhum campo */
   grava("SMW.OPT", "\x01\x02 lixo");
   smw_options_clear(&o);

@@ -22,7 +22,7 @@
 #include <timer.h>
 #include <unistd.h>
 
-#define SMW_VERSAO "0.14"
+#define SMW_VERSAO "0.14.1"
 
 #define DECLARE_DRIVER(n) extern unsigned char n##_irx[]; extern unsigned int size_##n##_irx
 DECLARE_DRIVER(bdm);
@@ -376,7 +376,7 @@ static unsigned text_width(const char *msg, unsigned scale) {
    progress was loaded from and save confirmations. 3x5 capitals, each dot
    scale x scale pixels. */
 static void draw_text_scaled(unsigned x, unsigned y, const char *msg, uint32_t bg, unsigned scale) {
-  static const char letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:.";
+  static const char letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:.%";
   static const unsigned char glyph[][5] = {
     {2,5,7,5,5},{6,5,6,5,6},{3,4,4,4,3},{6,5,5,5,6},{7,4,6,4,7},{7,4,6,4,4},{3,4,5,5,3},
     {5,5,7,5,5},{7,2,2,2,7},{1,1,1,5,2},{5,5,6,5,5},{4,4,4,4,7},{5,7,7,5,5},{6,5,5,5,5},
@@ -384,7 +384,7 @@ static void draw_text_scaled(unsigned x, unsigned y, const char *msg, uint32_t b
     {5,5,5,5,2},{5,5,7,7,5},{5,5,2,5,5},{5,5,2,2,2},{7,1,2,4,7},
     {7,5,5,5,7},{2,6,2,2,7},{7,1,7,4,7},{7,1,3,1,7},{5,5,7,1,1},
     {7,4,7,1,7},{7,4,7,5,7},{7,1,1,1,1},{7,5,7,5,7},{7,5,7,1,7},
-    {0,0,7,0,0},{0,2,0,2,0},{0,0,0,0,2}
+    {0,0,7,0,0},{0,2,0,2,0},{0,0,0,0,2},{5,1,2,4,5}
   };
   const unsigned s = scale;
   if (!s || x >= screen_w || y + 7 * s > SMW_HEIGHT) return;
@@ -413,21 +413,25 @@ static void draw_text(unsigned x, unsigned y, const char *msg, uint32_t bg) {
 
 /* v0.13.7: "TELA 4:3" or "TELA 16:9" for 5 s when the game starts and after
    L2+R2+X, at double size under the status bar, so a photo of the TV shows
-   which mode it is (EE ticks; 5 s fits before the counter wraps). */
+   which mode it is (EE ticks; 5 s fits before the counter wraps). v0.14.1:
+   also "16:9 SO NO 480P" and the size on the TV ("TAMANHO 94% X 90%"). */
 static const uint32_t ASPECT_NOTICE_TICKS = 5u * EE_HZ;
 static bool aspect_notice;
 static uint32_t aspect_notice_start;
-static void show_aspect_notice(void) {
+static char aspect_notice_text[24];
+static void show_video_notice(const char *text) {
+  snprintf(aspect_notice_text, sizeof(aspect_notice_text), "%s", text);
   aspect_notice = true;
   aspect_notice_start = cpu_ticks();
 }
+static void show_aspect_notice(void) { show_video_notice(video.wide ? "TELA 16:9" : "TELA 4:3"); }
 static void draw_aspect_notice(void) {
   if (!aspect_notice) return;
   if (cpu_ticks() - aspect_notice_start > ASPECT_NOTICE_TICKS) {
     aspect_notice = false;
     return;
   }
-  const char *text = video.wide ? "TELA 16:9" : "TELA 4:3";
+  const char *text = aspect_notice_text;
   draw_text_scaled((screen_w - text_width(text, 2)) / 2, 44, text, 0x00402000, 2);
 }
 
@@ -499,11 +503,27 @@ static void set_aspect(bool wide) {
   texture.TBW = screen_pitch / 64;
 }
 
+/* Setas do tamanho (AJUSTES e L2+R2): cima/baixo mudam a altura,
+   direita/esquerda a largura, SMW_TAMANHO_PASSO por toque, dentro de
+   SMW_TAMANHO_MIN..SMW_TAMANHO_MAX. */
+static void passo_tamanho(unsigned apertou, int *largura, int *altura) {
+  int l = *largura, a = *altura;
+  if (apertou & PAD_UP) a += SMW_TAMANHO_PASSO;
+  if (apertou & PAD_DOWN) a -= SMW_TAMANHO_PASSO;
+  if (apertou & PAD_RIGHT) l += SMW_TAMANHO_PASSO;
+  if (apertou & PAD_LEFT) l -= SMW_TAMANHO_PASSO;
+  *largura = smw_tamanho_limita(l), *altura = smw_tamanho_limita(a);
+}
+
 /* L2+R2 + Triangle: performance meter; each second its line also goes to
    the log, and turning it off writes SMW_LOG.TXT (the game stops for a
    moment), so the numbers reach the PC (v0.13.8). L2+R2 + Cross: 4:3 / 16:9
-   (shows "TELA 4:3" / "TELA 16:9" for 5 s). L2+R2 + Select: the cheats
-   (v0.14; the game pauses). While L2+R2 are held the pad
+   (shows "TELA 4:3" / "TELA 16:9" for 5 s; since v0.14.1 only in 480p,
+   otherwise "16:9 SO NO 480P"). L2+R2 + Select: the cheats (v0.14; the game
+   pauses). L2+R2 + D-pad (v0.14.1): the size on the TV, up/down the height
+   and left/right the width, 2% a step, 80 to 100%, like a monitor's screen
+   adjustment (saved with the next save, like the screen). While L2+R2 are
+   held the pad
    sends nothing to the game. Square and Circle (scanlines and smoothing
    until v0.13.6) do nothing now. The log is written and the pacing told
    about the new screen by the main loop, after its timed part. */
@@ -520,13 +540,29 @@ static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
     if (!perf.on) log_after_loop = true;
   }
   if (pressed & PAD_SELECT) abre_trapacas = true;  /* cheats, by the main loop */
-  if (pressed & PAD_CROSS) {
+  if ((pressed & PAD_CROSS) && !smw_16_9_vale(video.modo)) {
+    show_video_notice("16:9 SO NO 480P");
+    smw_log("L2+R2+X: 16:9 so no 480p (video %s)", nome_video(video.modo));
+  } else if (pressed & PAD_CROSS) {
     aspect_changed = true;
     set_aspect(!video.wide);
     show_aspect_notice();
     opcoes.tela = video.wide;
     smw_options_changed(&opcoes);  /* fica gravado junto com o proximo save */
     smw_log("L2+R2+X: tela %s", video.wide ? "16:9" : "4:3");
+  }
+  if (pressed & (PAD_UP | PAD_DOWN | PAD_LEFT | PAD_RIGHT)) {
+    int l = opcoes.largura, a = opcoes.altura;
+    passo_tamanho(pressed, &l, &a);
+    char texto[sizeof(aspect_notice_text)];
+    snprintf(texto, sizeof(texto), "TAMANHO %d%% X %d%%", l, a);
+    show_video_notice(texto);  /* also at the limit, so it shows the value */
+    if (l != opcoes.largura || a != opcoes.altura) {
+      opcoes.largura = l, opcoes.altura = a;
+      smw_set_tamanho(l, a);
+      smw_options_changed(&opcoes);  /* fica gravado junto com o proximo save */
+      smw_log("L2+R2+setas: tamanho %d%% x %d%%", l, a);
+    }
   }
   return 0;
 }
@@ -726,9 +762,14 @@ static void trapacas_no_jogo(int idioma) {
 }
 
 /* Tela AJUSTES. contagem: comeca sozinha em 5 s (ajustes ja salvos) ate o
-   jogador apertar um botao. Volta com X ou START (ou no fim da contagem). */
+   jogador apertar um botao. Volta com X ou START (ou no fim da contagem).
+   v0.14.1: a linha Tela so muda no 480p (o 16:9 so vale nele), e na linha
+   Tamanho X (ou uma seta do lado) entra no ajuste: cima/baixo mudam a
+   altura e esquerda/direita a largura, na hora (a propria tela e a previa);
+   X, CIRCULO ou START saem do ajuste. */
 static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const char *situacao) {
   Ajustes a = {.linha = contagem ? AJUSTE_JOGAR : AJUSTE_VIDEO, .video = o->video, .tela = o->tela,
+               .largura = o->largura, .altura = o->altura, .ajustando = false,
                .idioma = o->idioma, .segundos = -1, .aviso = aviso, .situacao = situacao,
                .trapacas_total = trapacas.n};
   unsigned held = botoes();
@@ -737,19 +778,36 @@ static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const 
   for (int frame = 0;; ++frame) {
     unsigned agora = botoes(), apertou = agora & ~held;
     held = agora;
-    if (saindo < 0 && apertou) {
+    if (saindo < 0 && apertou && a.ajustando) {
+      int l = a.largura, h = a.altura;
+      passo_tamanho(apertou, &l, &h);
+      if (l != a.largura || h != a.altura) {
+        a.largura = l, a.altura = h;
+        smw_set_tamanho(l, h);
+        smw_blip(sound);
+      }
+      if (apertou & (PAD_CROSS | PAD_CIRCLE | PAD_START)) {
+        a.ajustando = false;
+        smw_log("AJUSTES: tamanho %d%% x %d%%", a.largura, a.altura);
+        smw_blip(sound);
+      }
+    } else if (saindo < 0 && apertou) {
       contagem = false;
       int dir = (apertou & PAD_LEFT) ? -1 : (apertou & PAD_RIGHT) ? 1 : 0;
       if (a.linha == AJUSTE_TRAPACAS && (apertou & (PAD_CROSS | PAD_RIGHT))) {
         smw_blip(sound);
         tela_trapacas(false, fundo_ajustes, a.idioma);
         held = botoes();
+      } else if (a.linha == AJUSTE_TAMANHO && (apertou & (PAD_CROSS | PAD_LEFT | PAD_RIGHT))) {
+        a.ajustando = true;
+        a.aviso = NULL;
+        smw_blip(sound);
       } else if (apertou & (PAD_CROSS | PAD_START)) {
         saindo = frame;
       } else if (apertou & (PAD_UP | PAD_DOWN)) {
         a.linha = (a.linha + ((apertou & PAD_UP) ? AJUSTE_LINHAS - 1 : 1)) % AJUSTE_LINHAS;
         smw_blip(sound);
-      } else if (dir && a.linha != AJUSTE_JOGAR) {
+      } else if (dir && a.linha != AJUSTE_JOGAR && (a.linha != AJUSTE_TELA || smw_16_9_vale(a.video))) {
         if (a.linha == AJUSTE_VIDEO) a.video = outro_video(a.video, dir);
         if (a.linha == AJUSTE_TELA) a.tela = !a.tela;
         if (a.linha == AJUSTE_IDIOMA) a.idioma = !a.idioma;
@@ -769,6 +827,7 @@ static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const 
     mostra_quadro(bright < 0 ? 0 : bright);
   }
   o->video = a.video, o->tela = a.tela, o->idioma = a.idioma;
+  o->largura = a.largura, o->altura = a.altura;
   return sozinho;
 }
 
@@ -789,18 +848,25 @@ static bool confirma_video(int idioma) {
   return false;
 }
 
-/* "tela=4:3 video=240p idioma=pt saida=1280"; "-" = sem valor. */
+/* "tela=4:3 video=240p idioma=pt saida=1280 tamanho=100x100"; "-" = sem valor. */
 static void texto_opcoes(const SmwOptions *o, char *out, size_t size) {
-  snprintf(out, size, "tela=%s video=%s idioma=%s saida=%s",
+  char l[8] = "-", a[8] = "-";
+  if (smw_tamanho_valido(o->largura)) snprintf(l, sizeof(l), "%d", o->largura);
+  if (smw_tamanho_valido(o->altura)) snprintf(a, sizeof(a), "%d", o->altura);
+  snprintf(out, size, "tela=%s video=%s idioma=%s saida=%s tamanho=%sx%s",
            o->tela < 0 ? "-" : o->tela ? "16:9" : "4:3",
            o->video < 0 ? "-" : nome_video(o->video),
            o->idioma < 0 ? "-" : o->idioma ? "en" : "pt",
-           o->compat < 0 ? "-" : o->compat ? "512" : "1280");
+           o->compat < 0 ? "-" : o->compat ? "512" : "1280", l, a);
 }
+
+/* v0.14.1: o 16:9 so vale no 480p (componente ou HDMI); nos outros videos o
+   jogo fica em 4:3 e a escolha (tela=16:9) fica guardada. */
+static bool tela_larga(const SmwOptions *o) { return o->tela == 1 && smw_16_9_vale(o->video); }
 
 static bool mesmas_opcoes(const SmwOptions *a, const SmwOptions *b) {
   return a->tela == b->tela && a->video == b->video && a->idioma == b->idioma &&
-         (a->compat == 1) == (b->compat == 1);
+         (a->compat == 1) == (b->compat == 1) && a->largura == b->largura && a->altura == b->altura;
 }
 
 int main(int argc, char **argv) {
@@ -856,7 +922,6 @@ int main(int argc, char **argv) {
   tira_cena(0x0C7, cena_titulo, &fundo_titulo);    /* a fase do titulo */
   tira_cena(0x104, cena_apoio, &fundo_apoio);      /* casa do Yoshi */
   trapacas_carrega();
-  carregando("Pronto!", 4);
 
   /* Ajustes: o padrao, depois o SMW.CFG (Gravador no PC) e por cima o
      SMW.OPT (o que foi escolhido no PS2). Com tudo salvo, a tela AJUSTES
@@ -869,14 +934,19 @@ int main(int argc, char **argv) {
   smw_log("SMW.CFG (Gravador): %s", msg);
   texto_opcoes(&salvo, msg, sizeof(msg));
   smw_log("SMW.OPT (escolha no PS2): %s", tem_opt ? msg : "nao existe");
-  opcoes = (SmwOptions){.tela = 0, .video = SMW_VIDEO_240P, .idioma = 0, .compat = 0};
+  opcoes = (SmwOptions){.tela = 0, .video = SMW_VIDEO_240P, .idioma = 0, .compat = 0, .largura = SMW_TAMANHO_MAX,
+                          .altura = SMW_TAMANHO_MAX};
   const SmwOptions *fontes[2] = {&cfg, &salvo};
   for (int i = 0; i < 2; ++i) {
     if (fontes[i]->tela >= 0) opcoes.tela = fontes[i]->tela;
     if (fontes[i]->video >= 0) opcoes.video = fontes[i]->video;
     if (fontes[i]->idioma >= 0) opcoes.idioma = fontes[i]->idioma;
     if (fontes[i]->compat >= 0) opcoes.compat = fontes[i]->compat;
+    if (smw_tamanho_valido(fontes[i]->largura)) opcoes.largura = fontes[i]->largura;
+    if (smw_tamanho_valido(fontes[i]->altura)) opcoes.altura = fontes[i]->altura;
   }
+  smw_set_tamanho(opcoes.largura, opcoes.altura);  /* o Pronto! e a tela AJUSTES ja no tamanho salvo */
+  carregando("Pronto!", 4);
   const bool conhecido = salvo.video >= 0 && salvo.tela >= 0;
   const SmwOptions inicio = opcoes;
   const char *lugar = smw_save_location();
@@ -933,7 +1003,7 @@ int main(int argc, char **argv) {
   g_ptbr = opcoes.idioma != 1;
 
   smw_intro(gs, video.p480, sound, SMW_VERSAO, fundo_titulo, fundo_apoio);
-  set_aspect(opcoes.tela == 1);
+  set_aspect(tela_larga(&opcoes));
   const uint32_t field = measure_field();
   smw_log("Jogo comecou.");
   smw_log_fixa();

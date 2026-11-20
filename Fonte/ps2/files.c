@@ -1064,7 +1064,17 @@ static char *trim(char *s) {
 }
 
 void smw_options_clear(SmwOptions *o) {
-  o->tela = o->video = o->idioma = o->compat = SMW_OPT_ASK;
+  o->tela = o->video = o->idioma = o->compat = o->largura = o->altura = SMW_OPT_ASK;
+}
+
+/* "94" -> 94; fora de SMW_TAMANHO_MIN..SMW_TAMANHO_MAX (ou nao numero) ->
+   SMW_OPT_ASK. A faixa e conferida ainda em long: convertido antes para int,
+   um numero enorme como 4294967390 viraria 94 num PC de 64 bits. */
+static int tamanho_de(const char *s) {
+  char *fim;
+  long v = strtol(s, &fim, 10);
+  if (fim == s || *fim != '\0' || v < SMW_TAMANHO_MIN || v > SMW_TAMANHO_MAX) return SMW_OPT_ASK;  /* s ja vem sem espacos */
+  return (int)v;
 }
 
 static void parse_options(char *text, SmwOptions *o) {
@@ -1091,6 +1101,12 @@ static void parse_options(char *text, SmwOptions *o) {
       } else if (same_word(key, "saida")) {
         if (same_word(value, "1280")) o->compat = 0;
         else if (same_word(value, "512")) o->compat = 1;
+      } else if (same_word(key, "largura")) {
+        int v = tamanho_de(value);
+        if (v != SMW_OPT_ASK) o->largura = v;
+      } else if (same_word(key, "altura")) {
+        int v = tamanho_de(value);
+        if (v != SMW_OPT_ASK) o->altura = v;
       }
     }
     line = next;
@@ -1142,6 +1158,8 @@ static int options_text(const SmwOptions *o, char *text, size_t size) {
   if (o->video >= 0 && o->video <= 2) n += snprintf(text + n, size - n, "video=%s\n", videos[o->video]);
   if (o->idioma >= 0) n += snprintf(text + n, size - n, "idioma=%s\n", o->idioma ? "en" : "pt");
   if (o->compat == 1) n += snprintf(text + n, size - n, "saida=512\n");
+  if (smw_tamanho_valido(o->largura)) n += snprintf(text + n, size - n, "largura=%d\n", o->largura);
+  if (smw_tamanho_valido(o->altura)) n += snprintf(text + n, size - n, "altura=%d\n", o->altura);
   return n;
 }
 
