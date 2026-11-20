@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.13.7 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
+Retrogames Patos de Minas | v0.13.8 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
 
 O QUE VOCÊ PRECISA
 
@@ -60,7 +60,14 @@ GRAVAR O PROGRESSO
 
 Salve nos pontos oferecidos pelo próprio jogo. Ao gravar, aparece por 4
 segundos no canto da tela onde ficou o save, por exemplo
-"SALVO: MEMORY CARD 1".
+"SALVO: MEMORY CARD 1". No Memory Card a gravação leva alguns
+segundos; nesse tempo o jogo para e o som fica mudo.
+
+Ao escolher o arquivo na tela inicial, o próprio jogo do SNES grava o
+save de novo, quase sempre sem mudar nada. Nesse caso nada é gravado
+(nem a mensagem aparece) e o jogo entra direto. A exceção é logo depois
+do primeiro save num lugar novo: ainda não existe o SMW.BAK, e essa vez
+grava normalmente para criá-lo.
 
 - Pela ISO: no Memory Card, pasta SMWPS2 (cartão 1; sem ele, cartão 2).
   O pendrive fica só com o OPL, que o usa para ler a ISO.
@@ -166,13 +173,19 @@ Durante o jogo (segurando L2 + R2):
   "DESENHO" é o tempo médio de um quadro desenhado (lógica do jogo e
   desenho), "ENVIO" o de mandar a imagem para o GS e "LOGICA" o de um
   quadro pulado (só a lógica do jogo). Um quadro da TV dura 16,7 ms.
+  Com o medidor ligado, os números de cada segundo vão também para o
+  SMW_LOG.TXT; ao desligar, o arquivo é gravado (veja LOG DO CONSOLE).
 
 O ritmo do jogo segue a atualização da TV, e o som se ajusta a ela sem
 travar a imagem. Quando um quadro desenhado (DESENHO + ENVIO) cabe no
 tempo de uma atualização, o jogo desenha todos (TELA 60). Quando não
 cabe, ele desenha um sim, outro não (TELA 30), sempre no mesmo ritmo,
 e a velocidade e a música continuam corretas. Se um quadro atrasar, o
-jogo avança sem desenhar para recuperar.
+jogo avança sem desenhar para recuperar. Numa cena que fica no limite,
+cada vez que o jogo volta para TELA 60 e logo precisa voltar para
+TELA 30, ele espera o dobro (de 3 segundos até 1 minuto) antes de
+tentar de novo, em vez de ficar trocando. A troca 4:3 / 16:9 zera essa
+espera.
 
 TELA 16:9 (BETA)
 
@@ -238,12 +251,14 @@ O que fica anotado: a versão do jogo e a da BIOS do console (ROMVER),
 os drivers carregados, onde o jogo e o save foram achados, a escolha
 da tela AJUSTES, cada vídeo testado (com a largura usada: 1280 pontos
 ou a antiga, 512 / 640 no 480p) e se você confirmou a imagem, os saves
-(onde gravou, ou o código do erro) e os erros que param o jogo.
+(onde gravou e quanto tempo levou cada parte, ou o código do erro), as
+trocas entre TELA 60 e TELA 30, os números do medidor quando ligado e
+os erros que param o jogo.
 
 Cada gravação do arquivo para o jogo por um instante (o som fica mudo
 nessa hora). Por isso ele é gravado só antes de testar um vídeo novo,
-depois de confirmar o vídeo, no primeiro save, em cada save com erro e
-quando um erro para o jogo. Os saves que dão certo depois do primeiro
+depois de confirmar o vídeo, no primeiro save, em cada save com erro,
+ao desligar o medidor e quando um erro para o jogo. Os saves que dão certo depois do primeiro
 ficam anotados e entram no arquivo na próxima vez que ele for gravado.
 
 SOBRE ESTA VERSÃO
@@ -253,6 +268,25 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.13.8 (beta):
+- Ao escolher o arquivo do save na tela inicial, o jogo não trava mais
+  por uns 5 segundos nem faz o som estranho: o jogo do SNES grava o
+  save de novo nessa hora, quase sempre sem mudar nada, e agora nada
+  é gravado nesse caso (o progresso já está lá). Se o Memory Card for
+  trocado ou o pendrive tirado com o jogo ligado, grava normalmente.
+- Nos saves de verdade o som fica mudo enquanto grava, em vez de
+  repetir um pedaço da música.
+- Menos troca entre TELA 60 e TELA 30: numa cena no limite, o jogo
+  alternava 60 e 39 quadros. Agora, cada vez que volta para 60 e logo
+  precisa voltar para 30, ele espera o dobro antes de tentar de novo
+  (a troca 4:3 / 16:9 zera essa espera).
+- O SMW_LOG.TXT anota as trocas entre TELA 60 e TELA 30, os números do
+  medidor (L2 + R2 + TRIÂNGULO) a cada segundo enquanto ele está
+  ligado, e o tempo de cada parte de cada save. Ao desligar o medidor,
+  o arquivo é gravado.
+- Lembrete para fotos: jogue em 4:3 com a TV em 4:3 e em 16:9 com a TV
+  em 16:9 (veja TELA 16:9). Com a TV em 4:3, o 16:9 fica espremido.
 
 Mudanças da v0.13.7 (beta):
 - Ao trocar a tela com L2 + R2 + CRUZ, e no começo do jogo, aparece

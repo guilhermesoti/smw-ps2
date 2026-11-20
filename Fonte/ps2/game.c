@@ -24,12 +24,23 @@ void SmwDrawPpuFrame(bool draw_pixels);
 void RtlApuLock(void) {}
 void RtlApuUnlock(void) {}
 
+static void (*before_save)(void);
+void smw_before_save(void (*hook)(void)) { before_save = hook; }
+
 /* Each save goes to the log; the file itself is written after the first
    save (and after the next ones until a write works) and after a failed
-   one: writing it stops the game for a moment. */
+   one: writing it stops the game for a moment. A save of what the save
+   place already has (choosing the file on the title screen) writes nothing
+   (v0.13.8). */
 void RtlWriteSram(void) {
   static unsigned saves;
   static bool pending = true;
+  if (smw_save_unchanged(g_sram)) {
+    smw_log("Save %u: sem mudanca, nada gravado", saves + 1);
+    ++saves;
+    return;
+  }
+  if (before_save) before_save();
   unsigned start = smw_log_ms();
   smw_save_error = !smw_save_progress(g_sram);
   unsigned ms = smw_log_ms() - start;
@@ -37,7 +48,7 @@ void RtlWriteSram(void) {
   if (smw_save_error)
     smw_log("Save %u: ERRO AO SALVAR %s (%u ms)", saves, smw_save_error_text(), ms);
   else
-    smw_log("Save %u: ok, %s (%u ms)", saves, smw_save_location(), ms);
+    smw_log("Save %u: ok, %s (%u ms: %s)", saves, smw_save_location(), ms, smw_save_steps());
   if (pending || smw_save_error) pending = !smw_log_grava();
 }
 

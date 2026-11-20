@@ -122,15 +122,29 @@ int main(int argc, char **argv) {
   CHECK(!strcmp(smw_notice(NULL), "CARREGADO: MEMORY CARD 1"));
   CHECK(load_info.store == STORE_MC0);
   CHECK(file1() && file1()[140] == 1 && file1()[134] == 1);
+  /* A tela de arquivos copia o arquivo 1 para a reserva e chama RtlWriteSram
+     sem mudar nada. Depois do primeiro save o cartao ainda nao tem SMW.BAK:
+     essa vez grava (cria o BAK). */
+  CHECK(!mc_get(0, "/SMWPS2/SMW.BAK"));
   run(0, 420, new_game, 3);  /* titulo -> tela de arquivos -> escolhe o arquivo 1 (grava a SRAM) */
   CHECK(!smw_save_error);
+  CHECK(mc_get(0, "/SMWPS2/SMW.BAK"));
   CHECK(ow_save_buffer[140] == 1 && ow_save_buffer[134] == 1);
 
-  /* 4. Reinicia de novo: o progresso continua. */
+  /* 4. Reinicia de novo: o progresso continua e, com o SMW.BAK no lugar, a
+        tela de arquivos nao grava nada (v0.13.8; no console isso parava o
+        jogo por 5 s). */
   boot(argv[1]);
   CHECK(load_info.store == STORE_MC0);
   CHECK(file1() && file1()[140] == 1 && file1()[134] == 1);
   CHECK(mc_get(0, "/SMWPS2/SMW.SRM") && mc_get(0, "/SMWPS2/SMW.SRM")->size == SAVE_BYTES);
+  CHECK(load_info.generation == 2);
+  int gravacoes = mc_writes;
+  run(0, 420, new_game, 3);
+  CHECK(!smw_save_error && mc_writes == gravacoes);
+  CHECK(ow_save_buffer[140] == 1 && ow_save_buffer[134] == 1);
+  boot(argv[1]);
+  CHECK(load_info.generation == 2 && file1() && file1()[140] == 1);
 
   printf("Palacio Amarelo: salvo no Memory Card 1 com o pendrive recusando gravar, "
          "carregado apos 2 reinicios (geracao %u).\n", (unsigned)load_info.generation);

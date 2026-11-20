@@ -14,7 +14,9 @@ precisa estar nessa pasta). --cartao ARQUIVO copia o Memory Card 1
 (Mcd001.ps2) para ARQUIVO no fim, para ler o que o jogo gravou (por exemplo
 com o mymcplus: SMWPS2/SMW_LOG.TXT). --cartao-inicial ARQUIVO usa uma cópia
 desse cartão no lugar do novo (o PCSX2 cria o cartão novo sem formatação;
-um formatado sai com "mymcplus cartao.ps2 format"). --audio grava o som que
+um formatado sai com "mymcplus cartao.ps2 format"); --cartao2-inicial faz o
+mesmo no Memory Card 2 (sem ele, o cartão 2 novo e sem formatação aparece no
+log como arquivos que não podem ser lidos). --audio grava o som que
 o SPU2 gera em WAV: "tecla:gravar" liga e desliga a captura, e cada trecho
 sai como audio_NN.wav na pasta de saída.
 
@@ -54,7 +56,7 @@ TECLAS = {"cima": "Up", "baixo": "Down", "esquerda": "Left", "direita": "Right",
           "foto": "F8", "gravar": "F9"}
 
 
-def preparar_config(base: Path, hostfs=False, audio=False) -> Path:
+def preparar_config(base: Path, hostfs=False, audio=False, cartao2=False) -> Path:
     """Copia o PCSX2.ini do usuário e troca só o necessário para o teste."""
     cfg = base / "config"
     inis = cfg / "PCSX2/inis"
@@ -79,6 +81,8 @@ def preparar_config(base: Path, hostfs=False, audio=False) -> Path:
         # Sem som: no Xvfb não há saída de áudio e o aviso de erro roubaria o foco.
         "SPU2/Output": {"Backend": "Null"},
     }
+    if cartao2:  # o cartão 2 da rodada (--cartao2-inicial); sem ele, o do PCSX2.ini do usuário
+        trocas["MemoryCards"].update({"Slot2_Enable": "true", "Slot2_Filename": "Mcd002.ps2"})
     if audio:
         # Captura só do som (o que o SPU2 do PS2 gera, antes da saída Null), em WAV,
         # numa pasta da rodada. Sem --audio a tecla de captura nem é configurada.
@@ -234,6 +238,7 @@ def main():
     origem.add_argument("--elf", type=Path)
     ap.add_argument("--cartao", type=Path)
     ap.add_argument("--cartao-inicial", type=Path)
+    ap.add_argument("--cartao2-inicial", type=Path)
     ap.add_argument("--audio", action="store_true")
     ap.add_argument("--saida", required=True, type=Path)
     ap.add_argument("--roteiro", required=True)
@@ -248,8 +253,9 @@ def main():
         raise SystemExit(f"O arquivo do cartão já existe: {a.cartao}")
     if a.cartao and not a.cartao.resolve().parent.is_dir():
         raise SystemExit(f"A pasta do arquivo do cartão não existe: {a.cartao.parent}")
-    if a.cartao_inicial and not a.cartao_inicial.is_file():
-        raise SystemExit(f"Cartão inicial não encontrado: {a.cartao_inicial}")
+    for inicial in (a.cartao_inicial, a.cartao2_inicial):
+        if inicial and not inicial.is_file():
+            raise SystemExit(f"Cartão inicial não encontrado: {inicial}")
     passos = ler_roteiro(a.roteiro)
     gravar = sum(1 for p in passos if p[0] == "tecla" and p[1] == "gravar")
     if not a.audio and gravar:
@@ -271,9 +277,12 @@ def main():
     # o TemporaryDirectory apaga só ela, mesmo se algo der erro.
     with log, tempfile.TemporaryDirectory(prefix="rodada_", dir=a.trabalho) as tmp:
         base = Path(tmp)
-        cfg = preparar_config(base, hostfs=a.elf is not None, audio=a.audio)
+        cfg = preparar_config(base, hostfs=a.elf is not None, audio=a.audio,
+                              cartao2=a.cartao2_inicial is not None)
         if a.cartao_inicial:
             shutil.copyfile(a.cartao_inicial, base / "memcards" / "Mcd001.ps2")
+        if a.cartao2_inicial:
+            shutil.copyfile(a.cartao2_inicial, base / "memcards" / "Mcd002.ps2")
         tela, xvfb = abrir_tela()
         p = None
         try:

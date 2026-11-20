@@ -38,9 +38,17 @@ int main(void) {
   reboot();
   assert(!memcmp(sram, save, sizeof(save)));
 
-  /* icone de versao anterior: trocado no proximo save */
+  /* icone de versao anterior: trocado no proximo save, mesmo quando o
+     progresso nao mudou (v0.13.8: sem progresso novo o SMW.SRM nao e
+     regravado, mas o icone e) */
   mc_put(0, "/SMWPS2/icon.sys", kSmwIconSys, 452);  /* sem a marca da versao */
+  reboot();
+  int save_writes = mc_writes - mc_writes_icon;
+  assert(!smw_save_unchanged(save));
   assert(smw_save_progress(save) && mc_writes_icon == 2 * icon_writes);
+  assert(smw_save_unchanged(save));
+  /* so o icone (smwps2.icn + icon.sys) foi gravado, o save ficou igual */
+  assert(mc_writes - mc_writes_icon == save_writes + 1);
   sys = mc_get(0, "/SMWPS2/icon.sys");
   assert(sys->size == (int)sizeof(kSmwIconSys) && !memcmp(sys->data, kSmwIconSys, sizeof(kSmwIconSys)));
 

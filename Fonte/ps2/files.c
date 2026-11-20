@@ -12,6 +12,7 @@
 #include <zlib.h>
 #ifdef _EE
 #include <libmc.h>
+#include <timer.h>
 /* IOP open flags used by MCSERV (not the newlib values). */
 enum { CARD_O_RDONLY = 0x0001, CARD_O_RDWR = 0x0003, CARD_O_CREAT = 0x0200 };
 /* mcSetFileInfo: change only the attributes; readable + writable + executable. */
@@ -606,6 +607,10 @@ static bool write_copy(const char *path, const uint8_t *sram, uint32_t generatio
   return true;
 }
 
+/* Quantas vezes o libmc avisou cartao trocado em cada entrada (-1 ou -2
+   na consulta depois da troca). */
+static unsigned card_changes[2];
+
 static CardState card_state(int port) {
   if (!memory_card_ok) return CARD_NO_DRIVER;
 #ifdef _EE
@@ -614,6 +619,7 @@ static CardState card_state(int port) {
   for (int i = 0; i < 2; ++i) {
     if (mcGetInfo(port, 0, &type, &free_clusters, &format) != 0) return CARD_ABSENT;
     mcSync(0, NULL, &result);
+    if (result == -1 || result == -2) ++card_changes[port];
   }
   if (result < -2 || type == MC_TYPE_NONE) return CARD_ABSENT;
   if (type != MC_TYPE_PS2) return CARD_WRONG_TYPE;
@@ -654,6 +660,25 @@ static struct {
   CopyState bad_state[STORE_COUNT * FILE_COUNT];
 } load_info = {-1, -1, false, 0, 0, {0}, {0}, {0}};
 
+/* v0.13.8: o que o SMW.SRM do lugar ativo tem (o progresso carregado ou o
+   ultimo save que deu certo). Ao escolher o arquivo na tela inicial o jogo
+   regrava a SRAM (copia o arquivo para a copia de reserva), quase sempre
+   sem mudar nada; no Memory Card isso parava o jogo por ate 5 s. */
+static uint8_t last_written[SMW_SRAM_BYTES];
+static bool last_written_ok;
+static unsigned written_changes;  /* card_changes do lugar ativo nessa hora */
+static bool icon_current(const char *dir);
+static bool icon_missing[2];
+
+static unsigned store_changes(int store) {
+  return store >= STORE_MC0 ? card_changes[store - STORE_MC0] : 0;
+}
+static void remember_written(const uint8_t *save) {
+  memcpy(last_written, save, SMW_SRAM_BYTES);
+  written_changes = store_changes(active_store);
+  last_written_ok = true;
+}
+
 static char notice[48];
 static unsigned notice_serial;
 static void set_notice(const char *text) {
@@ -671,6 +696,9 @@ void smw_load_progress(uint8_t *save) {
   load_info.bad = 0;
   max_generation = 0;
   active_store = -1;
+  last_written_ok = false;
+  icon_missing[0] = icon_missing[1] = false;
+  bool bak_valid[STORE_COUNT] = {false}, store_bad[STORE_COUNT] = {false};
   for (int store = 0; store < STORE_COUNT; ++store) {
     if (store_check(store) != 0) continue;
     if (active_store < 0) active_store = store;  /* preferred place for new saves */
@@ -682,8 +710,10 @@ void smw_load_progress(uint8_t *save) {
       if (copy.state != COPY_VALID) {
         int i = load_info.bad++;
         load_info.bad_store[i] = store, load_info.bad_file[i] = file, load_info.bad_state[i] = copy.state;
+        store_bad[store] = true;
         continue;
       }
+      if (file == FILE_BAK) bak_valid[store] = true;
       if (copy.generation > max_generation) max_generation = copy.generation;
       if (!found || copy_cmp(&copy, &best_info) > 0) {
         found = true;
@@ -697,6 +727,15 @@ void smw_load_progress(uint8_t *save) {
   if (found) {
     memcpy(save, best, SMW_SRAM_BYTES);
     active_store = load_info.store;
+    /* So quando o SMW.SRM e o mais novo, no formato atual, com o SMW.BAK e
+       sem arquivo ruim no mesmo lugar: senao o proximo save arruma o lugar
+       (arquivo ruim em outro lugar o save nao mexe; revisao do Antigravity). */
+    if (load_info.file == FILE_SRM && !load_info.legacy && !store_bad[active_store] &&
+        bak_valid[active_store]) {
+      remember_written(best);
+      if (active_store >= STORE_MC0)
+        icon_missing[active_store - STORE_MC0] = !icon_current(store_dir(active_store));
+    }
     char text[48];
     snprintf(text, sizeof(text), "CARREGADO: %s", kStoreNames[load_info.store]);
     set_notice(text);
@@ -752,29 +791,46 @@ const char *smw_notice(unsigned *serial) {
 /* icon.sys + 3D icon, so the PS2 browser shows "Super Mario World" instead
    of "corrupted data". Written after the progress, only when the card has
    room for it, and never blocks or undoes a save. */
-static void write_card_icon(const char *dir, int port) {
+/* icon.sys desta versao no lugar (o desenho antigo conta como faltando). */
+static bool icon_current(const char *dir) {
 #ifdef _EE
   char path[SMW_PATH];
   uint8_t probe[sizeof(kSmwIconSys) + 1];
+  return join_path(path, dir, "icon.sys") &&
+         file_read(path, probe, sizeof(probe)) == (int)sizeof(kSmwIconSys) &&
+         memcmp(probe, kSmwIconSys, sizeof(kSmwIconSys)) == 0;
+#else
+  (void)dir;
+  return true;
+#endif
+}
+
+/* v0.13.8: guarda em icon_missing (declarado acima) o cartao onde o icone
+   ficou faltando (sem espaco): o proximo save, mesmo sem progresso novo,
+   tenta de novo. */
+static void write_card_icon(const char *dir, int port) {
+#ifdef _EE
+  char path[SMW_PATH];
   bool recording = card_recording;
+  bool ok = true;
   card_recording = false;
   /* Regrava se faltar ou se for de uma versao anterior (desenho antigo). */
-  if (join_path(path, dir, "icon.sys") &&
-      (file_read(path, probe, sizeof(probe)) != (int)sizeof(kSmwIconSys) ||
-       memcmp(probe, kSmwIconSys, sizeof(kSmwIconSys)) != 0)) {
+  if (!icon_current(dir)) {
     char icon[SMW_PATH];
     int iport;
     const char *name;
     int need_kb = (int)((sizeof(kSmwIcon) + 1023) / 1024 + 2);
-    bool named = join_path(icon, dir, SMW_ICON_NAME);
+    bool named = join_path(icon, dir, SMW_ICON_NAME) && join_path(path, dir, "icon.sys");
+    ok = false;
     card_state(port);  /* refresh the free space */
     if (named && card_free_kb[port] >= need_kb + ICON_SPARE_KB) {
       /* Apaga o icone antigo antes: a gravacao nao trunca arquivos maiores. */
       if (card_path(icon, &iport, &name)) card_delete(iport, name);
-      if (file_write(icon, kSmwIcon, sizeof(kSmwIcon)))
-        file_write(path, kSmwIconSys, sizeof(kSmwIconSys));
+      ok = file_write(icon, kSmwIcon, sizeof(kSmwIcon)) &&
+           file_write(path, kSmwIconSys, sizeof(kSmwIconSys));
     }
   }
+  icon_missing[port] = !ok;
   card_recording = recording;
 #else
   (void)dir;
@@ -804,10 +860,42 @@ static bool preserve_bad(const char *dir, int file) {
      4. delete SMW.TMP (same as SMW.SRM)
    Unreadable or corrupt files are renamed .BAD before anything replaces
    them. */
-static int save_to(int store, const uint8_t *save, uint32_t generation) {
+/* v0.13.8: tempo de cada parte do ultimo save, para o SMW_LOG.TXT. */
+static unsigned now_ms(void) {
+#ifdef _EE
+  u32 s, us;
+  TimerBusClock2USec(GetTimerSystemTime(), &s, &us);
+  return s * 1000u + us / 1000u;
+#else
+  return 0;
+#endif
+}
+enum { STEP_READ, STEP_BACKUP, STEP_NEW, STEP_ICON, STEP_COUNT };
+static unsigned save_step_ms[STEP_COUNT], save_step_at;
+static void save_steps_start(void) {
+  memset(save_step_ms, 0, sizeof(save_step_ms));
+  save_step_at = now_ms();
+}
+
+static void save_step(int step) {
+  unsigned t = now_ms();
+  save_step_ms[step] = t - save_step_at;
+  save_step_at = t;
+}
+
+const char *smw_save_steps(void) {
+  static char text[64];
+  snprintf(text, sizeof(text), "leitura %u, reserva %u, novo %u, icone %u", save_step_ms[STEP_READ],
+           save_step_ms[STEP_BACKUP], save_step_ms[STEP_NEW], save_step_ms[STEP_ICON]);
+  return text;
+}
+
+/* *backup_ok: deu certo e deixou um SMW.BAK valido (havia uma copia anterior). */
+static int save_to(int store, const uint8_t *save, uint32_t generation, bool *backup_ok) {
   static SaveCopy have[FILE_COUNT];
   const char *dir = store_dir(store);
   char path[FILE_COUNT][SMW_PATH];
+  save_steps_start();
   for (int f = 0; f < FILE_COUNT; ++f)
     if (!join_path(path[f], dir, kSaveNames[f])) return ERR_PATH;
   if (store != STORE_FOLDER) make_folder(dir);
@@ -818,6 +906,7 @@ static int save_to(int store, const uint8_t *save, uint32_t generation) {
     if (have[f].state == COPY_VALID && (newest < 0 || copy_cmp(&have[f], &have[newest]) > 0))
       newest = f;
   }
+  save_step(STEP_READ);
   /* 1. backup of the previous state */
   if (newest >= 0 && newest != FILE_BAK &&
       (have[FILE_BAK].state != COPY_VALID ||
@@ -826,6 +915,7 @@ static int save_to(int store, const uint8_t *save, uint32_t generation) {
         !preserve_bad(dir, FILE_BAK)) return ERR_PRESERVE;
     if (!write_copy(path[FILE_BAK], have[newest].sram, have[newest].generation)) return ERR_BACKUP;
   }
+  save_step(STEP_BACKUP);
   /* 2-3. the new save */
   for (int f = FILE_TMP; ; f = FILE_SRM) {
     if ((have[f].state == COPY_UNREADABLE || have[f].state == COPY_CORRUPT) && !preserve_bad(dir, f))
@@ -834,7 +924,11 @@ static int save_to(int store, const uint8_t *save, uint32_t generation) {
     if (f == FILE_SRM) break;
   }
   file_remove(path[FILE_TMP]);  /* If removal fails, it holds the same save as SMW.SRM. */
+  save_step(STEP_NEW);
   if (store != STORE_FOLDER) write_card_icon(dir, store - STORE_MC0);
+  save_step(STEP_ICON);
+  /* Sem copia anterior valida o SMW.BAK nao foi gravado (o primeiro save). */
+  *backup_ok = newest >= 0;
   return 0;
 }
 
@@ -842,7 +936,56 @@ static SmwOptions pending_options;
 static bool options_pending;
 static bool write_options_to(int store, const SmwOptions *o);
 
+/* O SMW.SRM do lugar ativo ja tem este progresso: o lugar continua la, o
+   cartao nao foi trocado e o conteudo e o mesmo. */
+static bool same_as_written(const uint8_t *save) {
+  /* Primeiro a comparacao na memoria: progresso novo nao consulta o cartao. */
+  if (!last_written_ok || active_store < 0 || memcmp(save, last_written, SMW_SRAM_BYTES) != 0)
+    return false;
+  if (store_check(active_store) != 0 || store_changes(active_store) != written_changes) {
+    last_written_ok = false;
+    return false;
+  }
+  if (active_store == STORE_FOLDER) {
+    /* O pendrive pode ter saido, sido trocado ou o arquivo mudado no PC:
+       rele o SMW.SRM e o SMW.BAK (rapido no pendrive; no Memory Card a
+       troca e avisada pelo libmc). Revisoes do Codex. */
+    static SaveCopy now;  /* grande: fora da pilha */
+    char path[SMW_PATH];
+    bool ok = join_path(path, folder_dir, kSaveNames[FILE_SRM]);
+    if (ok) read_copy(path, &now);
+    ok = ok && now.state == COPY_VALID && !now.legacy &&
+         memcmp(now.sram, last_written, SMW_SRAM_BYTES) == 0 &&
+         join_path(path, folder_dir, kSaveNames[FILE_BAK]);
+    if (ok) read_copy(path, &now);
+    if (!ok || now.state != COPY_VALID) {
+      last_written_ok = false;
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool active_icon_missing(void) {
+  return active_store >= STORE_MC0 && icon_missing[active_store - STORE_MC0];
+}
+
+bool smw_save_unchanged(const uint8_t *save) {
+  return !options_pending && !active_icon_missing() && same_as_written(save);
+}
+
 bool smw_save_progress(const uint8_t *save) {
+  save_steps_start();
+  if (same_as_written(save)) {
+    /* Nada novo no progresso: so o ajuste trocado no jogo e o icone que
+       faltava, se houver (no log, so o tempo do icone). */
+    error_text[0] = '\0';
+    if (options_pending && write_options_to(active_store, &pending_options)) options_pending = false;
+    save_step_at = now_ms();
+    if (active_icon_missing()) write_card_icon(store_dir(active_store), active_store - STORE_MC0);
+    save_step(STEP_ICON);
+    return true;
+  }
   int order[STORE_COUNT], count = 0;
   if (active_store >= 0) order[count++] = active_store;
   for (int store = 0; store < STORE_COUNT; ++store)
@@ -854,21 +997,27 @@ bool smw_save_progress(const uint8_t *save) {
   card_step = card_result = usb_step = usb_result = 0;
   card_file = usb_file = 0;
   uint32_t generation = max_generation + 1;
+  last_written_ok = false;  /* o SMW.SRM pode ficar diferente se falhar no meio */
   for (int i = 0; i < count; ++i) {
     int store = order[i];
     int code = store_check(store);
     /* The USB slot is simply unused when the game came from a disc. */
     if (code == ERR_NOT_READY && store == STORE_FOLDER) continue;
-    if (code == 0) code = save_to(store, save, generation);
+    /* Cartao trocado durante o save (a consulta do icone avisa): o que foi
+       gravado nao esta no cartao de agora (revisao do Codex). */
+    const unsigned changes = store_changes(store);
+    bool backup_ok = false;
+    if (code == 0) code = save_to(store, save, generation, &backup_ok);
     if (code == 0) {
       active_store = store;
       max_generation = generation;
+      if (backup_ok && store_changes(store) == changes) remember_written(save);
       error_text[0] = '\0';
       card_recording = false;
       char text[48];
       snprintf(text, sizeof(text), "SALVO: %s", kStoreNames[store]);
       set_notice(text);
-      /* Ajustes trocados no jogo (L2+R2+X, L2+R2+CIRCULO) vao junto com o save. */
+      /* Ajuste trocado no jogo (L2+R2+X) vai junto com o save. */
       if (options_pending && write_options_to(store, &pending_options)) options_pending = false;
       return true;
     }
@@ -891,8 +1040,8 @@ bool smw_save_progress(const uint8_t *save) {
 /* ------------------------------------------------------- options --- */
 
 /* SMW.CFG: feito pelo Gravador no PC, ao lado do jogo (APPS/SMW) ou dentro
-   da ISO. So e lido. SMW.OPT: a escolha feita no PS2 (tela AJUSTES, L2+R2+X
-   ou L2+R2+CIRCULO), gravada onde fica o save. Os dois sao texto, uma linha
+   da ISO. So e lido. SMW.OPT: a escolha feita no PS2 (tela AJUSTES ou
+   L2+R2+X), gravada onde fica o save. Os dois sao texto, uma linha
    "chave=valor" cada; linhas com # e chaves desconhecidas sao ignoradas. */
 
 static bool same_word(const char *a, const char *b) { return strcasecmp(a, b) == 0; }

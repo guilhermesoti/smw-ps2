@@ -12,6 +12,8 @@ bool smw_path_is_disc(const char *path);
 void smw_enable_memory_card(bool available);
 /* Human-readable place where progress is being kept (after smw_start). */
 const char *smw_save_location(void);
+/* Tempo (ms) de cada parte do ultimo save: leitura, reserva, novo, icone. */
+const char *smw_save_steps(void);
 /* One line per save location, for the boot screen. */
 void smw_storage_report(char *out, size_t size);
 /* Where the progress was loaded from, or why nothing was loaded (boot screen). */

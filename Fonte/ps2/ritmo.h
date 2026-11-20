@@ -20,10 +20,11 @@
    30 (so o passo desenhado e levou mais de um quadro da TV, ou uma volta de
    compensacao que nao diminuiu a divida). Volta ao leve pelo custo medido
    do quadro desenhado (passo + envio ao GS, sem a espera da TV): media
-   abaixo de 93% de um quadro da TV em 60 voltas seguidas; ou, com a media
-   abaixo de 100%, por voltas de teste so com o passo desenhado (uma a cada
-   3 s; 2 seguidas que couberam). Se o leve dura pouco, as voltas de teste
-   ficam mais espacadas (ate 1 por minuto), para nao ficar trocando.
+   abaixo de 93% de um quadro da TV num intervalo de voltas seguidas; ou,
+   com a media abaixo de 100%, por voltas de teste so com o passo desenhado
+   (uma por intervalo; 2 seguidas que couberam). O intervalo comeca em 3 s
+   e dobra (ate 1 minuto) cada vez que o leve dura pouco, para nao ficar
+   trocando (v0.13.8); a troca 4:3 / 16:9 zera o freio.
 
    Ate a v0.13.6 so havia a compensacao: depois do primeiro atraso, cada
    volta rodava 1 passo sem desenho + 1 desenhado; com 2,9 + 13,2 ms mais o
@@ -36,11 +37,17 @@ typedef struct {
   uint32_t media;     /* custo medio do quadro desenhado, em ciclos do EE */
   unsigned atrasos;   /* nivel de atrasos no leve */
   unsigned folgadas;  /* voltas seguidas com folga, no pesado */
-  unsigned desde_prova, provas_ok, intervalo;  /* voltas de teste, no pesado */
+  /* no pesado: voltas de teste; intervalo = voltas de teste e de folga
+     seguidas para voltar ao leve (cresce com o freio) */
+  unsigned desde_prova, provas_ok, intervalo;
   unsigned voltas_leve;  /* voltas desde que voltou ao leve */
+  bool voltou;           /* ja voltou do pesado ao leve alguma vez */
 } Ritmo;
 
 void ritmo_inicia(Ritmo *r);
+
+/* Cena nova (troca 4:3 / 16:9): esquece o freio da volta ao leve. */
+void ritmo_cena_nova(Ritmo *r);
 
 /* Depois de cada volta: quadros da TV que passaram, passos que a volta
    rodou (sem desenho + 1), custo do quadro desenhado e a duracao de um

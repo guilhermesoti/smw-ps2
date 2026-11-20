@@ -20,5 +20,11 @@ void smw_frame(uint16_t p1, uint16_t p2, unsigned pads, int16_t *stereo, int sam
                bool draw_pixels);
 void smw_load_progress(uint8_t *save);
 bool smw_save_progress(const uint8_t *save);
+/* true se o lugar do save ja tem exatamente isto no SMW.SRM e nao ha ajuste
+   pendente: gravar de novo so pararia o jogo (v0.13.8). */
+bool smw_save_unchanged(const uint8_t *save);
+/* Chamada antes de cada save que grava de verdade (o jogo para enquanto
+   grava; o main deixa o som mudo, senao o audsrv repete o que tem). */
+void smw_before_save(void (*hook)(void));
 extern bool smw_save_error;
 #endif

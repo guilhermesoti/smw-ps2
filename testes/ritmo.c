@@ -86,6 +86,9 @@ static double custo_troca(long v) { return v < 1800 ? custo_169(v) : custo_43(v)
 static double custo_16(long v) { (void)v; return 16.0; }  /* cabe, com 0,7 ms de folga (revisao do Codex) */
 static double custo_18_16(long v) { return v < 1800 ? 18.0 : 16.0; }  /* pesado e depois cabe (Codex) */
 static double custo_tranco(long v) { return v == 100 ? 40.0 : 14.7; }  /* um tranco so */
+/* Cena que fica mais leve e mais pesada a cada 20 s, passando do limite nos
+   picos (o 60/39 alternando visto no console na v0.13.7). */
+static double custo_onda(long v) { return 15.2 + 1.6 * sin(v * 6.2832 / 1200.0) + (aleatorio() - 0.5) * 1.0; }
 
 static int falhas;
 static void confere(bool ok, const char *o_que) {
@@ -112,6 +115,7 @@ int main(void) {
   medir_de = 1000;
   Resultado i = simula(custo_tranco, 3600, 10.0, false, -1);  /* passo sem desenho de 10 ms (Codex) */
   medir_de = 0;
+  Resultado o = simula(custo_onda, DEZ_MIN, 2.9, false, -1);
   mostra("4:3", a);
   mostra("4:3, regra antiga", b);
   mostra("16:9", c);
@@ -121,7 +125,9 @@ int main(void) {
   mostra("16,0 ms constantes", g);
   mostra("18 ms e depois 16 ms", h);
   mostra("tranco, logica de 10 ms", i);
-  printf("  trocas de modo: 4:3 %ld, 16:9 %ld, no limite %ld (10 min)\n", a.trocas, c.trocas, d.trocas);
+  mostra("cena que varia (onda)", o);
+  printf("  trocas de modo: 4:3 %ld, 16:9 %ld, no limite %ld em %ld s, onda %ld em %ld s\n", a.trocas,
+         c.trocas, d.trocas, d.quadros / 60, o.trocas, o.quadros / 60);
 
   confere(labs(a.passos - a.quadros) <= 2, "4:3: o jogo anda junto com a TV");
   confere(59.82 * a.desenhados / a.quadros > 58.0, "4:3: desenha quase todos os quadros (mais de 58 por segundo)");
@@ -140,9 +146,12 @@ int main(void) {
   confere(59.82 * i.desenhados_fim / i.quadros_fim > 59.0 && labs(i.passos - i.quadros) <= 2,
           "tranco com logica de 10 ms: nao fica preso em 20 quadros");
   confere(c.trocas <= 2, "16:9: nao fica trocando de modo (sem voltas de teste quando nao cabe)");
-  confere(d.trocas <= 40, "no limite: no maximo 40 trocas de modo em 10 min");
+  confere(d.trocas * 1800 <= d.quadros, "no limite: no maximo 1 troca de modo a cada 30 s");
+  confere(o.trocas * 600 <= o.quadros && labs(o.passos - o.quadros) <= 2,
+          "cena que varia: o jogo anda junto com a TV e troca de modo no maximo a cada 10 s");
   confere(a.maior_atraso <= 2 && c.maior_atraso <= 2 && d.maior_atraso <= 3 && e.maior_atraso <= 2 &&
-          f.maior_atraso <= 3 && g.maior_atraso <= 1 && h.maior_atraso <= 3 && i.maior_atraso <= 3,
+          f.maior_atraso <= 3 && g.maior_atraso <= 1 && h.maior_atraso <= 3 && i.maior_atraso <= 3 &&
+          o.maior_atraso <= 3,
           "atraso nunca passa de 3 passos");
 
   /* Depois de trocar 16:9 -> 4:3, volta a desenhar todos em poucos segundos. */
@@ -157,6 +166,34 @@ int main(void) {
   }
   printf("  troca 16:9 -> 4:3: voltou a desenhar todos depois de %d voltas\n", volta_leve);
   confere(volta_leve >= 0 && volta_leve <= 120, "16:9 -> 4:3: volta a desenhar todos em ate 4 s");
+
+  /* Depois de uma cena no limite o freio aumenta o intervalo da volta ao
+     leve; uma cena bem mais leve (12 ms: o passo sem desenho e o desenhado
+     cabem num quadro, e a volta adiantada serve de teste) ou a troca de tela
+     (4:3, 14,7 ms, com ritmo_cena_nova como no main.c) nao pode deixar o
+     jogo em 30 por 1 minuto (revisao do Antigravity). */
+  for (int caso = 0; caso < 2; ++caso) {
+    ritmo_inicia(&r);
+    sem = 0;
+    int depois = -1;
+    unsigned intervalo = 0;
+    for (long v = 0; v < 24000; ++v) {
+      if (v == 20000) {
+        intervalo = r.pesado ? r.intervalo : 0;
+        if (caso == 1) ritmo_cena_nova(&r);
+      }
+      double cst = v < 20000 ? custo_limite(v) : caso == 0 ? 12.0 : custo_43(v);
+      double ms = sem * 2.9 + cst;
+      int q = (int)ceil(ms / QUADRO_MS - 1e-9);
+      sem = ritmo_proxima(&r, q < 1 ? 1 : q, sem + 1, (uint32_t)(cst * CICLOS_MS), QUADRO_TV);
+      if (v >= 20000 && !r.pesado && depois < 0) depois = (int)(v - 20000);
+    }
+    printf("  %s depois da cena no limite (intervalo %u voltas): desenha todos depois de %d voltas\n",
+           caso == 0 ? "cena de 12 ms" : "troca para o 4:3", intervalo, depois);
+    confere(intervalo > 90 && depois >= 0 && depois <= 150,
+            caso == 0 ? "cena bem mais leve depois do freio: volta a desenhar todos em ate 5 s"
+                      : "troca de tela depois do freio: volta a desenhar todos em ate 5 s");
+  }
 
   printf(falhas ? "RITMO: %d FALHA(S)\n" : "RITMO: OK\n", falhas);
   return falhas ? 1 : 0;

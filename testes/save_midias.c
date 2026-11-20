@@ -135,16 +135,93 @@ int main(void) {
   CHECK(load_info.store == STORE_MC0 && load_info.generation == 1);
   CHECK(!memcmp(g_test_sram, yellow, SMW_SRAM_BYTES));
   CHECK(!strcmp(notice, "CARREGADO: MEMORY CARD 1"));
-  CHECK(smw_save_progress(g_test_sram));            /* escolher o arquivo na tela inicial */
+  /* Escolher o arquivo na tela inicial regrava a SRAM sem mudar nada. Logo
+     depois do primeiro save o cartao ainda nao tem SMW.BAK: essa vez grava
+     (cria o BAK). Dai em diante, desde a v0.13.8, nada vai para o cartao
+     (no console isso parava o jogo por ate 5 s, com o som repetindo). */
+  CHECK(!mc_get(0, "/SMWPS2/SMW.BAK"));
+  CHECK(!smw_save_unchanged(g_test_sram) && smw_save_progress(g_test_sram));
+  CHECK(mc_get(0, "/SMWPS2/SMW.BAK") != NULL);
+  reboot();
+  CHECK(!memcmp(g_test_sram, yellow, SMW_SRAM_BYTES) && load_info.generation == 2);
+  int antes = mc_writes;
+  CHECK(smw_save_unchanged(g_test_sram) && smw_save_progress(g_test_sram) && mc_writes == antes);
   reboot();
   CHECK(!memcmp(g_test_sram, yellow, SMW_SRAM_BYTES) && load_info.generation == 2);
   CHECK(usb_get("SMW.SRM", buf, sizeof(buf)) == SMW_SRAM_BYTES && !memcmp(buf, stale, SMW_SRAM_BYTES));
-  /* O pendrive volta a aceitar gravacao: o proximo save vai para o cartao
-     (onde esta o mais recente) e o reinicio continua achando o mais novo. */
+  /* O pendrive volta a aceitar gravacao: o proximo save com progresso novo
+     vai para o cartao (onde esta o mais recente) e o reinicio continua
+     achando o mais novo. */
   usb_denied = 0;
-  CHECK(smw_save_progress(yellow));
+  uint8_t more[SMW_SRAM_BYTES];
+  make_sram(more, 2, true);
+  CHECK(!smw_save_unchanged(more) && smw_save_progress(more) && mc_writes > antes);
   reboot();
-  CHECK(load_info.store == STORE_MC0 && load_info.generation == 3);
+  CHECK(load_info.store == STORE_MC0 && load_info.generation == 3 && exits_of(g_test_sram) == 2);
+  /* Depois de um save que deu certo, o mesmo conteudo de novo tambem nao
+     grava; um ajuste trocado no jogo (L2+R2+X) com o progresso igual grava
+     so o SMW.OPT, sem mexer no save. */
+  uint8_t mais[SMW_SRAM_BYTES];
+  make_sram(mais, 3, true);
+  CHECK(!smw_save_unchanged(mais) && smw_save_progress(mais));
+  antes = mc_writes;
+  CHECK(smw_save_unchanged(mais) && smw_save_progress(mais) && mc_writes == antes);
+  SmwOptions tela = {.tela = 1, .video = SMW_VIDEO_240P, .idioma = 0, .compat = SMW_OPT_ASK};
+  smw_options_changed(&tela);
+  CHECK(!smw_save_unchanged(mais) && smw_save_progress(mais) && mc_writes > antes);
+  CHECK(mc_get(0, "/SMWPS2/SMW.OPT") != NULL && smw_save_unchanged(mais));
+  reboot();
+  CHECK(load_info.store == STORE_MC0 && load_info.generation == 4 && exits_of(g_test_sram) == 3);
+  /* Trocou o Memory Card 1 por um vazio com o jogo ligado: o mesmo progresso
+     tem de ir para o cartao novo (o libmc avisa a troca com -1); como no
+     primeiro save, a vez seguinte cria o SMW.BAK e so depois nada grava. */
+  for (int i = 0; i < MC_MAXF; i++) if (mc_fs[i].port == 0) mc_fs[i].used = 0;
+  mc_swapped[0] = 1;
+  antes = mc_writes;
+  CHECK(!smw_save_unchanged(g_test_sram) && smw_save_progress(g_test_sram) && mc_writes > antes);
+  CHECK(mc_get(0, "/SMWPS2/SMW.SRM") != NULL && !mc_get(0, "/SMWPS2/SMW.BAK"));
+  CHECK(!smw_save_unchanged(g_test_sram) && smw_save_progress(g_test_sram));
+  CHECK(mc_get(0, "/SMWPS2/SMW.BAK") != NULL && smw_save_unchanged(g_test_sram));
+  reboot();
+  CHECK(load_info.store == STORE_MC0 && exits_of(g_test_sram) == 3);
+  /* O libmc pode avisar a troca na segunda consulta (revisao do Codex). */
+  mc_swapped[0] = 2;
+  CHECK(!smw_save_unchanged(g_test_sram));
+  /* Pendrive: o save so e pulado se o SMW.SRM dele ainda tiver o progresso
+     (o pendrive pode ter saido ou o arquivo mudado no PC; revisao do Codex). */
+  fresh();
+  reboot();
+  CHECK(smw_save_progress(yellow) && smw_save_progress(yellow));  /* SMW.SRM e SMW.BAK */
+  CHECK(!strcmp(notice, "SALVO: PENDRIVE") && smw_save_unchanged(yellow));
+  usb_put("SMW.SRM", stale, SMW_SRAM_BYTES);  /* mudou no PC */
+  CHECK(!smw_save_unchanged(yellow) && smw_save_progress(yellow));
+  CHECK(usb_get("SMW.SRM", buf, sizeof(buf)) == SAVE_BYTES && smw_save_unchanged(yellow));
+  /* Trocado por outro pendrive so com o mesmo SMW.SRM (sem o SMW.BAK): grava
+     de novo para recriar a reserva (revisao do Codex). */
+  {
+    char bak[300];
+    snprintf(bak, sizeof(bak), "%sSMW.BAK", usb_dir);
+    CHECK(unlink(bak) == 0);
+  }
+  CHECK(!smw_save_unchanged(yellow) && smw_save_progress(yellow));
+  CHECK(usb_get("SMW.BAK", buf, sizeof(buf)) == SAVE_BYTES && smw_save_unchanged(yellow));
+  /* Cartao trocado durante o save: a consulta do icone avisa e o progresso
+     nao fica como gravado no cartao de agora (revisao do Codex). */
+  fresh();
+  usb_denied = 1;
+  reboot();
+  CHECK(smw_save_progress(yellow) && smw_save_progress(yellow));  /* SMW.SRM e SMW.BAK no cartao 1 */
+  CHECK(!strcmp(notice, "SALVO: MEMORY CARD 1") && smw_save_unchanged(yellow));
+  uint8_t nova[SMW_SRAM_BYTES];
+  make_sram(nova, 2, true);
+  mc_fs[mc_find(0, "/SMWPS2/icon.sys")].used = 0;  /* o icone sera regravado: consulta o cartao */
+  mc_swapped[0] = 3;  /* 1a e 2a consulta: antes de gravar; 3a: a do icone */
+  CHECK(smw_save_progress(nova) && !smw_save_unchanged(nova));
+  /* Arquivo ruim em outro lugar (pendrive) nao impede pular o save do
+     cartao: o save nao mexe nele (revisao do Antigravity). */
+  usb_put("SMW.SRM", "ruim", 4);
+  reboot();
+  CHECK(load_info.bad == 1 && load_info.store == STORE_MC0 && smw_save_unchanged(g_test_sram));
 
   /* 2. Migracao dos saves antigos do jeito que a v0.7.3 deixou o cartao:
         SMW.SRM com o progresso antigo (regravado ao escolher o arquivo) e

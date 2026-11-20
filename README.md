@@ -2,7 +2,7 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.13.7 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
+**Versão 0.13.8 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
 - Tela AJUSTES no começo: vídeo 240p (cabo AV, qualquer TV; o recomendado), 480i (só para TV que não mostra 240p) ou 480p (componente/HDMI), tela 4:3 ou 16:9 e idioma, sempre com os pixels nítidos. Vídeo novo só fica se você confirmar que a imagem apareceu.
@@ -33,7 +33,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.13.7 obtido com o ps2dev v2.0.0 foi `59ca7d8ef82c08ee8c8b3b79a4fcb2f89583a92032cf908171eb2293f14ab2ad`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.13.8 obtido com o ps2dev v2.0.0 foi `391cd7f1f81c44dab4211d7de69f07940afce4a289e3487f12addedb58947017`.
 
 ## Gravador SMW PS2 (programa no PC)
 
@@ -195,7 +195,8 @@ Testes do salvamento (Memory Card simulado em `testes/mocks/mc_mock.h`, pendrive
 ```sh
 cd testes
 P="$(pkg-config --cflags minizip zlib)"; L="$(pkg-config --libs minizip zlib)"
-# fallback entre mídias + reinício, saves antigos, corrompidos, falha de leitura, cartão cheio
+# fallback entre mídias + reinício, saves antigos, corrompidos, falha de leitura, cartão cheio,
+# save sem mudança (não grava nada) e Memory Card trocado com o jogo ligado
 cc -std=gnu11 -D_EE -Imocks -I../Fonte/ps2 $P save_midias.c -Wl,--wrap=fopen $L -o /tmp/smw-save-midias && /tmp/smw-save-midias
 # log do console (SMW_LOG.TXT): pendrive, Memory Card pela ISO, pendrive recusando, memória cheia
 cc -std=gnu11 -D_EE -Imocks -I../Fonte/ps2 $P registro.c -Wl,--wrap=fopen $L -o /tmp/smw-registro && /tmp/smw-registro

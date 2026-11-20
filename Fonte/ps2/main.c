@@ -21,7 +21,7 @@
 #include <timer.h>
 #include <unistd.h>
 
-#define SMW_VERSAO "0.13.7"
+#define SMW_VERSAO "0.13.8"
 
 #define DECLARE_DRIVER(n) extern unsigned char n##_irx[]; extern unsigned int size_##n##_irx
 DECLARE_DRIVER(bdm);
@@ -476,10 +476,14 @@ static void set_aspect(bool wide) {
   texture.TBW = screen_pitch / 64;
 }
 
-/* L2+R2 + Triangle: performance meter. L2+R2 + Cross: 4:3 / 16:9 (shows
-   "TELA 4:3" / "TELA 16:9" for 5 s). While L2+R2 are held the pad sends
-   nothing to the game. Square and Circle (scanlines and smoothing until
-   v0.13.6) do nothing now. */
+/* L2+R2 + Triangle: performance meter; each second its line also goes to
+   the log, and turning it off writes SMW_LOG.TXT (the game stops for a
+   moment), so the numbers reach the PC (v0.13.8). L2+R2 + Cross: 4:3 / 16:9
+   (shows "TELA 4:3" / "TELA 16:9" for 5 s). While L2+R2 are held the pad
+   sends nothing to the game. Square and Circle (scanlines and smoothing
+   until v0.13.6) do nothing now. The log is written and the pacing told
+   about the new screen by the main loop, after its timed part. */
+static bool log_after_loop, aspect_changed;
 static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
   uint16_t pressed = raw & ~*previous;
   *previous = raw;
@@ -489,8 +493,10 @@ static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
     perf.steps = perf.drawn = 0;  /* starts a new window */
     perf.draw_ticks = perf.send_ticks = perf.logic_ticks = 0;
     smw_log("L2+R2+TRIANGULO: medidor %s", perf.on ? "ligado" : "desligado");
+    if (!perf.on) log_after_loop = true;
   }
   if (pressed & PAD_CROSS) {
+    aspect_changed = true;
     set_aspect(!video.wide);
     show_aspect_notice();
     opcoes.tela = video.wide;
@@ -502,13 +508,14 @@ static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
 
 /* One loop of the main loop: skipped game frames (logic), the drawn one and
    its sending to the GS. TELA is the frames drawn per 60 game frames (a
-   window can end at 61 or 62, when a loop ran 2 or 3 of them). */
-static void perf_loop(unsigned skipped, uint32_t logic, uint32_t draw, uint32_t send) {
-  if (!perf.on) return;
+   window can end at 61 or 62, when a loop ran 2 or 3 of them). Returns true
+   when a new line of the meter is ready. */
+static bool perf_loop(unsigned skipped, uint32_t logic, uint32_t draw, uint32_t send) {
+  if (!perf.on) return false;
   perf.steps += skipped + 1;
   ++perf.drawn;
   perf.logic_ticks += logic, perf.draw_ticks += draw, perf.send_ticks += send;
-  if (perf.steps < 60) return;
+  if (perf.steps < 60) return false;
   unsigned not_drawn = perf.steps - perf.drawn;
   unsigned shown = (perf.drawn * 60 + perf.steps / 2) / perf.steps;
   unsigned d = perf.draw_ticks / perf.drawn / EE_TICKS_PER_TENTH_MS;
@@ -521,6 +528,7 @@ static void perf_loop(unsigned skipped, uint32_t logic, uint32_t draw, uint32_t 
   }
   perf.steps = perf.drawn = 0;
   perf.draw_ticks = perf.send_ticks = perf.logic_ticks = 0;
+  return true;
 }
 
 /* One game frame (pads, game logic and sound; PPU too when draw). Returns
@@ -660,6 +668,7 @@ int main(int argc, char **argv) {
   bool from_disc = smw_path_is_disc(folder);
   smw_log_inicia(folder);
   smw_log_antes_de_gravar(som_mudo);
+  smw_before_save(som_mudo);
   smw_log("Super Mario World PS2 v" SMW_VERSAO " - RetroGames");
   smw_log("ELF: %s (%s)", argc && argv && argv[0] ? argv[0] : "(sem nome)",
           from_disc ? "aberto pela ISO" : "aberto como aplicativo");
@@ -799,14 +808,32 @@ int main(int argc, char **argv) {
     const uint32_t draw = step_game(true);
     const uint32_t t1 = cpu_ticks();
     const uint32_t send = present();
-    perf_loop((unsigned)pending, logic, draw, send);
+    if (perf_loop((unsigned)pending, logic, draw, send))
+      smw_log("Medidor: %s (%s)", perf.text, ritmo.pesado ? "1 em 2" : "todos");
     uint32_t now = cpu_ticks();
     int fields = (int)((now - last + field / 2) / field);
     last = now;
+    const bool was_heavy = ritmo.pesado;
     /* The cost given to ritmo is the whole drawn step (pads, sound to audsrv,
        game and PPU: t1 - t0) plus the sending, i.e. everything a loop that
        only draws must fit in a TV frame; the meter's DESENHO is the game and
        PPU part alone. */
     pending = ritmo_proxima(&ritmo, fields, pending + 1, (t1 - t0) + send, field);
+    if (ritmo.pesado != was_heavy) {
+      unsigned m = ritmo.media / EE_TICKS_PER_TENTH_MS;
+      smw_log("Ritmo: desenha %s (custo medio %u.%u ms)", ritmo.pesado ? "1 em 2" : "todos",
+              m / 10, m % 10);
+    }
+    if (aspect_changed) {  /* other screen, other cost */
+      aspect_changed = false;
+      ritmo_cena_nova(&ritmo);
+    }
+    if (log_after_loop) {
+      /* Meter turned off: the write stops the game for a moment; like a
+         save, it is not counted as late frames to catch up. */
+      log_after_loop = false;
+      smw_log_grava();
+      last = cpu_ticks();
+    }
   }
 }

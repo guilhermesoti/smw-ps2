@@ -20,14 +20,16 @@ static McFile mc_fs[MC_MAXF];
 static struct { int open, file, pos; } mc_fds[8];
 static int mc_pending, mc_present[2] = {1, 0}, mc_capacity_kb[2] = {8000, 8000};
 static int mc_fail_rename;      /* mcRename devolve -5 */
-static int mc_writes_icon, mc_max_piece;
+static int mc_swapped[2];       /* cartao trocado: a consulta n (1 ou 2) da -1 */
+static int mc_writes_icon, mc_max_piece, mc_writes;  /* mc_writes: chamadas de mcWrite */
 
 static void mc_reset(void) {
   memset(mc_fs, 0, sizeof(mc_fs));
   memset(mc_fds, 0, sizeof(mc_fds));
   mc_present[0] = 1, mc_present[1] = 0;
   mc_capacity_kb[0] = mc_capacity_kb[1] = 8000;
-  mc_fail_rename = 0, mc_writes_icon = 0, mc_max_piece = 0;
+  mc_fail_rename = 0, mc_writes_icon = 0, mc_max_piece = 0, mc_writes = 0;
+  mc_swapped[0] = mc_swapped[1] = 0;
 }
 static int mc_find(int port, const char *n) {
   for (int i = 0; i < MC_MAXF; i++)
@@ -59,7 +61,8 @@ int mcGetInfo(int port, int slot, int *type, int *free_clusters, int *format) {
   *type = mc_present[port] ? MC_TYPE_PS2 : 0;
   *free_clusters = mc_capacity_kb[port] - mc_used_kb(port);
   *format = 1;
-  mc_pending = mc_present[port] ? 0 : -10;
+  mc_pending = !mc_present[port] ? -10 : mc_swapped[port] == 1 ? -1 : 0;
+  if (mc_swapped[port]) --mc_swapped[port];
   return 0;
 }
 int mcMkDir(int port, int slot, const char *name) {
@@ -107,6 +110,7 @@ int mcWrite(int fd, const void *buf, int size) {
   int grow = (end > old ? (end + 1023) / 1024 - (old + 1023) / 1024 : 0);
   if (mc_used_kb(mc_fs[f].port) + grow > mc_capacity_kb[mc_fs[f].port]) { mc_pending = -3; return 0; }
   if (strstr(mc_fs[f].name, ".icn")) mc_writes_icon++;
+  mc_writes++;
   memcpy(mc_fs[f].data + mc_fds[fd].pos, buf, size);
   mc_fds[fd].pos = end;
   if (end > mc_fs[f].size) mc_fs[f].size = end;
