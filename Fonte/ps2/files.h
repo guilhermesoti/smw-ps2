@@ -39,7 +39,8 @@ const char *smw_save_error_text(void);
    scanlines= (ate a v0.13.6) e largura= e altura= (o tamanho da v0.14.1,
    que saiu) de arquivos antigos sao ignoradas. */
 enum { SMW_OPT_ASK = -1 };
-enum { SMW_VIDEO_240P = 0, SMW_VIDEO_480P = 1, SMW_VIDEO_480I = 2 };
+/* O 480i (2) saiu na v0.15: video=480i de arquivos antigos fica sem valor. */
+enum { SMW_VIDEO_240P = 0, SMW_VIDEO_480P = 1 };
 enum { SMW_POSICAO_MAX = 16, SMW_POSICAO_PASSO = 2, SMW_POSICAO_NADA = -(SMW_POSICAO_MAX + 1) };
 typedef struct { int tela, video, idioma, compat, pos_x, pos_y; } SmwOptions;
 /* Uma posicao (x ou y) que vale: de -SMW_POSICAO_MAX a SMW_POSICAO_MAX. */

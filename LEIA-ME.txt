@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.14.2 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
+Retrogames Patos de Minas | v0.15 (beta) | NTSC 240p/480p | 4:3 ou 16:9 | Português
 
 O QUE VOCÊ PRECISA
 
@@ -143,20 +143,19 @@ baixo escolhe a linha, para os lados muda o valor, X ou START começa:
 - VÍDEO:
   240p: cabo AV (amarelo), em TV de tubo ou de tela plana. É a imagem
   mais nítida e mais parecida com a do SNES. Use esta.
-  480i: só se a sua TV não mostrar o 240p. As mesmas 224 linhas
-  aparecem nos dois campos da imagem entrelaçada, e a TV de tela plana
-  desentrelaça, o que em geral deixa a imagem menos nítida.
   480p: adaptador HDMI ou cabo componente (no cabo AV não aparece).
   Cada linha do SNES vira duas. O PS2 deve estar com "Saída de vídeo
   componente" em "Y Cb/Pb Cr" na Configuração do Sistema.
 - TELA: 4:3 ou 16:9 (veja TELA 16:9 abaixo), com o teste do círculo.
-  O 16:9 só existe no 480p: com 240p ou 480i a linha fica em 4:3.
+  O 16:9 só existe no 480p: com 240p a linha fica em 4:3.
 - POSIÇÃO: centraliza a imagem na TV (veja POSIÇÃO DA IMAGEM NA TV).
 - IDIOMA: português do Brasil ou inglês (o original).
 - TRAPAÇAS: quantas estão ligadas; X abre a lista (veja TRAPAÇAS).
 A imagem é sempre com os pixels nítidos, como no cartucho.
 
 A tela AJUSTES aparece sempre na mesma imagem (480i), que toda TV mostra.
+O 480i deixou de ser opção do jogo na v0.15: quem tinha escolhido o 480i
+vê a tela AJUSTES sem a contagem e escolhe de novo.
 Quando você escolhe um vídeo novo, o jogo pergunta "A IMAGEM APARECEU?":
 aperte X em 10 segundos. Sem resposta (TV sem imagem), ele volta
 sozinho para a tela AJUSTES. Os ajustes ficam gravados (SMW.OPT, onde
@@ -170,17 +169,16 @@ no 480p) antes de voltar para os ajustes, e lembra disso.
 
 Durante o jogo (segurando L2 + R2):
 - L2 + R2 + CRUZ: troca entre 4:3 e 16:9 (a troca fica gravada junto
-  com o próximo save). Aparece "TELA 4:3" ou "TELA 16:9" por 5
-  segundos, também no começo do jogo, para conferir numa foto. Só no
-  480p; nos outros vídeos aparece "16:9 SO NO 480P" e nada muda.
+  com o próximo save). Só no 480p; no 240p aparece "16:9 SO NO 480P"
+  e nada muda.
 - L2 + R2 + setas: move a imagem na TV, para centralizar. Aparece
   "POSICAO +4, -2" (por exemplo) ou "POSICAO CENTRO" por 5 segundos.
   Fica gravado junto com o próximo save.
 - L2 + R2 + SELECT: abre a lista de trapaças. O jogo e a música ficam
   parados até você voltar (CÍRCULO ou SELECT).
 - L2 + R2 + TRIÂNGULO: liga/desliga o medidor de desempenho, no canto
-  de baixo. "TELA 60" = todos os 60 quadros de cada segundo foram
-  desenhados; "TELA 30" = metade foi pulada para manter a velocidade.
+  de baixo. "TELA 30" = o jogo desenhou 30 dos 60 quadros de cada
+  segundo, como deve ser (veja abaixo); menos que isso, a cena pesou.
   "DESENHO" é o tempo médio de um quadro desenhado (lógica do jogo e
   desenho), "ENVIO" o de mandar a imagem para o GS e "LOGICA" o de um
   quadro pulado (só a lógica do jogo). Um quadro da TV dura 16,7 ms.
@@ -188,21 +186,19 @@ Durante o jogo (segurando L2 + R2):
   SMW_LOG.TXT; ao desligar, o arquivo é gravado (veja LOG DO CONSOLE).
 
 O ritmo do jogo segue a atualização da TV, e o som se ajusta a ela sem
-travar a imagem. Quando um quadro desenhado (DESENHO + ENVIO) cabe no
-tempo de uma atualização, o jogo desenha todos (TELA 60). Quando não
-cabe, ele desenha um sim, outro não (TELA 30), sempre no mesmo ritmo,
-e a velocidade e a música continuam corretas. Se um quadro atrasar, o
-jogo avança sem desenhar para recuperar. Numa cena que fica no limite,
-cada vez que o jogo volta para TELA 60 e logo precisa voltar para
-TELA 30, ele espera o dobro (de 3 segundos até 1 minuto) antes de
-tentar de novo, em vez de ficar trocando. A troca 4:3 / 16:9 zera essa
-espera.
+travar a imagem. Desde a v0.15 o jogo roda os 60 quadros de cada
+segundo e desenha um sim, outro não (TELA 30), sempre no mesmo ritmo:
+cada imagem fica dois quadros da TV, e a velocidade e a música
+continuam corretas. Se uma cena pesada atrasar, o jogo avança um
+quadro sem desenhar para recuperar. Até a v0.14.2 ele tentava desenhar
+todos (TELA 60) quando cabia, mas no console ficava trocando entre 60
+e 30.
 
 TELA 16:9 (BETA)
 
 Escolha 4:3 ou 16:9 na linha TELA da tela AJUSTES. O 16:9 só existe
-com o vídeo 480p (cabo componente ou adaptador HDMI): com 240p ou 480i
-a linha TELA mostra 4:3, apagada, e o jogo fica em 4:3 (se o 16:9
+com o vídeo 480p (cabo componente ou adaptador HDMI): com 240p a linha
+TELA mostra 4:3, apagada, e o jogo fica em 4:3 (se o 16:9
 estava escolhido, ele volta quando você escolher o 480p). O teste ao
 lado tem um círculo que só fica redondo quando a TV está no modo certo
 para a opção marcada. A escolha fica gravada (arquivo SMW.OPT, no
@@ -243,7 +239,7 @@ AJUSTES DE ABERTURA (SMW.CFG E SMW.OPT)
 O Gravador grava SMW.CFG junto do jogo (em APPS/SMW ou dentro da ISO),
 um texto simples com o que já vem marcado na tela AJUSTES:
   tela=perguntar        (ou 4:3, 16:9)
-  video=perguntar       (ou 240p, 480i, 480p)
+  video=perguntar       (ou 240p, 480p)
   idioma=pt             (ou en)
 Dá para editar no Bloco de Notas. O que foi escolhido no próprio PS2
 (SMW.OPT, onde fica o save) vale mais que o SMW.CFG. Sem esses arquivos
@@ -341,8 +337,8 @@ O que fica anotado: a versão do jogo e a da BIOS do console (ROMVER),
 os drivers carregados, onde o jogo e o save foram achados, a escolha
 da tela AJUSTES, cada vídeo testado (com a largura usada: 1280 pontos
 ou a antiga, 512 / 640 no 480p) e se você confirmou a imagem, os saves
-(onde gravou e quanto tempo levou cada parte, ou o código do erro), as
-trocas entre TELA 60 e TELA 30, os números do medidor quando ligado, o
+(onde gravou e quanto tempo levou cada parte, ou o código do erro), os
+números do medidor quando ligado, o
 tempo de preparar cada cenário de fundo das telas, as trapaças (lidas,
 ligadas e desligadas) e os erros que param o jogo.
 
@@ -359,6 +355,20 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.15 (beta):
+- O jogo desenha sempre 30 imagens por segundo (um quadro sim, outro
+  não), com a velocidade e a música corretas. A tentativa de desenhar
+  os 60 saiu: no console ela ficava trocando entre 60 e 30.
+- O vídeo 480i saiu da tela AJUSTES e do Gravador: ficam o 240p (cabo
+  AV) e o 480p (componente ou HDMI).
+- Saiu o aviso "TELA 4:3" / "TELA 16:9" do começo do jogo e do L2 + R2
+  + CRUZ.
+- A vinheta da Retrogames ganhou o tema das outras telas: um céu de
+  noite do próprio jogo atrás e a caixa preta de borda dupla, com o
+  cubo dourado e os textos dentro.
+- Transição em círculo entre as telas (AJUSTES, "A IMAGEM APARECEU?",
+  vinheta, título e apoio), no lugar de clarear e escurecer.
 
 Mudanças da v0.14.2 (beta):
 - O tamanho da imagem saiu e no lugar ficou a POSIÇÃO, como no port do

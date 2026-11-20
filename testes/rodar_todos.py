@@ -293,7 +293,7 @@ def t_gravador_telas(ctx, base):
 # Nome, descrição, função, se é demorado (fica fora com --rapido).
 LISTA = [
     ("opcoes", "SMW.CFG / SMW.OPT", t_opcoes, False),
-    ("ritmo", "ritmo do jogo (60/30 quadros, simulado)", t_ritmo, False),
+    ("ritmo", "ritmo do jogo (30 quadros, simulado)", t_ritmo, False),
     ("saves", "saves entre pendrive e Memory Cards", _mock("save_midias", "save_midias.c"), False),
     ("log", "SMW_LOG.TXT", _mock("registro", "registro.c"), False),
     ("icone", "ícone do save no Memory Card", _mock("icone", "memory_card_icon.c", wrap=False), False),

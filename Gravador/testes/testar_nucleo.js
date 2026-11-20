@@ -58,7 +58,7 @@ const espera = async (promessa, codigo) => {
   /* SMW.CFG */
   const cfg = N.gerarCfg({ tela: '16:9', video: '480p', suavizacao: 'media', idioma: 'en' });
   confere(/\r\ntela=16:9\r\nvideo=480p\r\nidioma=en\r\n$/.test(cfg) && !/suaviz/.test(cfg), 'SMW.CFG com os ajustes (sem suavização desde a v0.13.7)');
-  confere(/video=480i\r\n/.test(N.gerarCfg({ video: '480i' })), 'SMW.CFG com 480i');
+  confere(/video=perguntar\r\n/.test(N.gerarCfg({ video: '480i' })), 'SMW.CFG sem 480i (saiu na v0.15): volta a perguntar');
   confere(/tela=perguntar\r\nvideo=perguntar\r\nidioma=pt/.test(N.gerarCfg({ tela: 'x', idioma: 'y' })), 'SMW.CFG com valores inválidos volta ao padrão');
 
   /* TRAPACAS.TXT: os mesmos casos do testes/trapacas.c (leitor do jogo) */

@@ -60,9 +60,9 @@ int main(int argc, char **argv) {
 
   /* Suavizacao e scanlines sairam na v0.13.7: as chaves de arquivos antigos
      sao ignoradas e o resto continua valendo. */
-  grava("SMW.CFG", "video=480i\nsuavizacao=media\nscanlines=sim\nidioma=en\n");
+  grava("SMW.CFG", "video=480p\nsuavizacao=media\nscanlines=sim\nidioma=en\n");
   smw_read_config(&o);
-  CONFERE(o.video == SMW_VIDEO_480I && o.idioma == 1 && o.tela == SMW_OPT_ASK && o.compat == SMW_OPT_ASK);
+  CONFERE(o.video == SMW_VIDEO_480P && o.idioma == 1 && o.tela == SMW_OPT_ASK && o.compat == SMW_OPT_ASK);
 
   grava("SMW.CFG", "tela=perguntar\nvideo=perguntar\nidioma=portugues");
   smw_read_config(&o);
@@ -82,15 +82,15 @@ int main(int argc, char **argv) {
   CONFERE(!smw_read_saved_options(&o));
   CONFERE(o.tela == SMW_OPT_ASK && o.video == SMW_OPT_ASK);
   /* A posicao 0 vale (centro): sem posicao, SMW_POSICAO_NADA */
-  SmwOptions escolha = {.tela = 1, .video = SMW_VIDEO_480I, .idioma = 0, .compat = SMW_OPT_ASK,
+  SmwOptions escolha = {.tela = 1, .video = SMW_VIDEO_480P, .idioma = 0, .compat = SMW_OPT_ASK,
                         .pos_x = SMW_POSICAO_NADA, .pos_y = SMW_POSICAO_NADA};
   CONFERE(smw_save_options(&escolha));
   char texto[128];
   le("SMW.OPT", texto, sizeof(texto));
-  CONFERE(strcmp(texto, "tela=16:9\nvideo=480i\nidioma=pt\n") == 0);
+  CONFERE(strcmp(texto, "tela=16:9\nvideo=480p\nidioma=pt\n") == 0);
   smw_options_clear(&o);
   CONFERE(smw_read_saved_options(&o));
-  CONFERE(o.tela == 1 && o.video == SMW_VIDEO_480I && o.idioma == 0 && o.compat == SMW_OPT_ASK);
+  CONFERE(o.tela == 1 && o.video == SMW_VIDEO_480P && o.idioma == 0 && o.compat == SMW_OPT_ASK);
 
   /* SMW.OPT da v0.13.6, com suavizacao e scanlines: o resto vale */
   grava("SMW.OPT", "tela=4:3\nvideo=240p\nsuavizacao=forte\nscanlines=sim\nidioma=en\n");
@@ -157,7 +157,16 @@ int main(int argc, char **argv) {
   CONFERE(smw_posicao_anda(0, 2) == 2 && smw_posicao_anda(-4, 2) == -2 && smw_posicao_anda(16, 2) == 16);
   CONFERE(smw_posicao_anda(-15, -2) == -16 && smw_posicao_anda(1, -2) == 0 && smw_posicao_anda(-1, 2) == 0);
   CONFERE(smw_posicao_anda(3, -2) == 1 && smw_posicao_anda(2, -2) == 0);
-  CONFERE(!smw_16_9_vale(SMW_VIDEO_240P) && smw_16_9_vale(SMW_VIDEO_480P) && !smw_16_9_vale(SMW_VIDEO_480I));
+  CONFERE(!smw_16_9_vale(SMW_VIDEO_240P) && smw_16_9_vale(SMW_VIDEO_480P) && !smw_16_9_vale(2));
+  /* O 480i saiu na v0.15: video=480i de um SMW.OPT antigo fica sem valor (o jogador escolhe) */
+  grava("SMW.OPT", "tela=4:3\nvideo=480i\nidioma=pt\n");
+  smw_options_clear(&o);
+  CONFERE(smw_read_saved_options(&o) && o.tela == 0 && o.video == SMW_OPT_ASK && o.idioma == 0);
+  SmwOptions velho = {.tela = 0, .video = 2, .idioma = 0, .compat = SMW_OPT_ASK, .pos_x = SMW_POSICAO_NADA,
+                      .pos_y = SMW_POSICAO_NADA};
+  CONFERE(smw_save_options(&velho));
+  le("SMW.OPT", texto, sizeof(texto));
+  CONFERE(strcmp(texto, "tela=4:3\nidioma=pt\n") == 0);
   SmwOptions posicao = {.tela = 0, .video = SMW_VIDEO_480P, .idioma = 0, .compat = SMW_OPT_ASK, .pos_x = 0,
                         .pos_y = -8};
   CONFERE(smw_save_options(&posicao));

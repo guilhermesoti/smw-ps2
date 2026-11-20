@@ -1096,7 +1096,7 @@ static void parse_options(char *text, SmwOptions *o) {
       } else if (same_word(key, "video")) {
         if (same_word(value, "240p")) o->video = SMW_VIDEO_240P;
         else if (same_word(value, "480p")) o->video = SMW_VIDEO_480P;
-        else if (same_word(value, "480i")) o->video = SMW_VIDEO_480I;
+        else if (same_word(value, "480i")) o->video = SMW_OPT_ASK;  /* saiu na v0.15: o jogador escolhe */
         else if (same_word(value, "perguntar")) o->video = SMW_OPT_ASK;
       } else if (same_word(key, "idioma")) {
         if (same_word(value, "pt") || same_word(value, "portugues")) o->idioma = 0;
@@ -1170,12 +1170,12 @@ static bool opcao_acrescenta(char *text, size_t size, size_t *n, const char *fmt
    longo tem 69 bytes (tela=16:9, video=480p, idioma=pt, saida=512,
    posicao_x=-16, posicao_y=-16); quem chama passa 128. */
 static int options_text(const SmwOptions *o, char *text, size_t size) {
-  static const char *const videos[] = {"240p", "480p", "480i"};
+  static const char *const videos[] = {"240p", "480p"};
   size_t n = 0;
   bool ok = size > 0;
   if (ok) text[0] = '\0';
   if (ok && o->tela >= 0) ok = opcao_acrescenta(text, size, &n, "tela=%s\n", o->tela ? "16:9" : "4:3");
-  if (ok && o->video >= 0 && o->video <= 2) ok = opcao_acrescenta(text, size, &n, "video=%s\n", videos[o->video]);
+  if (ok && o->video >= 0 && o->video <= 1) ok = opcao_acrescenta(text, size, &n, "video=%s\n", videos[o->video]);
   if (ok && o->idioma >= 0) ok = opcao_acrescenta(text, size, &n, "idioma=%s\n", o->idioma ? "en" : "pt");
   if (ok && o->compat == 1) ok = opcao_acrescenta(text, size, &n, "saida=512\n");
   if (ok && smw_posicao_valida(o->pos_x)) ok = opcao_acrescenta(text, size, &n, "posicao_x=%d\n", o->pos_x);

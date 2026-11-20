@@ -18,7 +18,7 @@ enum { AJUSTE_VIDEO, AJUSTE_TELA, AJUSTE_POSICAO, AJUSTE_IDIOMA, AJUSTE_TRAPACAS
 
 typedef struct {
   int linha;     /* AJUSTE_* marcada */
-  int video;     /* 0 = 240p, 1 = 480p, 2 = 480i (os mesmos numeros de files.h) */
+  int video;     /* 0 = 240p, 1 = 480p (os mesmos numeros de files.h; o 480i saiu na v0.15) */
   int tela;      /* 0 = 4:3, 1 = 16:9 (escolha guardada; o 16:9 so vale no 480p) */
   int pos_x, pos_y;  /* posicao na TV, pixels e linhas do SNES (v0.14.2) */
   bool ajustando;    /* no ajuste da posicao: as setas movem a imagem */
@@ -57,10 +57,27 @@ typedef struct {
 void formato_trapacas(uint32_t *px, const unsigned char *fonte, const ListaTrapacas *l, int frame,
                       const uint32_t *fundo);
 
-/* Abertura (intro.c): o titulo do port e a tela "Apoie o projeto" com o QR
-   do Pix (qr: n linhas de n caracteres '0'/'1'). */
+/* Abertura (intro.c). A vinheta da Retrogames (v0.15: no tema das outras
+   telas, com a cena do jogo atras e a caixa preta de borda dupla): quadro =
+   quadros desde o comeco dela; particulas em espiral formam o cubo dourado
+   em FORMATO_VINHETA_TRAVA quadros, e entram os textos. */
+enum { FORMATO_VINHETA_TRAVA = 90 };
+void formato_vinheta(uint32_t *px, const unsigned char *fonte, int quadro, const uint32_t *fundo);
+
+/* O titulo do port e a tela "Apoie o projeto" com o QR do Pix (qr: n
+   linhas de n caracteres '0'/'1'). */
 void formato_titulo(uint32_t *px, const unsigned char *fonte, const char *versao, const uint32_t *fundo);
 void formato_apoio(uint32_t *px, const unsigned char *fonte, int frame, bool pode_seguir,
                    const char (*qr)[46], int n, const uint32_t *fundo);
+
+/* Transicao em circulo entre as telas (v0.15): fora do circulo de raio r no
+   centro do quadro, preto. r em linhas; a largura e corrigida pela
+   proporcao do pixel na TV 4:3, para o circulo sair redondo. r >=
+   FORMATO_IRIS_MAX nao muda nada; 0 apaga tudo. */
+enum { FORMATO_IRIS_MAX = 187, FORMATO_IRIS_QUADROS = 24 };
+void formato_iris(uint32_t *px, int r);
+/* Raio no quadro q da transicao (0 a FORMATO_IRIS_QUADROS), abrindo (do
+   preto para a tela toda) ou fechando. */
+int formato_iris_raio(int q, bool abrindo);
 
 #endif

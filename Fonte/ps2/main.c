@@ -22,7 +22,7 @@
 #include <timer.h>
 #include <unistd.h>
 
-#define SMW_VERSAO "0.14.2"
+#define SMW_VERSAO "0.15"
 
 #define DECLARE_DRIVER(n) extern unsigned char n##_irx[]; extern unsigned int size_##n##_irx
 DECLARE_DRIVER(bdm);
@@ -49,10 +49,10 @@ static int audio_capacity;  /* bytes in audsrv's ring buffer */
 static const char *card_drivers = "nenhum";
 
 /* Video. 240p: like the SNES; the sharpest over the AV cable on any TV
-   (tested on a CRT and on a flat TV). 480i: the same 224 lines shown in both
-   fields of an interlaced picture, for TVs that do not show 240p; flat TVs
-   deinterlace it and it comes out softer. 480p: component or HDMI adapter; there each
-   SNES line becomes two TV lines. Always sharp pixels: the smoothing (GS
+   (tested on a CRT and on a flat TV). 480p: component or HDMI adapter; there
+   each SNES line becomes two TV lines. The 480i option (v0.13 to v0.14.2)
+   was removed in v0.15 at the user's request; only the settings screen
+   still uses an interlaced mode (VIDEO_AJUSTES), which every TV shows. Always sharp pixels: the smoothing (GS
    bilinear filter) and the 480p scanlines were removed in v0.13.7 (on the
    console both looked worse than the sharp picture). */
 static struct { int modo; bool p480, wide, compat; } video = {SMW_VIDEO_240P, false, false, false};
@@ -237,8 +237,8 @@ static uint32_t quadro[FORMATO_W * FORMATO_H] __attribute__((aligned(64)));
    smw_start, as the background of the screens before the game (0x00RRGGBB,
    or NULL: formato.c draws its own landscape). */
 static uint32_t cena_ajustes[SMW_WIDTH * SMW_HEIGHT], cena_titulo[SMW_WIDTH * SMW_HEIGHT],
-    cena_apoio[SMW_WIDTH * SMW_HEIGHT];
-static const uint32_t *fundo_ajustes, *fundo_titulo, *fundo_apoio;
+    cena_apoio[SMW_WIDTH * SMW_HEIGHT], cena_vinheta[SMW_WIDTH * SMW_HEIGHT];
+static const uint32_t *fundo_ajustes, *fundo_titulo, *fundo_apoio, *fundo_vinheta;
 
 /* v0.14: cheats (trapacas.c) from TRAPACAS.TXT; the ones that are on (name
    and codes) go to TRAPACAS.LIG, where the save is. trapacas_on: how many
@@ -271,7 +271,6 @@ static const char *nome_video(int modo) {
   switch (modo) {
   case SMW_VIDEO_240P: return "240p";
   case SMW_VIDEO_480P: return "480p";
-  case SMW_VIDEO_480I: return "480i";
   case VIDEO_AJUSTES: return "AJUSTES (480i)";
   default: return "?";
   }
@@ -282,7 +281,7 @@ static const char *nome_video(int modo) {
    e DISPLAY2, gsKit_set_display_offset): nao custa nada e nao perde
    nitidez. Um pixel do SNES e 10 VCK no NTSC (1280 colunas com MAGH 1, ou
    512 com MAGH 4) e 5 no 480p (1280 com MAGH 0, ou 640 com MAGH 1). Uma
-   linha e 1 unidade do DY no 240p; 2 no 480i e nos menus (o DY entrelacado
+   linha e 1 unidade do DY no 240p; 2 nos menus (o DY entrelacado
    conta as linhas do quadro inteiro, e o gsKit o mantem par) e no 480p (o
    jogo em 448 linhas). A unidade e sempre o pixel do quadro 4:3: no 16:9
    o mesmo toque anda o mesmo tanto na TV (cerca de 1,34 pixel do quadro
@@ -328,8 +327,9 @@ static void video_abre(int modo, bool compat) {
     if (!compat) gs->PSM = GS_PSM_CT16;
   } else {
     gs->Mode = GS_MODE_NTSC;
-    /* 480i in FIELD mode with 224 lines: every line is shown in both fields. */
-    bool entrelacado = modo == SMW_VIDEO_480I || modo == VIDEO_AJUSTES;
+    /* The settings screen: 480i in FIELD mode with 224 lines (every line in
+       both fields), which every TV shows. */
+    bool entrelacado = modo == VIDEO_AJUSTES;
     gs->Interlace = entrelacado ? GS_INTERLACED : GS_NONINTERLACED;
     gs->Field = entrelacado ? GS_FIELD : GS_FRAME;
     gs->Width = modo == VIDEO_AJUSTES || compat ? 512 : 1280;
@@ -439,11 +439,11 @@ static void draw_text(unsigned x, unsigned y, const char *msg, uint32_t bg) {
   draw_text_scaled(x, y, msg, bg, 1);
 }
 
-/* v0.13.7: "TELA 4:3" or "TELA 16:9" for 5 s when the game starts and after
-   L2+R2+X, at double size under the status bar, so a photo of the TV shows
-   which mode it is (EE ticks; 5 s fits before the counter wraps). v0.14.1:
-   also "16:9 SO NO 480P"; v0.14.2: the position on the TV ("POSICAO +2, -4"
-   or "POSICAO CENTRO"). */
+/* Notices for 5 s at double size under the status bar (EE ticks; 5 s fits
+   before the counter wraps): "16:9 SO NO 480P" (v0.14.1) and the position
+   on the TV ("POSICAO +2, -4" or "POSICAO CENTRO", v0.14.2). The "TELA 4:3"
+   / "TELA 16:9" of the v0.13.7 (at the start and after L2+R2+X) was removed
+   in v0.15 at the user's request. */
 static const uint32_t ASPECT_NOTICE_TICKS = 5u * EE_HZ;
 static bool aspect_notice;
 static uint32_t aspect_notice_start;
@@ -453,7 +453,6 @@ static void show_video_notice(const char *text) {
   aspect_notice = true;
   aspect_notice_start = cpu_ticks();
 }
-static void show_aspect_notice(void) { show_video_notice(video.wide ? "TELA 16:9" : "TELA 4:3"); }
 static void draw_aspect_notice(void) {
   if (!aspect_notice) return;
   if (cpu_ticks() - aspect_notice_start > ASPECT_NOTICE_TICKS) {
@@ -502,7 +501,17 @@ static uint32_t present(void) {
   gsKit_queue_exec(gs);
   gsKit_finish();
   const uint32_t ticks = cpu_ticks() - start;
+  /* v0.15: 30 images a second, each one exactly 2 TV frames. The flip is
+     never at the first vertical blank after the last one: wait until it
+     came (the GS VSINT flag, cleared right after the last flip), and
+     gsKit_sync_flip waits for the next. Waiting after the flip instead kept
+     the loop at 2 frames but let images stay 1 or 3 frames when the work
+     went back and forth around one frame (Antigravity and Codex review).
+     The wait only reads the flag: gsKit_vsync_wait clears it first, so a
+     blank arriving between a test and that call was lost (review 2). */
+  while (!(*GS_CSR & 8)) {}
   gsKit_sync_flip(gs);
+  gsKit_vsync_nowait();  /* clears VSINT: the next blank says a frame passed */
   return ticks;
 }
 
@@ -546,15 +555,14 @@ static void passo_posicao(unsigned apertou, int *x, int *y) {
 /* L2+R2 + Triangle: performance meter; each second its line also goes to
    the log, and turning it off writes SMW_LOG.TXT (the game stops for a
    moment), so the numbers reach the PC (v0.13.8). L2+R2 + Cross: 4:3 / 16:9
-   (shows "TELA 4:3" / "TELA 16:9" for 5 s; since v0.14.1 only in 480p,
-   otherwise "16:9 SO NO 480P"). L2+R2 + Select: the cheats (v0.14; the game
+   (since v0.14.1 only in 480p, otherwise "16:9 SO NO 480P"). L2+R2 + Select: the cheats (v0.14; the game
    pauses). L2+R2 + D-pad (v0.14.2): moves the picture on the TV, 2 SNES
    pixels/lines a step, up to 16 each way, like a monitor's position
    adjustment (saved with the next save, like the screen; the size of the
-   v0.14.1 is gone). While L2+R2 are held the pad sends nothing to the game. Square and Circle (scanlines and smoothing
-   until v0.13.6) do nothing now. The log is written and the pacing told
-   about the new screen by the main loop, after its timed part. */
-static bool log_after_loop, aspect_changed, abre_trapacas;
+   v0.14.1 is gone). While L2+R2 are held the pad sends nothing to the game.
+   Square and Circle (scanlines and smoothing until v0.13.6) do nothing now.
+   The log is written by the main loop, after its timed part. */
+static bool log_after_loop, abre_trapacas;
 static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
   uint16_t pressed = raw & ~*previous;
   *previous = raw;
@@ -571,9 +579,7 @@ static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
     show_video_notice("16:9 SO NO 480P");
     smw_log("L2+R2+X: 16:9 so no 480p (video %s)", nome_video(video.modo));
   } else if (pressed & PAD_CROSS) {
-    aspect_changed = true;
     set_aspect(!video.wide);
-    show_aspect_notice();
     opcoes.tela = video.wide;
     smw_options_changed(&opcoes);  /* fica gravado junto com o proximo save */
     smw_log("L2+R2+X: tela %s", video.wide ? "16:9" : "4:3");
@@ -687,12 +693,10 @@ static void carregando(const char *etapa, int passo) {
   mostra_quadro(128);
 }
 
-/* Order of the video modes on the screen: 240p, 480i, 480p. */
+/* The video modes on the screen: 240p and 480p (480i left in v0.15). */
 static int outro_video(int v, int dir) {
-  static const int ordem[3] = {SMW_VIDEO_240P, SMW_VIDEO_480I, SMW_VIDEO_480P};
-  int i = 0;
-  while (i < 2 && ordem[i] != v) ++i;
-  return ordem[(i + 3 + dir) % 3];
+  (void)dir;
+  return v == SMW_VIDEO_480P ? SMW_VIDEO_240P : SMW_VIDEO_480P;
 }
 
 /* Le o TRAPACAS.TXT (o do lugar do save, os outros, o CD da ISO) e liga as
@@ -846,12 +850,19 @@ static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const 
     a.segundos = contagem ? 5 - frame / 60 : -1;
     a.trapacas = trapacas_ligadas(&trapacas);
     formato_ajustes(quadro, msx, &a, frame, fundo_ajustes);
-    int bright = frame < 15 ? frame * 128 / 15 : 128;
+    /* v0.15: a tela abre e fecha em circulo (antes, clareava e escurecia).
+       Saindo enquanto ainda abre, fecha do raio que ja esta na tela: a curva
+       de fechar e a de abrir ao contrario, entao comeca no quadro dela que
+       tem esse raio e so diminui (revisao 2). */
+    int raio = formato_iris_raio(frame, true);
     if (saindo >= 0) {
-      bright = 128 - (frame - saindo) * 128 / 15;
-      if (frame - saindo > 15) break;
+      int aberto = saindo < FORMATO_IRIS_QUADROS ? saindo : FORMATO_IRIS_QUADROS;
+      int q = frame - saindo + FORMATO_IRIS_QUADROS - aberto;
+      if (q > FORMATO_IRIS_QUADROS) break;
+      raio = formato_iris_raio(q, false);
     }
-    mostra_quadro(bright < 0 ? 0 : bright);
+    formato_iris(quadro, raio);
+    mostra_quadro(128);
   }
   o->video = a.video, o->tela = a.tela, o->idioma = a.idioma;
   o->pos_x = a.pos_x, o->pos_y = a.pos_y;
@@ -869,7 +880,8 @@ static bool confirma_video(int idioma) {
       return true;
     }
     formato_confirma(quadro, msx, video.modo, idioma, 10 - frame / 60, frame, fundo_ajustes);
-    mostra_quadro(frame < 15 ? frame * 128 / 15 : 128);
+    formato_iris(quadro, formato_iris_raio(frame, true));  /* v0.15: abre em circulo */
+    mostra_quadro(128);
   }
   smw_log("Video: sem resposta em 10 s");
   return false;
@@ -948,6 +960,7 @@ int main(int argc, char **argv) {
   tira_cena(0x105, cena_ajustes, &fundo_ajustes);  /* Yoshi's Island 1 */
   tira_cena(0x0C7, cena_titulo, &fundo_titulo);    /* a fase do titulo */
   tira_cena(0x104, cena_apoio, &fundo_apoio);      /* casa do Yoshi */
+  tira_cena(0x125, cena_vinheta, &fundo_vinheta);  /* ceu de noite: a vinheta da Retrogames (v0.15) */
   trapacas_carrega();
 
   /* Ajustes: o padrao, depois o SMW.CFG (Gravador no PC) e por cima o
@@ -1028,48 +1041,34 @@ int main(int argc, char **argv) {
   smw_log_grava();
   g_ptbr = opcoes.idioma != 1;
 
-  smw_intro(gs, video.p480, sound, SMW_VERSAO, fundo_titulo, fundo_apoio);
+  smw_intro(gs, video.p480, sound, SMW_VERSAO, fundo_vinheta, fundo_titulo, fundo_apoio);
   set_aspect(tela_larga(&opcoes));
   const uint32_t field = measure_field();
   smw_log("Jogo comecou.");
   smw_log_fixa();
-  /* The TV drives the game: each loop runs the frames not drawn, the drawn
-     one, sends it to the GS and ends at the TV's frame change. ritmo.c
-     decides how many frames go without drawing (all are drawn when one fits
-     in a TV frame; one in two when it does not), keeping the game, and so
-     the sound, at the TV's pace. */
+  /* The TV drives the game: 60 game frames a second, one drawn and one not
+     (v0.15, ritmo.c). Each loop runs the frames not drawn, the drawn one,
+     sends it to the GS; present() flips at the second TV frame after the
+     last flip (or later, when the work took longer), so every image stays 2
+     TV frames. A longer loop leaves frames behind and the next one runs one
+     more, keeping the game, and so the sound, at the TV's pace. */
   Ritmo ritmo;
   ritmo_inicia(&ritmo);
-  show_aspect_notice();
   uint32_t last = cpu_ticks();
-  int pending = 0;
+  int pending = 1;
   for (;;) {
     uint32_t logic = 0;
     for (int i = 0; i < pending; ++i) logic += step_game(false);
-    const uint32_t t0 = cpu_ticks();
     const uint32_t draw = step_game(true);
-    const uint32_t t1 = cpu_ticks();
     const uint32_t send = present();
-    if (perf_loop((unsigned)pending, logic, draw, send))
-      smw_log("Medidor: %s (%s)", perf.text, ritmo.pesado ? "1 em 2" : "todos");
-    uint32_t now = cpu_ticks();
+    const uint32_t now = cpu_ticks();
     int fields = (int)((now - last + field / 2) / field);
+    /* The first loop, or the first after a pause (last not taken at a
+       flip), can measure less than the 2 frames the flips are apart. */
+    if (fields < 2) fields = 2;
     last = now;
-    const bool was_heavy = ritmo.pesado;
-    /* The cost given to ritmo is the whole drawn step (pads, sound to audsrv,
-       game and PPU: t1 - t0) plus the sending, i.e. everything a loop that
-       only draws must fit in a TV frame; the meter's DESENHO is the game and
-       PPU part alone. */
-    pending = ritmo_proxima(&ritmo, fields, pending + 1, (t1 - t0) + send, field);
-    if (ritmo.pesado != was_heavy) {
-      unsigned m = ritmo.media / EE_TICKS_PER_TENTH_MS;
-      smw_log("Ritmo: desenha %s (custo medio %u.%u ms)", ritmo.pesado ? "1 em 2" : "todos",
-              m / 10, m % 10);
-    }
-    if (aspect_changed) {  /* other screen, other cost */
-      aspect_changed = false;
-      ritmo_cena_nova(&ritmo);
-    }
+    if (perf_loop((unsigned)pending, logic, draw, send)) smw_log("Medidor: %s", perf.text);
+    pending = ritmo_proxima(&ritmo, fields, pending + 1);
     if (log_after_loop) {
       /* Meter turned off: the write stops the game for a moment; like a
          save, it is not counted as late frames to catch up. */

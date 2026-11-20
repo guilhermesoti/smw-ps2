@@ -1,5 +1,6 @@
-/* Telas antes do jogo: carregando, AJUSTES, o teste do modo de video e a
- * lista de trapacas.
+/* Telas antes do jogo: carregando, AJUSTES, o teste do modo de video, a
+ * lista de trapacas e, na abertura (intro.c), a vinheta da Retrogames, o
+ * titulo e a tela de apoio; e a transicao em circulo entre elas (v0.15).
  *
  * v0.14: quadro de 256 x 224, a resolucao do SNES. O fundo e uma cena do
  * proprio jogo, tirada da ROM do jogador na hora (smw_capture_scene); por
@@ -205,7 +206,7 @@ static void elipse(int cx, int cy, float rx, float ry, uint32_t cor) {
 /* ---- AJUSTES ---- */
 
 typedef struct {
-  const char *titulo, *jogar, *rotulo[AJUSTE_JOGAR], *idioma[2], *rodape, *contagem, *video_txt[3][2],
+  const char *titulo, *jogar, *rotulo[AJUSTE_JOGAR], *idioma[2], *rodape, *contagem, *video_txt[2][2],
       *aplica, *tela_txt[2], *redondo[2], *so_480p[2], *idioma_txt[2], *idioma_tela, *trapaca_txt[4], *nenhuma,
       *ligadas, *sem_arquivo, *posicao_txt[3], *ajustando_txt[3], *rodape_ajuste, *jogar_txt[3], *centro;
 } Textos;
@@ -216,8 +217,7 @@ static const Textos kTextos[2] = {
     "AJUSTES", "JOGAR", {"Vídeo", "Tela", "Posição", "Idioma", "Trapaças"}, {"Português", "English"},
     "Direcional: escolhe e muda  X: joga", "Começa em %d s. Um botão muda.",
     {{"240p: cabo AV, em qualquer TV.", "O mais nítido, igual ao SNES."},
-     {"480p: cabo componente ou HDMI.", "No cabo AV não aparece; volta."},
-     {"480i: se a TV não mostrar 240p.", "Em geral, menos nítido que 240p."}},
+     {"480p: cabo componente ou HDMI.", "No cabo AV não aparece; volta."}},
     "Muda quando você apertar X.",
     {"4:3: TV de tubo ou em 4:3.", "16:9: mostra mais da fase."},
     {"O círculo fica redondo", "com a TV no modo certo."},
@@ -237,8 +237,7 @@ static const Textos kTextos[2] = {
     "SETTINGS", "PLAY", {"Video", "Screen", "Position", "Language", "Cheats"}, {"Português", "English"},
     "D-pad: choose and change  X: play", "Starts in %d s. Any button stops.",
     {{"240p: AV cable, any TV.", "The sharpest, like the SNES."},
-     {"480p: component or HDMI.", "Not on the AV cable; it returns."},
-     {"480i: if the TV lacks 240p.", "Usually softer than 240p."}},
+     {"480p: component or HDMI.", "Not on the AV cable; it returns."}},
     "Changes when you press X.",
     {"4:3: CRT or TV set to 4:3.", "16:9: more of the level."},
     {"The circle is round", "in the right TV mode."},
@@ -267,10 +266,13 @@ enum { BX = 10, BY = 10, BW = W - 20, BH = 180, LX = BX + 10, LW = BW - 20, LINH
    4:3, apagada, e a escolha fica guardada. */
 static bool tela_fixa(const Ajustes *a) { return !smw_16_9_vale(a->video); }
 
+/* Indice das tabelas de video (240p, 480p): qualquer outro valor vira 240p. */
+static int video_i(int video) { return video == SMW_VIDEO_480P ? 1 : 0; }
+
 static const char *valor(const Textos *t, const Ajustes *a, int linha, char *buf, size_t n) {
-  static const char *const videos[] = {"240p", "480p", "480i"};
+  static const char *const videos[] = {"240p", "480p"};
   switch (linha) {
-  case AJUSTE_VIDEO: return videos[a->video];
+  case AJUSTE_VIDEO: return videos[video_i(a->video)];
   case AJUSTE_TELA: return a->tela && !tela_fixa(a) ? "16:9" : "4:3";
   case AJUSTE_POSICAO:
     if (!a->pos_x && !a->pos_y) return t->centro;
@@ -324,8 +326,8 @@ static void painel(const Textos *t, const Ajustes *a) {
   int tx = x + 6, l1 = y + 4, l2 = y + 14, l3 = y + 24, l4 = y + 34;
   switch (a->linha) {
   case AJUSTE_VIDEO:
-    texto(tx, l1, t->video_txt[a->video][0], BRANCO, 1);
-    texto(tx, l2, t->video_txt[a->video][1], AZUL, 1);
+    texto(tx, l1, t->video_txt[video_i(a->video)][0], BRANCO, 1);
+    texto(tx, l2, t->video_txt[video_i(a->video)][1], AZUL, 1);
     texto(tx, l4, t->aplica, CINZA, 1);
     break;
   case AJUSTE_TELA: {
@@ -440,7 +442,7 @@ void formato_carregando(uint32_t *destino, const unsigned char *letras, const ch
 void formato_confirma(uint32_t *destino, const unsigned char *letras, int video, int idioma, int segundos,
                       int frame, const uint32_t *cena) {
   (void)frame;
-  static const char *const videos[] = {"240p", "480p", "480i"};
+  static const char *const videos[] = {"240p", "480p"};
   px = destino;
   fonte = letras;
   fundo(cena, 140);
@@ -449,13 +451,13 @@ void formato_confirma(uint32_t *destino, const unsigned char *letras, int video,
   if (idioma == 1) {
     texto_sombra(36, "CAN YOU", BRANCO, 0x404040, 2);
     texto_sombra(54, "SEE THIS?", BRANCO, 0x404040, 2);
-    snprintf(linha, sizeof(linha), "Press X to keep %s.", videos[video]);
+    snprintf(linha, sizeof(linha), "Press X to keep %s.", videos[video_i(video)]);
     texto_em(0, W, 78, linha, AZUL);
     texto_em(0, W, 166, "No answer: back to the settings.", CINZA);
   } else {
     texto_sombra(36, "A IMAGEM", BRANCO, 0x404040, 2);
     texto_sombra(54, "APARECEU?", BRANCO, 0x404040, 2);
-    snprintf(linha, sizeof(linha), "Aperte X para ficar com o %s.", videos[video]);
+    snprintf(linha, sizeof(linha), "Aperte X para ficar com o %s.", videos[video_i(video)]);
     texto_em(0, W, 78, linha, AZUL);
     texto_em(0, W, 166, "Sem resposta, volta aos ajustes.", CINZA);
   }
@@ -514,6 +516,159 @@ void formato_trapacas(uint32_t *destino, const unsigned char *letras, const List
   uint32_t c2 = CINZA;
   if (!m->valida) l2 = en ? "No valid code on this line." : "Nenhum código válido nesta linha.", c2 = LARANJA;
   rodape(l1, BRANCO, l2, c2);
+}
+
+/* ---- abertura: a vinheta da Retrogames (intro.c) ----
+   Ate a v0.14.2 era desenhada no intro.c num quadro proprio de 320 x 224,
+   em fundo preto; na v0.15 (pedido do usuario) ganhou o tema das outras
+   telas: a cena do jogo atras, a caixa preta de borda dupla e, dentro dela,
+   as particulas, o cubo dourado e os textos. As distancias na horizontal
+   valem 0,8 das de antes: o pixel do quadro de 256 e 1,25 vez mais largo
+   que o do de 320. */
+
+enum { VX = 18, VY = 16, VW = W - 36, VH = 192, V_PARTICULAS = 160, V_CY = 76 };
+static float v_angulo[V_PARTICULAS], v_raio[V_PARTICULAS];
+static bool v_pronta;
+
+/* Soma luz (brilho aditivo), so dentro da caixa. */
+static void soma(int x, int y, unsigned r, unsigned g, unsigned b) {
+  if (x < VX + 3 || x >= VX + VW - 3 || y < VY + 3 || y >= VY + VH - 3) return;
+  uint32_t p = px[y * W + x];
+  uint32_t nr = ((p >> 16) & 255) + r, ng = ((p >> 8) & 255) + g, nb = (p & 255) + b;
+  px[y * W + x] = (nr > 255 ? 255 : nr) << 16 | (ng > 255 ? 255 : ng) << 8 | (nb > 255 ? 255 : nb);
+}
+
+static void ponto_brilho(int x, int y, unsigned r, unsigned g, unsigned b) {
+  soma(x, y, r, g, b);
+  soma(x + 1, y, r / 3, g / 3, b / 3), soma(x - 1, y, r / 3, g / 3, b / 3);
+  soma(x, y + 1, r / 3, g / 3, b / 3), soma(x, y - 1, r / 3, g / 3, b / 3);
+}
+
+static void linha_brilho(float x0, float y0, float x1, float y1, unsigned r, unsigned g, unsigned b) {
+  float dx = x1 - x0, dy = y1 - y0;
+  int passos = (int)sqrtf(dx * dx + dy * dy) + 1;
+  for (int i = 0; i <= passos; i++) {
+    float t = (float)i / passos;
+    ponto_brilho((int)(x0 + dx * t), (int)(y0 + dy * t), r, g, b);
+  }
+}
+
+static void cubo(float cx, float cy, float lado, float ay, float ax, int nivel) {
+  static const int arestas[12][2] = {{0, 1}, {1, 3}, {3, 2}, {2, 0}, {4, 5}, {5, 7}, {7, 6}, {6, 4},
+                                     {0, 4}, {1, 5}, {2, 6}, {3, 7}};
+  float sx[8], sy[8];
+  const float cy_ = cosf(ay), sy_ = sinf(ay), cx_ = cosf(ax), sx_ = sinf(ax);
+  for (int i = 0; i < 8; i++) {
+    float x = (i & 1) ? 1.f : -1.f, y = (i & 2) ? 1.f : -1.f, z = (i & 4) ? 1.f : -1.f;
+    float x1 = x * cy_ + z * sy_, z1 = -x * sy_ + z * cy_;
+    float y1 = y * cx_ - z1 * sx_, z2 = y * sx_ + z1 * cx_;
+    float k = 4.0f / (z2 + 6.0f);
+    sx[i] = cx + x1 * lado * k * 0.8f, sy[i] = cy + y1 * lado * k * 0.9f;
+  }
+  for (int i = 0; i < 12; i++)
+    linha_brilho(sx[arestas[i][0]], sy[arestas[i][0]], sx[arestas[i][1]], sy[arestas[i][1]],
+                 255 * nivel >> 8, 190 * nivel >> 8, 60 * nivel >> 8);
+}
+
+static uint32_t nivel_cor(uint32_t rgb, int nivel) /* nivel 0..256 */ {
+  if (nivel <= 0) return 0;
+  if (nivel >= 256) return rgb;
+  return ((((rgb >> 16) & 255) * nivel >> 8) << 16) | ((((rgb >> 8) & 255) * nivel >> 8) << 8) |
+         ((rgb & 255) * nivel >> 8);
+}
+
+/* Um brilho que corre pela faixa [y0, y1) clareando so as letras (o fundo da
+   caixa e escuro, mas nao preto). */
+static void varre(int y0, int y1, int em) {
+  for (int y = y0; y < y1; y++)
+    for (int x = em - 15; x < em + 15; x++) {
+      if ((unsigned)x >= W || (unsigned)y >= H || ((px[y * W + x] >> 16) & 255) < 100) continue;
+      int k = 15 - (x > em ? x - em : em - x);
+      soma(x, y, k * 10, k * 10, k * 8);
+    }
+}
+
+void formato_vinheta(uint32_t *destino, const unsigned char *letras, int f, const uint32_t *cena) {
+  px = destino;
+  fonte = letras;
+  if (!v_pronta) {  /* sempre as mesmas particulas */
+    unsigned semente = 0x1234567u;
+    for (int i = 0; i < V_PARTICULAS; i++) {
+      semente = semente * 1103515245u + 12345u;
+      v_angulo[i] = (float)((semente >> 8) & 0xFFFF) / 65535.0f * 6.2831853f;
+      semente = semente * 1103515245u + 12345u;
+      v_raio[i] = 104 + (float)((semente >> 8) & 0xFFFF) / 65535.0f * 104;
+    }
+    v_pronta = true;
+  }
+  const int trava = FORMATO_VINHETA_TRAVA;
+  const float t = (float)f;
+  fundo(cena, 50);
+  caixa_a(VX, VY, VW, VH, 228);  /* um pouco mais escura que as outras: o brilho aparece mais */
+  if (f < trava) {  /* particulas em espiral ate o centro */
+    const float k = 1.0f - (float)f / trava, gira = t * 0.04f + (1 - k) * 3.0f;
+    for (int i = 0; i < V_PARTICULAS; i++) {
+      float r = v_raio[i] * k * k, a = v_angulo[i] + gira;
+      ponto_brilho(W / 2 + (int)(r * cosf(a) * 0.8f), V_CY + (int)(r * sinf(a) * 0.75f), 160, 120, 50);
+    }
+  } else if (f < trava + 40) {  /* estouro: saem de novo, sumindo */
+    const unsigned some = (unsigned)(200 - (f - trava) * 5);
+    for (int i = 0; i < V_PARTICULAS; i++) {
+      float e = (float)(f - trava) * 3.0f * (0.5f + v_raio[i] / 208.0f);
+      ponto_brilho(W / 2 + (int)(e * cosf(v_angulo[i]) * 0.8f), V_CY + (int)(e * sinf(v_angulo[i]) * 0.75f),
+                   some, some * 3 / 4, some / 3);
+    }
+  }
+  if (f >= trava - 30) {
+    int cresce = f < trava ? (f - (trava - 30)) * 256 / 30 : 256;
+    cubo(W / 2, V_CY, 35.0f * (0.4f + 0.6f * cresce / 256.0f), t * 0.035f, 0.5f + 0.25f * sinf(t * 0.02f),
+         f < trava ? cresce / 2 : 256);
+  }
+  if (f >= trava && f < trava + 12) {  /* clarao, dentro da caixa */
+    unsigned k = (unsigned)(trava + 12 - f) * 20;
+    for (int y = VY + 3; y < VY + VH - 3; y++)
+      for (int x = VX + 3; x < VX + VW - 3; x++) soma(x, y, k, k, k);
+  }
+  /* Os textos aparecem aos poucos (cor 0 = ainda nao aparece). */
+  const char *nome = "RETROGAMES";
+  uint32_t cor = f > trava + 20 ? nivel_cor(0xF2C14E, (f - (trava + 20)) * 8) : 0;
+  if (cor) texto((W - largura(nome, 3)) / 2, 132, nome, cor, 3);
+  if (f >= trava + 40 && f < trava + 130) varre(128, 158, 20 + (f - (trava + 40)) * 3);
+  cor = f > trava + 60 ? nivel_cor(0xC8D0F0, (f - (trava + 60)) * 8) : 0;
+  if (cor) texto_em(0, W, 166, "Patos de Minas - MG", cor);
+  cor = f > trava + 100 ? nivel_cor(0x9098B8, (f - (trava + 100)) * 6) : 0;
+  if (cor) texto_em(0, W, 186, "apresenta", cor);
+}
+
+/* ---- transicao em circulo (v0.15) ---- */
+
+void formato_iris(uint32_t *destino, int r) {
+  if (r >= FORMATO_IRIS_MAX) return;
+  if (r <= 0) {
+    memset(destino, 0, sizeof(uint32_t) * W * H);
+    return;
+  }
+  const float aspecto = 1.1667f;  /* o pixel de 256 x 224 numa TV 4:3 e mais largo que alto */
+  const float r2 = (float)r * (float)r;
+  for (int y = 0; y < H; y++) {
+    float dy = (float)y + 0.5f - H / 2.0f;
+    int x0 = W, x1 = W;  /* fora do circulo: a linha toda */
+    if (dy * dy < r2) {
+      float meia = sqrtf(r2 - dy * dy) / aspecto;
+      if (meia >= W / 2.0f) continue;  /* a linha toda dentro */
+      x0 = (int)(W / 2.0f - meia + 0.5f), x1 = (int)(W / 2.0f + meia + 0.5f);
+    }
+    if (x0 > 0) memset(destino + y * W, 0, sizeof(uint32_t) * (size_t)x0);
+    if (x1 < W) memset(destino + y * W + x1, 0, sizeof(uint32_t) * (size_t)(W - x1));
+  }
+}
+
+int formato_iris_raio(int q, bool abrindo) {
+  if (q <= 0) return abrindo ? 0 : FORMATO_IRIS_MAX;
+  if (q >= FORMATO_IRIS_QUADROS) return abrindo ? FORMATO_IRIS_MAX : 0;
+  float t = (float)q / FORMATO_IRIS_QUADROS;
+  t = t * t * (3 - 2 * t);  /* comeca e termina devagar */
+  return (int)lroundf(FORMATO_IRIS_MAX * (abrindo ? t : 1 - t));
 }
 
 /* ---- abertura: titulo e "apoie o projeto" (intro.c) ---- */

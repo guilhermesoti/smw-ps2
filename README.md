@@ -2,16 +2,16 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.14.2 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
+**Versão 0.15 (beta) · NTSC 240p/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
-- Tela AJUSTES no começo: vídeo 240p (cabo AV, qualquer TV; o recomendado), 480i (só para TV que não mostra 240p) ou 480p (componente/HDMI), tela 4:3 ou 16:9 e idioma, sempre com os pixels nítidos. Vídeo novo só fica se você confirmar que a imagem apareceu.
+- Tela AJUSTES no começo: vídeo 240p (cabo AV, qualquer TV; o recomendado) ou 480p (componente/HDMI), tela 4:3 ou 16:9 e idioma, sempre com os pixels nítidos. Vídeo novo só fica se você confirmar que a imagem apareceu.
 - 1280 pontos por linha em todos os vídeos (no 480p, quadro de 16 bits): todo pixel do SNES com a mesma largura, também no 16:9.
-- Tela 16:9 opcional (beta), só no vídeo 480p (componente ou HDMI): nas fases mostra 43 colunas a mais de cada lado, para TV no modo widescreen (no começo e no fim da fase, o que fica fora dela aparece preto). Escolha na tela AJUSTES; L2 + R2 + CRUZ troca no jogo e mostra "TELA 4:3" ou "TELA 16:9" por 5 segundos.
+- Tela 16:9 opcional (beta), só no vídeo 480p (componente ou HDMI): nas fases mostra 43 colunas a mais de cada lado, para TV no modo widescreen (no começo e no fim da fase, o que fica fora dela aparece preto). Escolha na tela AJUSTES; L2 + R2 + CRUZ troca no jogo.
 - Posição da imagem na TV (para centralizar pelo AV), como o ajuste de posição de um monitor, sem perder nitidez: linha POSIÇÃO na tela AJUSTES e L2 + R2 + setas no jogo. O tamanho da v0.14.1 saiu (pelo AV a imagem reduzida embaçava ou perdia linhas).
-- Telas de carregamento, AJUSTES e apresentação com um cenário do próprio jogo de fundo (desenhado da cópia do jogador ao abrir) e caixas pretas como as mensagens do jogo.
+- Telas de carregamento, AJUSTES, a vinheta da Retrogames e a apresentação com um cenário do próprio jogo de fundo (desenhado da cópia do jogador ao abrir), caixas pretas como as mensagens do jogo e transição em círculo entre elas.
 - Trapaças (códigos Pro Action Replay) num texto, `TRAPACAS.TXT`: liga e desliga na tela AJUSTES ou com L2 + R2 + SELECT no jogo. O pacote traz 13, conferidas no jogo, todas desligadas.
-- Desenha todos os 60 quadros por segundo quando o quadro cabe no tempo da TV; quando não cabe, um sim, outro não, sempre no mesmo ritmo, com a velocidade e a música corretas.
+- Roda os 60 quadros por segundo e desenha um sim, outro não (30 imagens por segundo), sempre no mesmo ritmo, com a velocidade e a música corretas.
 - **Gravador SMW PS2**: um HTML que abre em qualquer navegador, confere a cópia do jogo e grava o aplicativo, a ISO ou os dois no pendrive.
 - Em português do Brasil: mensagens, nomes das fases e textos dos castelos. O inglês (o original) se escolhe na tela AJUSTES.
 - Grava no pendrive ou no Memory Card (pasta `SMWPS2`, com ícone 3D no navegador do PS2).
@@ -36,7 +36,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.14.2 obtido com o ps2dev v2.0.0 foi `c68a5fce079a64aceafc57f542c0c66b4f262d3fd4a0d311e742bbb0e6fe3d49`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.15 obtido com o ps2dev v2.0.0 foi `96f07a6b753502c67a8b1ad41ff5e2875754a8a3e3602e3d77c57f0fb4601a7e`.
 
 ## Gravador SMW PS2 (programa no PC)
 
@@ -60,7 +60,7 @@ O código fica em `Gravador/src/` (`nucleo.js`: ROM, ISO, ZIP, SMW.CFG e o leito
 ### Ajustes de abertura
 
 O Gravador grava `SMW.CFG` ao lado do jogo (ou dentro da ISO), texto com `tela=perguntar|4:3|16:9`,
-`video=perguntar|240p|480i|480p` e `idioma=pt|en`: o que já vem marcado na tela AJUSTES (as linhas `suavizacao=` e
+`video=perguntar|240p|480p` e `idioma=pt|en`: o que já vem marcado na tela AJUSTES (as linhas `suavizacao=` e
 `scanlines=` de versões antigas são ignoradas). O que foi escolhido no PS2 fica em `SMW.OPT`, no lugar do save, e vale mais que o `SMW.CFG`.
 O `tela=16:9` só vale com `video=480p` (nos outros o jogo fica em 4:3 e a escolha fica guardada). A posição na TV
 fica em `posicao_x=` e `posicao_y=` (pixels e linhas do SNES, de -16 a 16; também aceitos no `SMW.CFG`): o jogo só
@@ -110,7 +110,7 @@ A lista `APPS/SMW/TRAPACAS.TXT` (ao lado do ELF) também entra na ISO; sem ela, 
 | Triângulo (△) | Segunda tecla de corrida e ação (X do SNES) |
 | Start / Select | Pausar ou iniciar / soltar o item da reserva |
 | L1 / R1 | Deslocar a câmera nas fases que permitem |
-| L2 + R2 + × | Trocar entre 4:3 e 16:9, só no 480p (mostra "TELA 4:3" ou "TELA 16:9" por 5 s; nos outros vídeos, "16:9 SO NO 480P") |
+| L2 + R2 + × | Trocar entre 4:3 e 16:9, só no 480p (no 240p mostra "16:9 SO NO 480P") |
 | L2 + R2 + setas | Mover a imagem na TV para centralizar (2 pixels do SNES a cada toque, até 16 para cada lado) |
 | L2 + R2 + SELECT | Lista de trapaças (o jogo fica parado; ○ ou SELECT volta) |
 | L2 + R2 + △ | Medidor de desempenho (quadros desenhados por segundo e tempos de desenho, envio ao GS e lógica) |
@@ -146,8 +146,8 @@ cc -std=gnu11 -fsanitize=address,undefined -IFonte/ps2 $(pkg-config --cflags min
 ASAN_OPTIONS=detect_leaks=0 /tmp/smw-opcoes /caminho/da/pasta/com/o/jogo/
 ```
 
-Ritmo do jogo (`Fonte/ps2/ritmo.c`: quantos quadros desenhar), simulado com os tempos medidos no console: no 4:3
-desenha quase todos, no 16:9 um sim, outro não, sem trancos, e o jogo anda junto com a TV:
+Ritmo do jogo (`Fonte/ps2/ritmo.c`: 60 quadros por segundo, um desenhado e um não), simulado com os tempos medidos
+no console: 30 imagens por segundo sem trancos no 4:3 e no 16:9, pico pago na volta seguinte, e o jogo anda junto com a TV:
 
 ```sh
 cc -std=gnu11 -fsanitize=address,undefined -IFonte/ps2 Fonte/ps2/ritmo.c testes/ritmo.c -lm -o /tmp/smw-ritmo

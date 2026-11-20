@@ -7,10 +7,11 @@
 /* Abertura da Retrogames e tela "Apoie o projeto" (intro.c). Chame depois de
    iniciar o video e antes do jogo; volta quando o jogador aperta X ou START
    na tela de apoio (ou depois de 20 s).
-   v0.14: fundo_titulo e fundo_apoio sao cenas do jogo (256 x 224, 0x00RRGGBB,
-   smw_capture_scene) para o titulo e a tela de apoio, ou NULL. */
-void smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version, const uint32_t *fundo_titulo,
-               const uint32_t *fundo_apoio);
+   fundo_vinheta (v0.15), fundo_titulo e fundo_apoio (v0.14) sao cenas do
+   jogo (256 x 224, 0x00RRGGBB, smw_capture_scene) para a vinheta da
+   Retrogames, o titulo e a tela de apoio, ou NULL. */
+void smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version, const uint32_t *fundo_vinheta,
+               const uint32_t *fundo_titulo, const uint32_t *fundo_apoio);
 
 /* Desenha a textura t de (x0, y0) a (x1, y1), usando u1 x v1 texels, com os
    pixels nitidos (sem filtro). */
