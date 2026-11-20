@@ -2,14 +2,14 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.15 (beta) · NTSC 240p/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
+**Versão 0.16 (beta) · NTSC 240p/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
 - Tela AJUSTES no começo: vídeo 240p (cabo AV, qualquer TV; o recomendado) ou 480p (componente/HDMI), tela 4:3 ou 16:9 e idioma, sempre com os pixels nítidos. Vídeo novo só fica se você confirmar que a imagem apareceu.
 - 1280 pontos por linha em todos os vídeos (no 480p, quadro de 16 bits): todo pixel do SNES com a mesma largura, também no 16:9.
 - Tela 16:9 opcional (beta), só no vídeo 480p (componente ou HDMI): nas fases mostra 43 colunas a mais de cada lado, para TV no modo widescreen (no começo e no fim da fase, o que fica fora dela aparece preto). Escolha na tela AJUSTES; L2 + R2 + CRUZ troca no jogo.
 - Posição da imagem na TV (para centralizar pelo AV), como o ajuste de posição de um monitor, sem perder nitidez: linha POSIÇÃO na tela AJUSTES e L2 + R2 + setas no jogo. O tamanho da v0.14.1 saiu (pelo AV a imagem reduzida embaçava ou perdia linhas).
-- Telas de carregamento, AJUSTES, a vinheta da Retrogames e a apresentação com um cenário do próprio jogo de fundo (desenhado da cópia do jogador ao abrir), caixas pretas como as mensagens do jogo e transição em círculo entre elas.
+- Telas de carregamento, AJUSTES, a vinheta da Retrogames e a apresentação com um cenário do próprio jogo de fundo (desenhado da cópia do jogador ao abrir), caixas pretas como as mensagens do jogo, a fonte das mensagens e a moeda do jogo (também lidas da cópia do jogador), os efeitos sonoros do jogo nos menus e transição em círculo entre as telas.
 - Trapaças (códigos Pro Action Replay) num texto, `TRAPACAS.TXT`: liga e desliga na tela AJUSTES ou com L2 + R2 + SELECT no jogo. O pacote traz 13, conferidas no jogo, todas desligadas.
 - Roda os 60 quadros por segundo e desenha um sim, outro não (30 imagens por segundo), sempre no mesmo ritmo, com a velocidade e a música corretas.
 - **Gravador SMW PS2**: um HTML que abre em qualquer navegador, confere a cópia do jogo e grava o aplicativo, a ISO ou os dois no pendrive.
@@ -36,7 +36,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.15 obtido com o ps2dev v2.0.0 foi `96f07a6b753502c67a8b1ad41ff5e2875754a8a3e3602e3d77c57f0fb4601a7e`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.16 obtido com o ps2dev v2.0.0 foi `7167a9a56440d04cf20a11a42d608a35e6cb8f417762fe93274f6984868a29ab`.
 
 ## Gravador SMW PS2 (programa no PC)
 

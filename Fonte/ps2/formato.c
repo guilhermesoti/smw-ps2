@@ -13,6 +13,7 @@
  * Wide (que estica a imagem 4:3 em 4/3) o deixa redondo de novo. */
 #include "formato.h"
 #include "files.h"  /* smw_16_9_vale */
+#include "game.h"   /* SmwArteMenu */
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -23,6 +24,14 @@
 
 static uint32_t *px;
 static const unsigned char *fonte;
+static bool so_msx;  /* a tela Carregando: so a fonte do PS2SDK */
+
+/* Comeco de cada tela: o quadro, a fonte do PS2SDK e se so ela vale. */
+static void inicia(uint32_t *destino, const unsigned char *letras, bool msx) {
+  px = destino;
+  fonte = letras;
+  so_msx = msx;
+}
 
 enum {
   OURO = 0xF8D030, OURO_SOMBRA = 0xA04000, BRANCO = 0xFFFFFF, CINZA = 0xB4B4C0, AZUL = 0x9FD0FF,
@@ -56,39 +65,186 @@ static void contorno(int x, int y, int w, int h, int b, uint32_t rgb) {
   fill(x, y, b, h, rgb), fill(x + w - b, y, b, h, rgb);
 }
 
-/* ---- texto: fonte 8x8 do PS2SDK, 6 pixels por letra ----
-   Os acentos do portugues estao na metade de cima da fonte (MSX). */
-static int glifo(const char **p) {
-  static const unsigned char tabela[][2] = {
-      {0xA1, 0xA0}, {0xA0, 0x85}, {0xA2, 0x83}, {0xA3, 0xB1}, {0xA7, 0x87}, {0xA9, 0x82},
-      {0xAA, 0x88}, {0xAD, 0xA1}, {0xB3, 0xA2}, {0xB4, 0x93}, {0xB5, 0xB5}, {0xBA, 0xA3},
-      {0xBC, 0x81}, {0x87, 0x80}, {0x89, 0x90}, {0x83, 0xB0}, {0x95, 0xB4}};
+/* ---- texto ----
+   v0.16: a fonte das mensagens do proprio jogo (a da ROM do jogador, ver
+   formato_usa_arte), com as letras acentuadas da traducao (ptbr.c) e os
+   sinais que ela nao tem desenhados aqui no mesmo estilo (traco de 2
+   pontos). O que faltar, e tudo na tela Carregando, sai da fonte 8x8 do
+   PS2SDK (MSX). Cada letra ocupa as colunas que tem tinta, mais 1 de
+   espaco (ate a v0.15: 6 pontos fixos, so a do PS2SDK). */
+
+typedef struct {
+  uint8_t l[8];  /* linhas, bit 7 = coluna da esquerda */
+  uint8_t esq, larg;
+  bool tem;
+} Glifo;
+
+static Glifo do_jogo[256];  /* por codigo Latin-1 */
+static bool tem_arte;
+static uint32_t moedas[3][16 * 16];  /* copia de SmwArteMenu.moeda */
+
+/* Um caractere do texto em UTF-8 como codigo Latin-1; fora dele, '?'. */
+static uint8_t proximo(const char **p) {
   const unsigned char *s = (const unsigned char *)*p;
   int c = *s++;
-  if (c == 0xC3 && *s) {
-    int u = *s++;
-    c = '?';
-    for (size_t i = 0; i < sizeof(tabela) / sizeof(tabela[0]); i++)
-      if (tabela[i][0] == u) c = tabela[i][1];
+  if (c >= 0x80) {
+    if ((c == 0xC2 || c == 0xC3) && (*s & 0xC0) == 0x80) {
+      c = (c & 3) << 6 | (*s++ & 0x3F);
+    } else {
+      c = '?';
+      while ((*s & 0xC0) == 0x80) s++;
+    }
   }
   *p = (const char *)s;
-  return c;
+  return (uint8_t)c;
+}
+
+static void mede(Glifo *g) {
+  uint8_t tudo = 0;
+  for (int r = 0; r < 8; r++) tudo |= g->l[r];
+  if (!tudo) {
+    g->esq = 0, g->larg = 3;  /* espaco */
+    return;
+  }
+  int a = 0, b = 7;
+  while (!(tudo & (0x80 >> a))) a++;
+  while (!(tudo & (0x80 >> b))) b--;
+  g->esq = (uint8_t)a, g->larg = (uint8_t)(b - a + 1);
+}
+
+/* Da fonte MSX: os acentos do portugues estao na metade de cima dela. */
+static Glifo glifo_msx(uint8_t c) {
+  static const unsigned char acentos[][2] = {
+      {0xE1, 0xA0}, {0xE0, 0x85}, {0xE2, 0x83}, {0xE3, 0xB1}, {0xE7, 0x87}, {0xE9, 0x82},
+      {0xEA, 0x88}, {0xED, 0xA1}, {0xF3, 0xA2}, {0xF4, 0x93}, {0xF5, 0xB5}, {0xFA, 0xA3},
+      {0xFC, 0x81}, {0xC7, 0x80}, {0xC9, 0x90}, {0xC3, 0xB0}, {0xD5, 0xB4}};
+  int m = c;
+  if (c >= 0x80) {
+    m = '?';
+    for (size_t i = 0; i < sizeof(acentos) / sizeof(acentos[0]); i++)
+      if (acentos[i][0] == c) m = acentos[i][1];
+  }
+  Glifo g;
+  for (int r = 0; r < 8; r++) g.l[r] = fonte[m * 8 + r] & 0xFC;  /* 6 colunas */
+  g.tem = true;
+  mede(&g);
+  return g;
+}
+
+/* A arte do jogo vale nesta tela (a Carregando usa so a MSX). */
+static bool usa_arte(void) { return tem_arte && !so_msx; }
+
+static Glifo glifo(uint8_t c) {
+  if (usa_arte() && do_jogo[c].tem) return do_jogo[c];
+  return glifo_msx(c);
+}
+
+/* Linhas no formato do ptbr.c: '3' tinta, '1' fundo. */
+static void de_texto(Glifo *g, const char *const linhas[8]) {
+  for (int r = 0; r < 8; r++) {
+    g->l[r] = 0;
+    for (int c = 0; c < 8; c++)
+      if (linhas[r][c] == '3') g->l[r] |= (uint8_t)(0x80 >> c);
+  }
+  g->tem = true;
+  mede(g);
+}
+
+/* Uma peca 2bpp do SNES (plano 0 no byte baixo, plano 1 no alto): tinta = 3. */
+static void de_peca(Glifo *g, const uint16_t peca[8]) {
+  for (int r = 0; r < 8; r++) g->l[r] = (uint8_t)(peca[r] & (peca[r] >> 8));
+  g->tem = true;
+  mede(g);
+}
+
+void formato_usa_arte(const SmwArteMenu *arte) {
+  tem_arte = arte && arte->ok;
+  memset(do_jogo, 0, sizeof(do_jogo));
+  if (!tem_arte) return;
+  memcpy(moedas, arte->moeda, sizeof(moedas));
+  /* As pecas da fonte das mensagens (o mesmo mapa do ptbr.c). */
+  for (int i = 0; i < 26; i++) de_peca(&do_jogo['A' + i], arte->letras[i]);
+  for (int i = 0; i < 26; i++) de_peca(&do_jogo['a' + i], arte->letras[0x40 + i]);
+  for (int i = 0; i < 7; i++) de_peca(&do_jogo['1' + i], arte->letras[0x64 + i]);
+  static const struct { char c; uint8_t peca; } sinais[] = {
+      {'0', 0x6B}, {'!', 0x1A}, {'.', 0x1B}, {'-', 0x1C}, {',', 0x1D}, {'?', 0x1E},
+      {'#', 0x5A}, {'(', 0x5B}, {')', 0x5C}, {'\'', 0x5D}};
+  for (size_t i = 0; i < sizeof(sinais) / sizeof(sinais[0]); i++)
+    de_peca(&do_jogo[(unsigned char)sinais[i].c], arte->letras[sinais[i].peca]);
+  do_jogo[' '].tem = true, mede(&do_jogo[' ']);
+  /* Acentuadas (desenho do port, ptbr.c), cada uma com o codigo que
+     game.c tirou da tabela de la (g_ptbr_acentos). */
+  for (int i = 0; i < SMW_ARTE_ACENTOS; i++) de_peca(&do_jogo[arte->acento_codigo[i]], arte->acentos[i]);
+  /* Os que a fonte do jogo nao tem (8, 9 e alguns sinais): desenho nosso,
+     no estilo dela. */
+  static const struct { char c; const char *l[8]; } nossos[] = {
+      {'8', {"11333311", "13311331", "13311331", "11333311", "13311331", "13311331", "11333311", "11111111"}},
+      {'9', {"11333311", "13311331", "13311331", "11333331", "11111331", "13311331", "11333311", "11111111"}},
+      {':', {"11111111", "13311111", "13311111", "11111111", "11111111", "13311111", "13311111", "11111111"}},
+      {';', {"11111111", "13311111", "13311111", "11111111", "11111111", "11331111", "13311111", "11111111"}},
+      {'+', {"11111111", "11133111", "11133111", "13333331", "13333331", "11133111", "11133111", "11111111"}},
+      {'/', {"11111331", "11111331", "11113311", "11133111", "11331111", "13311111", "13311111", "11111111"}},
+      {'%', {"13311131", "13311331", "11113311", "11133111", "11331111", "13311331", "13111331", "11111111"}},
+      {'=', {"11111111", "11111111", "13333331", "11111111", "13333331", "11111111", "11111111", "11111111"}},
+      {'>', {"13311111", "11331111", "11133111", "11113311", "11133111", "11331111", "13311111", "11111111"}},
+      {'<', {"11111331", "11113311", "11133111", "11331111", "11133111", "11113311", "11111331", "11111111"}},
+      {'"', {"13311331", "13311331", "11111111", "11111111", "11111111", "11111111", "11111111", "11111111"}},
+      {'_', {"11111111", "11111111", "11111111", "11111111", "11111111", "11111111", "13333331", "11111111"}},
+  };
+  for (size_t i = 0; i < sizeof(nossos) / sizeof(nossos[0]); i++)
+    de_texto(&do_jogo[(unsigned char)nossos[i].c], nossos[i].l);
 }
 
 static int largura(const char *s, int escala) {
   int n = 0;
-  while (*s) glifo(&s), n++;
-  return n ? n * 6 * escala - escala : 0;
+  while (*s) n += glifo(proximo(&s)).larg + 1;
+  return n ? (n - 1) * escala : 0;
+}
+
+/* Uma letra com a coluna da esquerda em x; devolve o x da proxima. */
+static int desenha(int x, int y, const Glifo *g, uint32_t rgb, int escala) {
+  for (int r = 0; r < 8; r++)
+    for (int c = 0; c < g->larg; c++)
+      if (g->l[r] & (0x80 >> (g->esq + c))) fill(x + c * escala, y + r * escala, escala, escala, rgb);
+  return x + (g->larg + 1) * escala;
 }
 
 static void texto(int x, int y, const char *s, uint32_t rgb, int escala) {
   while (*s) {
-    const unsigned char *g = fonte + glifo(&s) * 8;
-    for (int r = 0; r < 8; r++)
-      for (int c = 0; c < 6; c++)
-        if (g[r] & (0x80 >> c)) fill(x + c * escala, y + r * escala, escala, escala, rgb);
-    x += 6 * escala;
+    Glifo g = glifo(proximo(&s));
+    x = desenha(x, y, &g, rgb, escala);
   }
+}
+
+/* Ate max pontos de largura: o que nao couber vira "..." (nomes de
+   trapacas, que vem do TRAPACAS.TXT: com a fonte do jogo, 28 letras largas
+   passam da linha). */
+static void texto_ate(int x, int y, const char *s, uint32_t rgb, int max) {
+  if (largura(s, 1) <= max) {
+    texto(x, y, s, rgb, 1);
+    return;
+  }
+  const int fim = x + max - largura("...", 1) - 1;
+  while (*s) {
+    Glifo g = glifo(proximo(&s));
+    if (x + g.larg > fim) break;
+    x = desenha(x, y, &g, rgb, 1);
+  }
+  texto(x, y, "...", rgb, 1);
+}
+
+/* A moeda do jogo girando (16 x 16, com o canto de cima em x, y), como a
+   que sai dos blocos: de frente, de lado, de perfil, de lado, 4 quadros
+   cada. Sem a arte, nada. */
+static void moeda(int x, int y, int frame) {
+  if (!usa_arte()) return;
+  static const uint8_t fases[4] = {0, 1, 2, 1};
+  const uint32_t *m = moedas[fases[((unsigned)frame / 4) % 4]];
+  for (int j = 0; j < 16; j++)
+    for (int i = 0; i < 16; i++) {
+      uint32_t p = m[j * 16 + i];
+      if (p && (unsigned)(x + i) < W && (unsigned)(y + j) < H) px[(y + j) * W + x + i] = p & 0xFFFFFF;
+    }
 }
 
 /* Centrado na faixa [x0, x0 + w). */
@@ -295,7 +451,8 @@ static void linha_ajuste(const Textos *t, const Ajustes *a, int linha, int frame
     fill(LX, y, LW, LINHA_H, MARCA);
     contorno(LX, y, LW, LINHA_H, 1, OURO);
   }
-  texto(LX + 6, y + 3, t->rotulo[linha], marcada ? OURO : BRANCO, 1);
+  texto(LX + (usa_arte() ? 22 : 6), y + 3, t->rotulo[linha], marcada ? OURO : BRANCO, 1);
+  if (marcada) moeda(LX + 3, y - 1, frame);  /* v0.16: a moeda do jogo marca a linha */
   int fim = LX + LW - 8;
   const char *v = valor(t, a, linha, buf, sizeof(buf));
   bool sem = (linha == AJUSTE_TRAPACAS && a->trapacas_total <= 0) || (linha == AJUSTE_TELA && tela_fixa(a));
@@ -314,8 +471,11 @@ static void botao_jogar(const Textos *t, const Ajustes *a, int frame) {
   fill(x, y, w, LINHA_H, marcado ? OURO : 0x000000);
   contorno(x, y, w, LINHA_H, 1, marcado ? BRANCO : 0x808080);
   texto_em(x, w, y + 3, t->jogar, marcado ? PRETO : BRANCO);
-  if (marcado && (frame / 20) % 2 == 0)
+  if (marcado && usa_arte()) {
+    moeda(x - 20, y - 1, frame);  /* v0.16 */
+  } else if (marcado && (frame / 20) % 2 == 0) {
     seta(x - 9, y + LINHA_H / 2, 1, OURO), seta(x + w + 5, y + LINHA_H / 2, -1, OURO);
+  }
 }
 
 /* Painel de ajuda da linha marcada (ate 4 linhas). */
@@ -372,8 +532,7 @@ static void painel(const Textos *t, const Ajustes *a) {
 
 void formato_ajustes(uint32_t *destino, const unsigned char *letras, const Ajustes *a, int frame,
                      const uint32_t *cena) {
-  px = destino;
-  fonte = letras;
+  inicia(destino, letras, false);
   const Textos *t = &kTextos[a->idioma == 1];
   fundo(cena, 0);
   caixa(BX, BY, BW, BH);
@@ -411,8 +570,7 @@ void formato_ajustes(uint32_t *destino, const unsigned char *letras, const Ajust
 void formato_carregando(uint32_t *destino, const unsigned char *letras, const char *etapa, int passo,
                         int passos, int frame) {
   (void)frame;
-  px = destino;
-  fonte = letras;
+  inicia(destino, letras, true);  /* antes da ROM: so a fonte do PS2SDK */
   paisagem();
   texto_contorno(40, "SUPER MARIO WORLD", BRANCO, 2);
   const char *sub = "Port nativo para PlayStation 2";
@@ -443,8 +601,7 @@ void formato_confirma(uint32_t *destino, const unsigned char *letras, int video,
                       int frame, const uint32_t *cena) {
   (void)frame;
   static const char *const videos[] = {"240p", "480p"};
-  px = destino;
-  fonte = letras;
+  inicia(destino, letras, false);
   fundo(cena, 140);
   caixa(20, 26, W - 40, 158);
   char linha[64];
@@ -473,8 +630,7 @@ enum { T_LINHAS = 10, T_Y = 40, T_PASSO = 14 };
 
 void formato_trapacas(uint32_t *destino, const unsigned char *letras, const ListaTrapacas *l, int frame,
                       const uint32_t *cena) {
-  px = destino;
-  fonte = letras;
+  inicia(destino, letras, false);
   const bool en = l->idioma == 1;
   fundo(cena, l->no_jogo ? 110 : 0);
   caixa(8, 8, W - 16, 184);
@@ -506,8 +662,10 @@ void formato_trapacas(uint32_t *destino, const unsigned char *letras, const List
     }
     contorno(21, y, 8, 8, 1, it->valida ? BRANCO : 0x808080);
     if (it->ligada && it->valida) fill(23, y + 2, 4, 4, 0x60E060);
-    /* O nome ja vem cortado em 28 letras (trapacas.c): 168 pontos, cabe. */
-    texto(34, y, it->nome, !it->valida ? LARANJA : it->ligada ? OURO : BRANCO, 1);
+    /* O nome ja vem cortado em 28 letras (trapacas.c); com a fonte do jogo
+       (v0.16) as largas passam da linha: corta em pontos, antes da coluna
+       das setas de rolagem (x 231 a 237; revisao 2). */
+    texto_ate(34, y, it->nome, !it->valida ? LARANJA : it->ligada ? OURO : BRANCO, W - 27 - 34);
   }
   if (primeira > 0) seta_v(W - 22, 38, -1, (frame / 20) % 2 ? OURO : BRANCO);
   if (primeira + T_LINHAS < l->n) seta_v(W - 22, T_Y + T_LINHAS * T_PASSO - 4, 1, (frame / 20) % 2 ? OURO : BRANCO);
@@ -589,8 +747,7 @@ static void varre(int y0, int y1, int em) {
 }
 
 void formato_vinheta(uint32_t *destino, const unsigned char *letras, int f, const uint32_t *cena) {
-  px = destino;
-  fonte = letras;
+  inicia(destino, letras, false);
   if (!v_pronta) {  /* sempre as mesmas particulas */
     unsigned semente = 0x1234567u;
     for (int i = 0; i < V_PARTICULAS; i++) {
@@ -675,8 +832,7 @@ int formato_iris_raio(int q, bool abrindo) {
 
 void formato_titulo(uint32_t *destino, const unsigned char *letras, const char *versao,
                     const uint32_t *cena) {
-  px = destino;
-  fonte = letras;
+  inicia(destino, letras, false);
   fundo(cena, 60);
   texto_contorno(44, "Super Mario", OURO, 3);
   texto_contorno(74, "World", BRANCO, 2);
@@ -691,8 +847,7 @@ void formato_titulo(uint32_t *destino, const unsigned char *letras, const char *
 
 void formato_apoio(uint32_t *destino, const unsigned char *letras, int frame, bool pode_seguir,
                    const char (*qr)[46], int n, const uint32_t *cena) {
-  px = destino;
-  fonte = letras;
+  inicia(destino, letras, false);
   fundo(cena, 0);
   texto_contorno(8, "APOIE O PROJETO", OURO, 2);
   /* QR: 2 pixels por modulo, borda branca de 4 modulos, preto no branco. */

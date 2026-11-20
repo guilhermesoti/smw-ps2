@@ -35,6 +35,7 @@ static const char *const kAccent[4][2] = {
   {"11331131","13113311"},  /* tilde */
 };
 /* Glyph order: á à â ã é ê í ó ô õ ú ç, then the same in capitals. */
+const uint8 g_ptbr_acentos[12] = {0xE1, 0xE0, 0xE2, 0xE3, 0xE9, 0xEA, 0xED, 0xF3, 0xF4, 0xF5, 0xFA, 0xE7};
 static const struct { uint8 base, accent; } kGlyphs[12] = {
   {0,0},{0,1},{0,2},{0,3},{1,0},{1,2},{2,0},{3,0},{3,2},{3,3},{4,0},{5,255},
 };
@@ -103,12 +104,11 @@ static int EncodeChar(const char *s, uint8 *tile, uint8 *prop) {
   }
   }
   if (c == 0xC3) {  /* UTF-8 Latin-1 supplement */
-    static const uint8 kCodes[12] = {0xA1, 0xA0, 0xA2, 0xA3, 0xA9, 0xAA, 0xAD, 0xB3, 0xB4, 0xB5, 0xBA, 0xA7};
     uint8 d = (uint8)s[1];
     bool upper = d < 0xA0;
     uint8 low = upper ? d + 0x20 : d;
     for (int g = 0; g < 12; g++) {
-      if (kCodes[g] == low) {
+      if ((uint8)(g_ptbr_acentos[g] - 0x40) == low) {  /* Latin-1 -> 2o byte do UTF-8 */
         *tile = 0xC0 + g + (upper ? 12 : 0);  /* tile 0x3C0 + glyph */
         *prop = 0x3B;
         return 2;

@@ -13,6 +13,14 @@
    256 x 224 no mesmo formato, ou NULL (paisagem desenhada aqui). */
 enum { FORMATO_W = 256, FORMATO_H = 224 };
 
+/* v0.16: a fonte das mensagens do jogo e a moeda, tiradas da ROM do jogador
+   (smw_capture_scene, game.h); NULL ou sem arte (arte->ok falso) volta a
+   fonte do PS2SDK e tira a moeda. Copia o que precisa (o original pode
+   sair de cena) e vale para as telas seguintes; a tela Carregando sempre
+   usa a do PS2SDK (aparece antes de a ROM ser achada). */
+struct SmwArteMenu;
+void formato_usa_arte(const struct SmwArteMenu *arte);
+
 /* Linhas da tela AJUSTES, de cima para baixo. */
 enum { AJUSTE_VIDEO, AJUSTE_TELA, AJUSTE_POSICAO, AJUSTE_IDIOMA, AJUSTE_TRAPACAS, AJUSTE_JOGAR, AJUSTE_LINHAS };
 

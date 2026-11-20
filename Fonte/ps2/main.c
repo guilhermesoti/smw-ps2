@@ -22,7 +22,7 @@
 #include <timer.h>
 #include <unistd.h>
 
-#define SMW_VERSAO "0.15"
+#define SMW_VERSAO "0.16"
 
 #define DECLARE_DRIVER(n) extern unsigned char n##_irx[]; extern unsigned int size_##n##_irx
 DECLARE_DRIVER(bdm);
@@ -239,6 +239,9 @@ static uint32_t quadro[FORMATO_W * FORMATO_H] __attribute__((aligned(64)));
 static uint32_t cena_ajustes[SMW_WIDTH * SMW_HEIGHT], cena_titulo[SMW_WIDTH * SMW_HEIGHT],
     cena_apoio[SMW_WIDTH * SMW_HEIGHT], cena_vinheta[SMW_WIDTH * SMW_HEIGHT];
 static const uint32_t *fundo_ajustes, *fundo_titulo, *fundo_apoio, *fundo_vinheta;
+/* v0.16: the game's sound effects in the menus until the game starts
+   (game.c). */
+static bool som_do_jogo;
 
 /* v0.14: cheats (trapacas.c) from TRAPACAS.TXT; the ones that are on (name
    and codes) go to TRAPACAS.LIG, where the save is. trapacas_on: how many
@@ -381,10 +384,19 @@ static void som_menu(void) {
   int frames = (target - (audio_capacity - audsrv_available())) / 4;
   while (frames > 0) {
     int n = frames < SMW_MAX_SAMPLES ? frames : SMW_MAX_SAMPLES;
-    smw_som_menu(stereo, n);
+    if (som_do_jogo) smw_som_menus_gera(stereo, n);
+    else smw_som_menu(stereo, n);
     audsrv_play_audio((const char *)stereo, n * 4);
     frames -= n;
   }
+}
+
+/* v0.16: a menu sound. Before the game, the game's own effect (the menu
+   cursor of the file screen, 6, or the coin, 1); in the game (the cheats,
+   L2+R2+SELECT, with the game paused) the port's blip, as before. */
+static void efeito(uint8_t qual) {
+  if (som_do_jogo) smw_som_menus_efeito(qual);
+  else smw_blip(sound);
 }
 
 /* One frame of a settings screen (already drawn in quadro). In the game in
@@ -674,9 +686,9 @@ static unsigned botoes(void) {
 
 /* One frame of room sala as a background (smw_capture_scene; the engine
    starts over afterwards), converted from the GS format to 0x00RRGGBB. */
-static void tira_cena(unsigned sala, uint32_t *cena, const uint32_t **fundo) {
+static void tira_cena(unsigned sala, uint32_t *cena, const uint32_t **fundo, SmwArteMenu *arte) {
   unsigned inicio = smw_log_ms();
-  if (!smw_capture_scene(sala, cena)) {
+  if (!smw_capture_scene(sala, cena, arte)) {
     smw_log("Cena %03X para o fundo: nao carregou", sala);
     return;
   }
@@ -754,17 +766,17 @@ static void tela_trapacas(bool no_jogo, const uint32_t *fundo, int idioma) {
     held = agora;
     if (apertou & voltar) break;
     if (l.n > 0) {
-      if (apertou & PAD_UP) l.marcada = (l.marcada + l.n - 1) % l.n, smw_blip(sound);
-      if (apertou & PAD_DOWN) l.marcada = (l.marcada + 1) % l.n, smw_blip(sound);
-      if (apertou & PAD_LEFT) l.marcada = l.marcada >= 10 ? l.marcada - 10 : 0, smw_blip(sound);
-      if (apertou & PAD_RIGHT) l.marcada = l.marcada + 10 < l.n ? l.marcada + 10 : l.n - 1, smw_blip(sound);
+      if (apertou & PAD_UP) l.marcada = (l.marcada + l.n - 1) % l.n, efeito(SMW_EFEITO_CURSOR);
+      if (apertou & PAD_DOWN) l.marcada = (l.marcada + 1) % l.n, efeito(SMW_EFEITO_CURSOR);
+      if (apertou & PAD_LEFT) l.marcada = l.marcada >= 10 ? l.marcada - 10 : 0, efeito(SMW_EFEITO_CURSOR);
+      if (apertou & PAD_RIGHT) l.marcada = l.marcada + 10 < l.n ? l.marcada + 10 : l.n - 1, efeito(SMW_EFEITO_CURSOR);
       Trapaca *t = &trapacas.t[l.marcada];
       if ((apertou & PAD_CROSS) && t->codigos > 0) {
         t->ligada = !t->ligada;
         trapacas_on = trapacas_ligadas(&trapacas);
         trapacas_mudou = true;
         smw_log("Trapaca %s: %s", t->ligada ? "ligada" : "desligada", t->nome);
-        smw_blip(sound);
+        efeito(SMW_EFEITO_MOEDA);
       }
     }
     for (int i = 0; i < l.n; ++i)
@@ -815,35 +827,36 @@ static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const 
       if (x != a.pos_x || y != a.pos_y) {
         a.pos_x = x, a.pos_y = y;
         muda_posicao(x, y);
-        smw_blip(sound);
+        efeito(SMW_EFEITO_CURSOR);
       }
       if (apertou & (PAD_CROSS | PAD_CIRCLE | PAD_START)) {
         a.ajustando = false;
         smw_log("AJUSTES: posicao %+d %+d", a.pos_x, a.pos_y);
-        smw_blip(sound);
+        efeito(SMW_EFEITO_MOEDA);
       }
     } else if (saindo < 0 && apertou) {
       contagem = false;
       int dir = (apertou & PAD_LEFT) ? -1 : (apertou & PAD_RIGHT) ? 1 : 0;
       if (a.linha == AJUSTE_TRAPACAS && (apertou & (PAD_CROSS | PAD_RIGHT))) {
-        smw_blip(sound);
+        efeito(SMW_EFEITO_MOEDA);
         tela_trapacas(false, fundo_ajustes, a.idioma);
         held = botoes();
       } else if (a.linha == AJUSTE_POSICAO && (apertou & (PAD_CROSS | PAD_LEFT | PAD_RIGHT))) {
         a.ajustando = true;
         a.aviso = NULL;
-        smw_blip(sound);
+        efeito(SMW_EFEITO_MOEDA);
       } else if (apertou & (PAD_CROSS | PAD_START)) {
         saindo = frame;
+        efeito(SMW_EFEITO_MOEDA);  /* como escolher o arquivo no jogo */
       } else if (apertou & (PAD_UP | PAD_DOWN)) {
         a.linha = (a.linha + ((apertou & PAD_UP) ? AJUSTE_LINHAS - 1 : 1)) % AJUSTE_LINHAS;
-        smw_blip(sound);
+        efeito(SMW_EFEITO_CURSOR);
       } else if (dir && a.linha != AJUSTE_JOGAR && (a.linha != AJUSTE_TELA || smw_16_9_vale(a.video))) {
         if (a.linha == AJUSTE_VIDEO) a.video = outro_video(a.video, dir);
         if (a.linha == AJUSTE_TELA) a.tela = !a.tela;
         if (a.linha == AJUSTE_IDIOMA) a.idioma = !a.idioma;
         a.aviso = NULL;
-        smw_blip(sound);
+        efeito(SMW_EFEITO_CURSOR);
       }
     }
     if (saindo < 0 && contagem && frame >= 5 * 60) saindo = frame, sozinho = true;
@@ -957,10 +970,21 @@ int main(int argc, char **argv) {
   smw_log("%s", report);
   smw_load_report(report, sizeof(report));
   smw_log("%sNovos saves vao para: %s", report, smw_save_location());
-  tira_cena(0x105, cena_ajustes, &fundo_ajustes);  /* Yoshi's Island 1 */
-  tira_cena(0x0C7, cena_titulo, &fundo_titulo);    /* a fase do titulo */
-  tira_cena(0x104, cena_apoio, &fundo_apoio);      /* casa do Yoshi */
-  tira_cena(0x125, cena_vinheta, &fundo_vinheta);  /* ceu de noite: a vinheta da Retrogames (v0.15) */
+  /* v0.16: com a primeira, a fonte das mensagens e a moeda do jogo
+     (formato_usa_arte copia o que usa). */
+  static SmwArteMenu arte_menus;
+  tira_cena(0x105, cena_ajustes, &fundo_ajustes, &arte_menus);  /* Yoshi's Island 1 */
+  tira_cena(0x0C7, cena_titulo, &fundo_titulo, NULL);    /* a fase do titulo */
+  tira_cena(0x104, cena_apoio, &fundo_apoio, NULL);      /* casa do Yoshi */
+  tira_cena(0x125, cena_vinheta, &fundo_vinheta, NULL);  /* ceu de noite: a vinheta da Retrogames (v0.15) */
+  formato_usa_arte(&arte_menus);
+  smw_log("Menus: %s", arte_menus.ok ? "fonte e moeda do jogo" : "fonte do PS2SDK (a cena nao carregou)");
+  if (sound) {
+    unsigned inicio = smw_log_ms();
+    smw_som_menus_liga();
+    som_do_jogo = true;
+    smw_log("Menus: efeitos do jogo prontos (%u ms)", smw_log_ms() - inicio);
+  }
   trapacas_carrega();
 
   /* Ajustes: o padrao, depois o SMW.CFG (Gravador no PC) e por cima o
@@ -1038,6 +1062,10 @@ int main(int argc, char **argv) {
   else
     smw_log("SMW.OPT: sem mudanca");
   trapacas_grava();
+  if (som_do_jogo) {  /* v0.16: o jogo comeca do motor novo, como sem os efeitos */
+    smw_som_menus_desliga();
+    som_do_jogo = false;
+  }
   smw_log_grava();
   g_ptbr = opcoes.idioma != 1;
 

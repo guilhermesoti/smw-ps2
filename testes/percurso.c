@@ -58,11 +58,38 @@ int main(int argc, char **argv) {
   smw_start(rom, pixels);
   free(rom);
   /* v0.14: os menus tiram fotos de fases (smw_capture_scene) e o motor
-     recomeça; o percurso tem de sair igual, imagem e som. */
+     recomeça; o percurso tem de sair igual, imagem e som. v0.16: como no
+     PS2, a primeira tira também a fonte e a moeda, e os menus tocam os
+     efeitos do jogo pelo motor (smw_som_menus_*) antes de ele recomeçar. */
   if (strcmp(argv[2], "cenario") == 0) {
     static uint32_t cena[SMW_WIDTH * SMW_HEIGHT];
-    if (!smw_capture_scene(0x105, cena) || !smw_capture_scene(0x0C7, cena)) {
+    static SmwArteMenu arte;
+    if (!smw_capture_scene(0x105, cena, &arte) || !arte.ok || !smw_capture_scene(0x0C7, cena, NULL)) {
       fprintf(stderr, "A foto da fase falhou.\n");
+      return EXIT_FAILURE;
+    }
+    long tinta = 0, moeda = 0;
+    for (int t = 0; t < SMW_ARTE_LETRAS; ++t)
+      for (int r = 0; r < 8; ++r) tinta += (arte.letras[t][r] & (arte.letras[t][r] >> 8)) != 0;
+    for (int f = 0; f < 3; ++f)
+      for (int i = 0; i < 256; ++i) moeda += arte.moeda[f][i] != 0;
+    smw_som_menus_liga();
+    /* Faixas: antes do 1º efeito; o cursor (quadros 10-39, com o mesmo
+       pedido de novo no 11, que tem de esperar um quadro com 0); a moeda. */
+    long faixa[3] = {0, 0, 0};
+    for (int q = 0; q < 120; ++q) {
+      if (q == 10 || q == 11) smw_som_menus_efeito(SMW_EFEITO_CURSOR);
+      if (q == 40) smw_som_menus_efeito(SMW_EFEITO_MOEDA);
+      int n = q % 3 ? SMW_SAMPLES : 100;  /* pedaços de tamanhos diferentes */
+      smw_som_menus_gera(amostras, n);
+      for (int i = 0; i < n * 2; ++i) faixa[q < 10 ? 0 : q < 40 ? 1 : 2] += amostras[i] != 0;
+    }
+    smw_som_menus_desliga();
+    /* Antes do primeiro efeito, silêncio: o "plim" da tela da Nintendo, do
+       quadro que smw_som_menus_liga roda, não pode tocar. */
+    if (tinta < 100 || moeda < 100 || faixa[0] != 0 || faixa[1] == 0 || faixa[2] == 0) {
+      fprintf(stderr, "Arte dos menus: %ld linhas com tinta, %ld pontos de moeda; efeitos: %ld %ld %ld amostras.\n",
+              tinta, moeda, faixa[0], faixa[1], faixa[2]);
       return EXIT_FAILURE;
     }
   }
