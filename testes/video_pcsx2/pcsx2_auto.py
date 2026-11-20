@@ -22,7 +22,7 @@ ROTEIRO é uma lista de passos separados por vírgula:
     esperar:SEG    espera SEG segundos
     tecla:NOME     aperta e solta (NOME = cima baixo esquerda direita x
                    circulo quadrado triangulo start select l2 r2, e gravar
-                   com --audio)
+                   com --audio); juntas com "+": tecla:l2+r2+x
     foto:NOME      captura a tela como NOME.png (tecla de captura do PCSX2)
     raiz:NOME      captura a tela inteira do Xvfb (para diagnóstico)
     janelas        lista as janelas (para diagnóstico)
@@ -139,12 +139,15 @@ def apertar(d, nome, segura=0.12):
         g = w.get_geometry()
         xtest.fake_input(d, X.MotionNotify, x=g.x + g.width // 2, y=g.y + g.height // 2)
         d.sync()
-    codigo = d.keysym_to_keycode(XK.string_to_keysym(TECLAS[nome]))
-    xtest.fake_input(d, X.KeyPress, codigo)
-    d.sync()
+    codigos = [d.keysym_to_keycode(XK.string_to_keysym(TECLAS[n])) for n in nome.split("+")]
+    for codigo in codigos:  # várias juntas (l2+r2+x): aperta na ordem, solta ao contrário
+        xtest.fake_input(d, X.KeyPress, codigo)
+        d.sync()
+        time.sleep(0.05 if len(codigos) > 1 else 0)
     time.sleep(segura)
-    xtest.fake_input(d, X.KeyRelease, codigo)
-    d.sync()
+    for codigo in reversed(codigos):
+        xtest.fake_input(d, X.KeyRelease, codigo)
+        d.sync()
 
 
 def foto(d, snaps: Path, saida: Path, nome: str):
@@ -207,7 +210,8 @@ def ler_roteiro(texto):
         nome, args = partes[0], partes[1:]
         if nome not in ARGUMENTOS or len(args) != ARGUMENTOS[nome]:
             raise SystemExit(f"Passo inválido no roteiro: {':'.join(partes)}")
-        if nome == "tecla" and args[0] not in TECLAS:
+        if nome == "tecla" and (any(t not in TECLAS for t in args[0].split("+"))
+                                or ("+" in args[0] and "gravar" in args[0].split("+"))):
             raise SystemExit(f"Tecla desconhecida: {args[0]}")
         try:
             if nome == "esperar":

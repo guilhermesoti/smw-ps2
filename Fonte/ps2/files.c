@@ -905,7 +905,7 @@ static char *trim(char *s) {
 }
 
 void smw_options_clear(SmwOptions *o) {
-  o->tela = o->video = o->idioma = o->suave = o->compat = o->scanlines = SMW_OPT_ASK;
+  o->tela = o->video = o->idioma = o->compat = SMW_OPT_ASK;
 }
 
 static void parse_options(char *text, SmwOptions *o) {
@@ -929,13 +929,6 @@ static void parse_options(char *text, SmwOptions *o) {
       } else if (same_word(key, "idioma")) {
         if (same_word(value, "pt") || same_word(value, "portugues")) o->idioma = 0;
         else if (same_word(value, "en") || same_word(value, "ingles")) o->idioma = 1;
-      } else if (same_word(key, "suavizacao") || same_word(key, "suave")) {
-        if (same_word(value, "nao") || same_word(value, "desligada") || same_word(value, "0")) o->suave = 0;
-        else if (same_word(value, "media") || same_word(value, "1")) o->suave = 1;
-        else if (same_word(value, "forte") || same_word(value, "sim") || same_word(value, "2")) o->suave = 2;
-      } else if (same_word(key, "scanlines")) {
-        if (same_word(value, "nao") || same_word(value, "desligadas") || same_word(value, "0")) o->scanlines = 0;
-        else if (same_word(value, "sim") || same_word(value, "ligadas") || same_word(value, "1")) o->scanlines = 1;
       } else if (same_word(key, "saida")) {
         if (same_word(value, "1280")) o->compat = 0;
         else if (same_word(value, "512")) o->compat = 1;
@@ -985,12 +978,9 @@ bool smw_read_saved_options(SmwOptions *o) {
 /* Texto do SMW.OPT: so os campos com valor. */
 static int options_text(const SmwOptions *o, char *text, size_t size) {
   static const char *const videos[] = {"240p", "480p", "480i"};
-  static const char *const suaves[] = {"nao", "media", "forte"};
   int n = 0;
   if (o->tela >= 0) n += snprintf(text + n, size - n, "tela=%s\n", o->tela ? "16:9" : "4:3");
   if (o->video >= 0 && o->video <= 2) n += snprintf(text + n, size - n, "video=%s\n", videos[o->video]);
-  if (o->suave >= 0 && o->suave <= 2) n += snprintf(text + n, size - n, "suavizacao=%s\n", suaves[o->suave]);
-  if (o->scanlines >= 0) n += snprintf(text + n, size - n, "scanlines=%s\n", o->scanlines ? "sim" : "nao");
   if (o->idioma >= 0) n += snprintf(text + n, size - n, "idioma=%s\n", o->idioma ? "en" : "pt");
   if (o->compat == 1) n += snprintf(text + n, size - n, "saida=512\n");
   return n;

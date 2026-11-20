@@ -152,6 +152,13 @@ def t_opcoes(ctx, base):
     return rc == 0 and "OPCOES: OK" in out, out
 
 
+def t_ritmo(ctx, base):
+    b = compilar(ctx, base, "ritmo", [FONTE / "ps2/ritmo.c", TESTES / "ritmo.c"],
+                 extra=["-I", FONTE / "ps2"], sanitizar=True)
+    rc, out = rodar([b], base, ASAN)
+    return rc == 0 and "RITMO: OK" in out, out
+
+
 def _mock(nome, arquivo, wrap=True, gc=False):
     def teste(ctx, base):
         extra = ["-ffunction-sections", "-fdata-sections", "-Wl,--gc-sections"] if gc else []
@@ -267,6 +274,7 @@ def t_gravador_telas(ctx, base):
 # Nome, descrição, função, se é demorado (fica fora com --rapido).
 LISTA = [
     ("opcoes", "SMW.CFG / SMW.OPT", t_opcoes, False),
+    ("ritmo", "ritmo do jogo (60/30 quadros, simulado)", t_ritmo, False),
     ("saves", "saves entre pendrive e Memory Cards", _mock("save_midias", "save_midias.c"), False),
     ("log", "SMW_LOG.TXT", _mock("registro", "registro.c"), False),
     ("icone", "ícone do save no Memory Card", _mock("icone", "memory_card_icon.c", wrap=False), False),

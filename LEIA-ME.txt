@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.13.6 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
+Retrogames Patos de Minas | v0.13.7 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
 
 O QUE VOCÊ PRECISA
 
@@ -141,14 +141,8 @@ baixo escolhe a linha, para os lados muda o valor, X ou START começa:
   Cada linha do SNES vira duas. O PS2 deve estar com "Saída de vídeo
   componente" em "Y Cb/Pb Cr" na Configuração do Sistema.
 - TELA: 4:3 ou 16:9 (veja TELA 16:9 abaixo), com o teste do círculo.
-- SUAVIZAÇÃO: desligada, média ou forte. Deixa os pixels mais macios,
-  sem serrilhado. No cabo AV a própria TV já deixa a imagem macia, por
-  isso vem desligada; experimente no 480p. Vale para o jogo todo,
-  inclusive a abertura.
-- SCANLINES: desligadas (padrão) ou ligadas. Escurecem uma linha sim,
-  outra não, como num monitor de tubo ligado em RGB. Só aparecem no
-  480p.
 - IDIOMA: português do Brasil ou inglês (o original).
+A imagem é sempre com os pixels nítidos, como no cartucho.
 
 A tela AJUSTES aparece sempre na mesma imagem (480i), que toda TV mostra.
 Quando você escolhe um vídeo novo, o jogo pergunta "A IMAGEM APARECEU?":
@@ -163,22 +157,22 @@ mostrar essa saída, o jogo tenta sozinho a antiga (512 pontos, ou 640
 no 480p) antes de voltar para os ajustes, e lembra disso.
 
 Durante o jogo (segurando L2 + R2):
-- L2 + R2 + QUADRADO: liga/desliga as scanlines (só funciona no 480p).
-  A troca fica gravada junto com o próximo save.
-- L2 + R2 + CÍRCULO: troca a suavização (desligada, média, forte). A
-  troca fica gravada junto com o próximo save.
 - L2 + R2 + CRUZ: troca entre 4:3 e 16:9 (a troca fica gravada junto
-  com o próximo save).
+  com o próximo save). Aparece "TELA 4:3" ou "TELA 16:9" por 5
+  segundos, também no começo do jogo, para conferir numa foto.
 - L2 + R2 + TRIÂNGULO: liga/desliga o medidor de desempenho, no canto
   de baixo. "TELA 60" = todos os 60 quadros de cada segundo foram
   desenhados; "TELA 30" = metade foi pulada para manter a velocidade.
-  "DESENHO" é o tempo médio de um quadro desenhado e "LOGICA" o de um
-  quadro pulado (só a lógica do jogo). Um quadro cabe em 16,7 ms.
+  "DESENHO" é o tempo médio de um quadro desenhado (lógica do jogo e
+  desenho), "ENVIO" o de mandar a imagem para o GS e "LOGICA" o de um
+  quadro pulado (só a lógica do jogo). Um quadro da TV dura 16,7 ms.
 
 O ritmo do jogo segue a atualização da TV, e o som se ajusta a ela sem
-travar a imagem. Se um quadro demorar mais que o tempo de uma
-atualização, o jogo avança até 2 quadros sem desenhar, para manter a
-velocidade e a música corretas.
+travar a imagem. Quando um quadro desenhado (DESENHO + ENVIO) cabe no
+tempo de uma atualização, o jogo desenha todos (TELA 60). Quando não
+cabe, ele desenha um sim, outro não (TELA 30), sempre no mesmo ritmo,
+e a velocidade e a música continuam corretas. Se um quadro atrasar, o
+jogo avança sem desenhar para recuperar.
 
 TELA 16:9 (BETA)
 
@@ -192,6 +186,12 @@ Nas fases, o jogo mostra 43 colunas a mais de cada lado (342 em vez de
 no formato normal e a TV, no modo 16:9, abre ela para as proporções
 certas. Com a TV em 4:3, a imagem fica espremida: troque o modo da TV
 ou volte para 4:3 com L2 + R2 + CRUZ.
+
+Para comparar os dois, deixe a TV em 4:3 quando jogar em 4:3 e em 16:9
+quando jogar em 16:9: o Mario fica do mesmo tamanho e o 16:9 mostra
+mais da fase dos lados. Com a TV esticando a imagem 4:3 para a tela
+toda, o Mario fica mais largo do que no SNES e parece que o 16:9
+"aperta" a imagem.
 
 - Fases, salas de bônus, casas e castelos: tela larga.
 - No começo e no fim de cada fase, o que fica fora dela aparece preto
@@ -217,13 +217,11 @@ O Gravador grava SMW.CFG junto do jogo (em APPS/SMW ou dentro da ISO),
 um texto simples com o que já vem marcado na tela AJUSTES:
   tela=perguntar        (ou 4:3, 16:9)
   video=perguntar       (ou 240p, 480i, 480p)
-  suavizacao=perguntar  (ou nao, media, forte)
   idioma=pt             (ou en)
-Dá para editar no Bloco de Notas. O Gravador não grava as scanlines,
-mas dá para acrescentar a linha scanlines=sim (ou nao). O que foi escolhido no próprio PS2
+Dá para editar no Bloco de Notas. O que foi escolhido no próprio PS2
 (SMW.OPT, onde fica o save) vale mais que o SMW.CFG. Sem esses arquivos
-a tela AJUSTES começa em 240p, 4:3, suavização desligada e português, e
-espera você apertar X.
+a tela AJUSTES começa em 240p, 4:3 e português, e espera você apertar
+X. As linhas suavizacao= e scanlines= de versões antigas são ignoradas.
 
 LOG DO CONSOLE (SMW_LOG.TXT)
 
@@ -255,6 +253,20 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.13.7 (beta):
+- Ao trocar a tela com L2 + R2 + CRUZ, e no começo do jogo, aparece
+  "TELA 4:3" ou "TELA 16:9" por 5 segundos, para conferir numa foto.
+- Mais quadros por segundo: até a v0.13.6, depois do primeiro quadro
+  atrasado o jogo passava a desenhar só metade dos quadros (TELA 30) e
+  não voltava mais, mesmo no 4:3. Agora ele volta a desenhar todos
+  quando o quadro cabe no tempo da TV; quando não cabe (por exemplo no
+  16:9), desenha um sim, outro não, sempre no mesmo ritmo.
+- O medidor (L2 + R2 + TRIÂNGULO) mostra também o ENVIO, o tempo de
+  mandar a imagem para o GS.
+- Saíram a suavização e as scanlines (tela AJUSTES, L2 + R2 + CÍRCULO,
+  L2 + R2 + QUADRADO e Gravador): no console a imagem nítida ficou
+  melhor. A tela AJUSTES tem agora vídeo, tela e idioma.
 
 Mudanças da v0.13.6 (beta):
 - Tela 16:9: nas salas em que a câmera não anda para os lados (por

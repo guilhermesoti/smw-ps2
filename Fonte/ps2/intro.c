@@ -242,48 +242,21 @@ static unsigned read_buttons(void) {
   return now;
 }
 
-/* Desenha a textura t na tela, de (x0, y0) a (x1, y1), usando u1 x v1 texels.
-   suave 0: pixels nitidos; 2: filtro bilinear do GS; 1: metade de cada (o
-   desenho nitido e, por cima, o suave com 50% de transparencia). */
-void smw_sprite_suave(GSGLOBAL *gs, GSTEXTURE *t, float x0, float y0, float x1, float y1, float u1,
-                      float v1, int suave) {
+/* Desenha a textura t na tela, de (x0, y0) a (x1, y1), usando u1 x v1 texels,
+   com os pixels nitidos. A suavizacao (filtro bilinear do GS) e as scanlines
+   sairam na v0.13.7: no console ficavam piores que a imagem nitida. */
+void smw_desenha_textura(GSGLOBAL *gs, GSTEXTURE *t, float x0, float y0, float x1, float y1, float u1,
+                         float v1) {
   u8 enabled = gs->PrimAlphaEnable;
-  /* O filtro bilinear le o texel vizinho: na borda, repete a ultima coluna
-     e a ultima linha usadas em vez de ler o que vem depois na VRAM. */
-  gs->Clamp->MINU = 0, gs->Clamp->MAXU = (int)u1 - 1;
-  gs->Clamp->MINV = 0, gs->Clamp->MAXV = (int)v1 - 1;
-  gsKit_set_clamp(gs, GS_CMODE_REGION_CLAMP);
-  /* v0.13.5: o GS amostra cada ponto da tela no canto dele (coordenada
-     inteira) e o filtro bilinear tem o centro de cada texel em i + 0,5.
-     Com as coordenadas comecando em 0, no 240p (uma linha da tela para
-     cada linha do quadro) cada linha saia a media de duas linhas do jogo,
-     e a imagem ficava embacada na vertical; no 480p, uma linha sim e outra
-     nao. No filtro bilinear as coordenadas andam meio ponto da tela, para
-     cada ponto ler o quadro no centro dele: a suavizacao fica so na mistura
-     de vizinhos que a ampliacao pede. O desenho nitido continua igual. */
-  const float du = 0.5f * u1 / (x1 - x0), dv = 0.5f * v1 / (y1 - y0);
-  const u64 cor = GS_SETREG_RGBAQ(128, 128, 128, 128, 0);
   gs->PrimAlphaEnable = GS_SETTING_OFF;
-  if (suave >= 2) {
-    t->Filter = GS_FILTER_LINEAR;
-    gsKit_prim_sprite_texture(gs, t, x0, y0, du, dv, x1, y1, u1 + du, v1 + dv, 1, cor);
-  } else {
-    t->Filter = GS_FILTER_NEAREST;
-    gsKit_prim_sprite_texture(gs, t, x0, y0, 0, 0, x1, y1, u1, v1, 1, cor);
-  }
-  if (suave == 1) {
-    /* Cor = metade da textura suave + metade do que ja esta na tela. */
-    gsKit_set_primalpha(gs, GS_SETREG_ALPHA(0, 1, 2, 1, 0x40), 0);
-    t->Filter = GS_FILTER_LINEAR;
-    gs->PrimAlphaEnable = GS_SETTING_ON;
-    gsKit_prim_sprite_texture(gs, t, x0, y0, du, dv, x1, y1, u1 + du, v1 + dv, 2, cor);
-  }
+  t->Filter = GS_FILTER_NEAREST;
+  gsKit_prim_sprite_texture(gs, t, x0, y0, 0, 0, x1, y1, u1, v1, 1, GS_SETREG_RGBAQ(128, 128, 128, 128, 0));
   gs->PrimAlphaEnable = enabled;
 }
 
 /* Converte o quadro para o GS (0xAABBGGRR) com o brilho 0..128 e mostra
    ocupando a tela (480p: 448 linhas centradas nas 480). */
-void smw_mostra_quadro(GSGLOBAL *gs, GSTEXTURE *tex, uint32_t *quadro, bool p480, int bright, int suave) {
+void smw_mostra_quadro(GSGLOBAL *gs, GSTEXTURE *tex, uint32_t *quadro, bool p480, int bright) {
   unsigned k = (unsigned)bright * 2;
   const int n = (int)(tex->Width * tex->Height);
   for (int i = 0; i < n; i++) {
@@ -296,15 +269,14 @@ void smw_mostra_quadro(GSGLOBAL *gs, GSTEXTURE *tex, uint32_t *quadro, bool p480
   gsKit_clear(gs, GS_SETREG_RGBAQ(0, 0, 0, 0, 0));
   gsKit_texture_send_inline(gs, tex->Mem, tex->Width, tex->Height, tex->Vram, tex->PSM, tex->TBW, GS_CLUT_NONE);
   float top = p480 ? 16.0f : 0.0f, height = p480 ? 2.0f * tex->Height : (float)gs->Height;
-  smw_sprite_suave(gs, tex, 0, top, gs->Width, top + height, tex->Width, tex->Height, suave);
+  smw_desenha_textura(gs, tex, 0, top, gs->Width, top + height, tex->Width, tex->Height);
   gsKit_queue_exec(gs);
   gsKit_finish();
   gsKit_sync_flip(gs);
 }
 
-static int intro_suave;
 static void present(GSGLOBAL *gs, GSTEXTURE *tex, bool p480, int bright) {
-  smw_mostra_quadro(gs, tex, canvas_px, p480, bright, intro_suave);
+  smw_mostra_quadro(gs, tex, canvas_px, p480, bright);
 }
 
 /* Um "blip" curto ao trocar de opcao. Ele nao vai direto para o audsrv: o
@@ -334,12 +306,11 @@ void smw_som_menu(int16_t *stereo, int frames) {
   }
 }
 
-void smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version, int suave) {
+void smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version) {
   enum { A_START = 20, LOCK = 110, A_FADE = 300, B_START = 330, B_FADE = 450, C_START = 480 };
   static GSTEXTURE tex;
   unsigned held = 0xFFFF;
   int leaving = -1, leave_at = 0, skip = 0;
-  intro_suave = suave;
   char line[64];
 
   tex.Width = W;

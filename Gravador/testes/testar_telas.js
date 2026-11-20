@@ -135,7 +135,7 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   confere(nomes === 'APPS/SMW/SMW.CFG,APPS/SMW/SMW.ELF,APPS/SMW/SMW.SRM,APPS/SMW/SMW.ZIP,APPS/SMW/title.cfg,CD/SMWG_000.01.Super Mario World.iso',
     'pendrive: arquivos certos, SMW.OPT antigo removido (' + nomes + ')');
   confere(fs.readFileSync(path.join(pend, 'APPS/SMW/SMW.SRM'), 'latin1') === 'SAVE-ANTIGO', 'pendrive: save antigo intacto');
-  confere(/tela=16:9\r\nvideo=480p\r\nsuavizacao=perguntar\r\nidioma=pt/.test(fs.readFileSync(path.join(pend, 'APPS/SMW/SMW.CFG'), 'latin1')), 'pendrive: SMW.CFG com os ajustes');
+  confere(/tela=16:9\r\nvideo=480p\r\nidioma=pt/.test(fs.readFileSync(path.join(pend, 'APPS/SMW/SMW.CFG'), 'latin1')), 'pendrive: SMW.CFG com os ajustes');
   await p.close();
 
   /* ---------- 2. navegador sem gravação direta: download ---------- */

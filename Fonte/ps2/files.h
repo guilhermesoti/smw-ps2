@@ -24,13 +24,13 @@ const char *smw_save_error_text(void);
 
 /* Ajustes (tela AJUSTES na abertura, SMW.CFG do Gravador e SMW.OPT).
    tela: 0 = 4:3, 1 = 16:9. video: SMW_VIDEO_*. idioma: 0 = portugues,
-   1 = ingles. suave: 0 = desligada, 1 = media, 2 = forte. compat: 1 = saida
-   de 512 colunas (TV ou adaptador que nao aceitou a de 1280). scanlines:
-   0 = desligadas, 1 = ligadas (so aparecem no 480p; sem valor = desligadas).
-   SMW_OPT_ASK = sem valor (o jogador escolhe na tela de ajustes). */
+   1 = ingles. compat: 1 = saida de 512 colunas (TV ou adaptador que nao
+   aceitou a de 1280). SMW_OPT_ASK = sem valor (o jogador escolhe na tela de
+   ajustes). As chaves suavizacao= e scanlines= de arquivos antigos (ate a
+   v0.13.6) sao ignoradas. */
 enum { SMW_OPT_ASK = -1 };
 enum { SMW_VIDEO_240P = 0, SMW_VIDEO_480P = 1, SMW_VIDEO_480I = 2 };
-typedef struct { int tela, video, idioma, suave, compat, scanlines; } SmwOptions;
+typedef struct { int tela, video, idioma, compat; } SmwOptions;
 /* Todos os campos em SMW_OPT_ASK. */
 void smw_options_clear(SmwOptions *o);
 /* SMW.CFG do Gravador (pasta do jogo ou ISO). Depois de smw_find_rom. */
@@ -40,8 +40,7 @@ void smw_read_config(SmwOptions *o);
 bool smw_read_saved_options(SmwOptions *o);
 /* Grava agora. Se nao der, tenta de novo no proximo save. */
 bool smw_save_options(const SmwOptions *o);
-/* Troca feita no jogo (L2+R2+X, L2+R2+CIRCULO, L2+R2+QUADRADO): vai junto
-   com o proximo save. */
+/* Troca feita no jogo (L2+R2+X): vai junto com o proximo save. */
 void smw_options_changed(const SmwOptions *o);
 
 /* SMW_LOG.TXT (registro.c). Lugares: 0 = a pasta do jogo (pendrive; antes

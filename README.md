@@ -2,12 +2,13 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.13.6 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
+**Versão 0.13.7 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
-- Tela AJUSTES no começo: vídeo 240p (cabo AV, qualquer TV; o recomendado), 480i (só para TV que não mostra 240p) ou 480p (componente/HDMI), tela 4:3 ou 16:9, suavização (desligada, média, forte; desligada por padrão), scanlines (só no 480p; desligadas por padrão) e idioma. Vídeo novo só fica se você confirmar que a imagem apareceu.
+- Tela AJUSTES no começo: vídeo 240p (cabo AV, qualquer TV; o recomendado), 480i (só para TV que não mostra 240p) ou 480p (componente/HDMI), tela 4:3 ou 16:9 e idioma, sempre com os pixels nítidos. Vídeo novo só fica se você confirmar que a imagem apareceu.
 - 1280 pontos por linha em todos os vídeos (no 480p, quadro de 16 bits): todo pixel do SNES com a mesma largura, também no 16:9.
-- Tela 16:9 opcional (beta): nas fases mostra 43 colunas a mais de cada lado, para TV no modo widescreen (no começo e no fim da fase, o que fica fora dela aparece preto). Escolha na tela AJUSTES; L2 + R2 + CRUZ troca no jogo.
+- Tela 16:9 opcional (beta): nas fases mostra 43 colunas a mais de cada lado, para TV no modo widescreen (no começo e no fim da fase, o que fica fora dela aparece preto). Escolha na tela AJUSTES; L2 + R2 + CRUZ troca no jogo e mostra "TELA 4:3" ou "TELA 16:9" por 5 segundos.
+- Desenha todos os 60 quadros por segundo quando o quadro cabe no tempo da TV; quando não cabe, um sim, outro não, sempre no mesmo ritmo, com a velocidade e a música corretas.
 - **Gravador SMW PS2**: um HTML que abre em qualquer navegador, confere a cópia do jogo e grava o aplicativo, a ISO ou os dois no pendrive.
 - Em português do Brasil: mensagens, nomes das fases e textos dos castelos. Segure SELECT na abertura para jogar em inglês.
 - Grava no pendrive ou no Memory Card (pasta `SMWPS2`, com ícone 3D no navegador do PS2).
@@ -32,7 +33,7 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.13.6 obtido com o ps2dev v2.0.0 foi `8bde9289877426f9ae1eed17a0a1e5582704d22df739d16a500672222ce18ebe`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.13.7 obtido com o ps2dev v2.0.0 foi `59ca7d8ef82c08ee8c8b3b79a4fcb2f89583a92032cf908171eb2293f14ab2ad`.
 
 ## Gravador SMW PS2 (programa no PC)
 
@@ -55,8 +56,8 @@ O código fica em `Gravador/src/` (`nucleo.js`: ROM, ISO, ZIP e SMW.CFG; `tela.j
 ### Ajustes de abertura
 
 O Gravador grava `SMW.CFG` ao lado do jogo (ou dentro da ISO), texto com `tela=perguntar|4:3|16:9`,
-`video=perguntar|240p|480i|480p`, `suavizacao=perguntar|nao|media|forte` e `idioma=pt|en`: o que já vem marcado na
-tela AJUSTES. O que foi escolhido no PS2 fica em `SMW.OPT`, no lugar do save, e vale mais que o `SMW.CFG`.
+`video=perguntar|240p|480i|480p` e `idioma=pt|en`: o que já vem marcado na tela AJUSTES (as linhas `suavizacao=` e
+`scanlines=` de versões antigas são ignoradas). O que foi escolhido no PS2 fica em `SMW.OPT`, no lugar do save, e vale mais que o `SMW.CFG`.
 
 ## Jogar por USB
 
@@ -89,8 +90,8 @@ Copie `CD/SMWG_000.01.Super Mario World.iso` para a pasta `CD/` do pendrive e at
 | Triângulo (△) | Segunda tecla de corrida e ação (X do SNES) |
 | Start / Select | Pausar ou iniciar / soltar o item da reserva |
 | L1 / R1 | Deslocar a câmera nas fases que permitem |
-| L2 + R2 + × | Trocar entre 4:3 e 16:9 |
-| L2 + R2 + △ / □ / ○ | Medidor de desempenho / scanlines (480p) / suavização (desligada, média, forte) |
+| L2 + R2 + × | Trocar entre 4:3 e 16:9 (mostra "TELA 4:3" ou "TELA 16:9" por 5 s) |
+| L2 + R2 + △ | Medidor de desempenho (quadros desenhados por segundo e tempos de desenho, envio ao GS e lógica) |
 
 ## Repetir o teste de regressão
 
@@ -121,6 +122,14 @@ Ajustes de abertura (`SMW.CFG` e `SMW.OPT`), numa pasta só com o jogo:
 cc -std=gnu11 -fsanitize=address,undefined -IFonte/ps2 $(pkg-config --cflags minizip zlib) \
    Fonte/ps2/files.c testes/opcoes.c $(pkg-config --libs minizip zlib) -o /tmp/smw-opcoes
 ASAN_OPTIONS=detect_leaks=0 /tmp/smw-opcoes /caminho/da/pasta/com/o/jogo/
+```
+
+Ritmo do jogo (`Fonte/ps2/ritmo.c`: quantos quadros desenhar), simulado com os tempos medidos no console: no 4:3
+desenha quase todos, no 16:9 um sim, outro não, sem trancos, e o jogo anda junto com a TV:
+
+```sh
+cc -std=gnu11 -fsanitize=address,undefined -IFonte/ps2 Fonte/ps2/ritmo.c testes/ritmo.c -lm -o /tmp/smw-ritmo
+/tmp/smw-ritmo
 ```
 
 Gravador: o núcleo no Node 18+ (precisa de Python 3 com pycdlib: a ISO é comparada byte a byte com a do pycdlib)

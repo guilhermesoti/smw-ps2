@@ -48,45 +48,29 @@ int main(int argc, char **argv) {
   apaga("SMW.CFG");
   smw_read_config(&o);
   CONFERE(o.tela == SMW_OPT_ASK && o.video == SMW_OPT_ASK && o.idioma == SMW_OPT_ASK &&
-          o.suave == SMW_OPT_ASK && o.compat == SMW_OPT_ASK && o.scanlines == SMW_OPT_ASK);
+          o.compat == SMW_OPT_ASK);
 
   grava("SMW.CFG", "# Gravador SMW PS2\r\ntela=16:9\r\nvideo=480p\r\nidioma=en\r\n");
   smw_read_config(&o);
-  CONFERE(o.tela == 1 && o.video == SMW_VIDEO_480P && o.idioma == 1 && o.suave == SMW_OPT_ASK);
+  CONFERE(o.tela == 1 && o.video == SMW_VIDEO_480P && o.idioma == 1 && o.compat == SMW_OPT_ASK);
 
   grava("SMW.CFG", "  TELA = 4:3 \nVideo=240P\nidioma=PT\nlixo\n=\n#tela=16:9\nchave=valor\n");
   smw_read_config(&o);
   CONFERE(o.tela == 0 && o.video == SMW_VIDEO_240P && o.idioma == 0);
 
-  grava("SMW.CFG", "video=480i\nsuavizacao=media\n");
+  /* Suavizacao e scanlines sairam na v0.13.7: as chaves de arquivos antigos
+     sao ignoradas e o resto continua valendo. */
+  grava("SMW.CFG", "video=480i\nsuavizacao=media\nscanlines=sim\nidioma=en\n");
   smw_read_config(&o);
-  CONFERE(o.video == SMW_VIDEO_480I && o.suave == 1 && o.tela == SMW_OPT_ASK);
-
-  grava("SMW.CFG", "suavizacao=nao\n");
-  smw_read_config(&o);
-  CONFERE(o.suave == 0);
-  grava("SMW.CFG", "suavizacao=sim\n");
-  smw_read_config(&o);
-  CONFERE(o.suave == 2);
-
-  /* Scanlines (v0.13.5) */
-  grava("SMW.CFG", "scanlines=sim\n");
-  smw_read_config(&o);
-  CONFERE(o.scanlines == 1);
-  grava("SMW.CFG", "scanlines=desligadas\n");
-  smw_read_config(&o);
-  CONFERE(o.scanlines == 0);
-  grava("SMW.CFG", "scanlines=talvez\n");
-  smw_read_config(&o);
-  CONFERE(o.scanlines == SMW_OPT_ASK);
+  CONFERE(o.video == SMW_VIDEO_480I && o.idioma == 1 && o.tela == SMW_OPT_ASK && o.compat == SMW_OPT_ASK);
 
   grava("SMW.CFG", "tela=perguntar\nvideo=perguntar\nidioma=portugues");
   smw_read_config(&o);
   CONFERE(o.tela == SMW_OPT_ASK && o.video == SMW_OPT_ASK && o.idioma == 0);
 
-  grava("SMW.CFG", "tela=21:9\nvideo=1080p\nsuavizacao=talvez\n");
+  grava("SMW.CFG", "tela=21:9\nvideo=1080p\nsaida=640\n");
   smw_read_config(&o);
-  CONFERE(o.tela == SMW_OPT_ASK && o.video == SMW_OPT_ASK && o.suave == SMW_OPT_ASK);
+  CONFERE(o.tela == SMW_OPT_ASK && o.video == SMW_OPT_ASK && o.compat == SMW_OPT_ASK);
 
   grava("SMW.CFG", "");
   smw_read_config(&o);
@@ -97,21 +81,20 @@ int main(int argc, char **argv) {
   smw_options_clear(&o);
   CONFERE(!smw_read_saved_options(&o));
   CONFERE(o.tela == SMW_OPT_ASK && o.video == SMW_OPT_ASK);
-  SmwOptions escolha = {.tela = 1, .video = SMW_VIDEO_480I, .idioma = 0, .suave = 1,
-                        .compat = SMW_OPT_ASK, .scanlines = 0};
+  SmwOptions escolha = {.tela = 1, .video = SMW_VIDEO_480I, .idioma = 0, .compat = SMW_OPT_ASK};
   CONFERE(smw_save_options(&escolha));
   char texto[128];
   le("SMW.OPT", texto, sizeof(texto));
-  CONFERE(strcmp(texto, "tela=16:9\nvideo=480i\nsuavizacao=media\nscanlines=nao\nidioma=pt\n") == 0);
+  CONFERE(strcmp(texto, "tela=16:9\nvideo=480i\nidioma=pt\n") == 0);
   smw_options_clear(&o);
   CONFERE(smw_read_saved_options(&o));
-  CONFERE(o.tela == 1 && o.video == SMW_VIDEO_480I && o.suave == 1 && o.idioma == 0 &&
-          o.compat == SMW_OPT_ASK && o.scanlines == 0);
-  escolha.scanlines = 1;
-  CONFERE(smw_save_options(&escolha));
+  CONFERE(o.tela == 1 && o.video == SMW_VIDEO_480I && o.idioma == 0 && o.compat == SMW_OPT_ASK);
+
+  /* SMW.OPT da v0.13.6, com suavizacao e scanlines: o resto vale */
+  grava("SMW.OPT", "tela=4:3\nvideo=240p\nsuavizacao=forte\nscanlines=sim\nidioma=en\n");
   smw_options_clear(&o);
-  CONFERE(smw_read_saved_options(&o) && o.scanlines == 1);
-  escolha.scanlines = 0;
+  CONFERE(smw_read_saved_options(&o));
+  CONFERE(o.tela == 0 && o.video == SMW_VIDEO_240P && o.idioma == 1 && o.compat == SMW_OPT_ASK);
 
   /* Saida de 512 colunas (TV que nao aceitou a de 1280) */
   escolha.compat = 1;
@@ -125,18 +108,16 @@ int main(int argc, char **argv) {
   grava("SMW.OPT", "tela=4:3\n");
   smw_options_clear(&o);
   CONFERE(smw_read_saved_options(&o));
-  CONFERE(o.tela == 0 && o.video == SMW_OPT_ASK && o.suave == SMW_OPT_ASK && o.idioma == SMW_OPT_ASK &&
-          o.scanlines == SMW_OPT_ASK);
+  CONFERE(o.tela == 0 && o.video == SMW_OPT_ASK && o.idioma == SMW_OPT_ASK && o.compat == SMW_OPT_ASK);
 
   /* Troca no jogo: so grava junto com o proximo save */
-  SmwOptions jogo = {.tela = 0, .video = SMW_VIDEO_240P, .idioma = 1, .suave = 2,
-                     .compat = SMW_OPT_ASK, .scanlines = 1};
+  SmwOptions jogo = {.tela = 0, .video = SMW_VIDEO_240P, .idioma = 1, .compat = SMW_OPT_ASK};
   smw_options_changed(&jogo);
   le("SMW.OPT", texto, sizeof(texto));
   CONFERE(strcmp(texto, "tela=4:3\n") == 0);
   CONFERE(smw_save_progress(sram));
   le("SMW.OPT", texto, sizeof(texto));
-  CONFERE(strcmp(texto, "tela=4:3\nvideo=240p\nsuavizacao=forte\nscanlines=sim\nidioma=en\n") == 0);
+  CONFERE(strcmp(texto, "tela=4:3\nvideo=240p\nidioma=en\n") == 0);
   /* Save seguinte sem troca nao mexe no SMW.OPT */
   grava("SMW.OPT", "tela=16:9\n");
   CONFERE(smw_save_progress(sram));

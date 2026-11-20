@@ -1,7 +1,7 @@
 /* Telas da abertura: carregando, AJUSTES e o teste do modo de video.
  *
  * AJUSTES troca a antiga tela de texto do comeco: video (240p, 480i ou
- * 480p), tela (4:3 ou 16:9), suavizacao, scanlines e idioma, com o jogo comecando
+ * 480p), tela (4:3 ou 16:9) e idioma, com o jogo comecando
  * sozinho quando os ajustes ja estao salvos. Mesmo visual da tela de apoio
  * (intro.c): fundo azul com estrelas e moldura dourada dupla.
  *
@@ -171,62 +171,50 @@ static void seta(int x, int cy, int dir, uint32_t cor) {
 /* ---- AJUSTES ---- */
 
 typedef struct {
-  const char *titulo, *jogar, *rotulo[AJUSTE_JOGAR], *suave[3], *scan[2], *idioma[2], *rodape, *contagem, *video_txt[3][2],
-      *tela_txt[2], *redondo[2], *suave_txt[3], *suave_bom, *suave_ve, *scan_txt[2], *scan_480, *scan_jogo,
-      *idioma_txt[2], *idioma_tela, *jogar_txt[3], *aplica;
+  const char *titulo, *jogar, *rotulo[AJUSTE_JOGAR], *idioma[2], *rodape, *contagem, *video_txt[3][2],
+      *tela_txt[2], *redondo[2], *idioma_txt[2], *idioma_tela, *jogar_txt[3], *aplica;
 } Textos;
 
 static const Textos kTextos[2] = {
   {
-    "AJUSTES", "JOGAR", {"Vídeo", "Tela", "Suavização", "Scanlines", "Idioma"},
-    {"Desligada", "Média", "Forte"}, {"Desligadas", "Ligadas"}, {"Português", "English"},
+    "AJUSTES", "JOGAR", {"Vídeo", "Tela", "Idioma"}, {"Português", "English"},
     "Direcional: escolhe e muda  -  X: joga", "Começa em %d s. Aperte um botão para mudar.",
     {{"240p: cabo AV, em qualquer TV.", "O mais nítido, igual ao SNES."},
      {"480p: cabo componente ou adaptador HDMI.", "No cabo AV não aparece; volta sozinho."},
      {"480i: se a TV não mostrar o 240p.", "Em geral fica menos nítido que o 240p."}},
     {"4:3: TV de tubo ou em 4:3.", "16:9: mostra mais da fase."},
     {"O círculo fica redondo", "com a TV no modo certo."},
-    {"Pixels nítidos, como no cartucho.", "Pixels um pouco mais macios.", "Pixels macios, sem serrilhado."},
-    "No cabo AV a TV já deixa macio.", "Esta tela já mostra o efeito.",
-    {"Sem linhas escuras: imagem cheia.", "Linhas escuras, como numa TV de tubo."},
-    "Só no 480p (componente ou HDMI).", "No jogo, L2+R2+Quadrado troca.",
     {"Textos do jogo em português.", "Textos do jogo em inglês (original)."}, "Esta tela também muda.",
-    {"X ou START começa. Fica tudo salvo.", "No jogo, L2+R2+X troca a tela e",
-     "L2+R2+Círculo troca a suavização."},
+    {"X ou START começa. Fica tudo salvo.", "No jogo, L2+R2+X troca a tela",
+     "(4:3 ou 16:9) e mostra qual ficou."},
     "Muda quando você apertar X.",
   },
   {
-    "SETTINGS", "PLAY", {"Video", "Screen", "Smoothing", "Scanlines", "Language"},
-    {"Off", "Medium", "Strong"}, {"Off", "On"}, {"Português", "English"},
+    "SETTINGS", "PLAY", {"Video", "Screen", "Language"}, {"Português", "English"},
     "D-pad: choose and change  -  X: play", "Starts in %d s. Press a button to change.",
     {{"240p: AV cable, any TV.", "The sharpest, like the SNES."},
      {"480p: component cable or HDMI adapter.", "Not on the AV cable; it comes back."},
      {"480i: if the TV does not show 240p.", "Usually softer than 240p."}},
     {"4:3: CRT or TV set to 4:3.", "16:9: more of the level."},
     {"The circle is round", "in the right TV mode."},
-    {"Sharp pixels, like the cartridge.", "Slightly softer pixels.", "Soft pixels, no jagged edges."},
-    "Over AV the TV already softens it.", "This screen already shows it.",
-    {"No dark lines: full picture.", "Dark lines, like a CRT TV."},
-    "Only in 480p (component or HDMI).", "In game, L2+R2+SQUARE changes it.",
     {"Game texts in Portuguese.", "Game texts in English (original)."}, "This screen changes too.",
     {"X or START begins. Everything is saved.", "In game, L2+R2+X changes the screen",
-     "and L2+R2+CIRCLE the smoothing."},
+     "(4:3 or 16:9) and shows which one."},
     "Changes when you press X.",
   },
 };
 
-/* Cinco linhas de ajuste, o botao JOGAR, o painel de ajuda e o rodape. */
-enum { LX = 28, LW = W - 56, LINHA_Y = 40, LINHA_H = 16, LINHA_PASSO = 17, VALOR_X = 152,
-       JOGAR_Y = LINHA_Y + AJUSTE_JOGAR * LINHA_PASSO + 3, PAINEL_Y = JOGAR_Y + LINHA_H + 3,
-       PAINEL_H = 40, RODAPE_Y = PAINEL_Y + PAINEL_H + 4 };
+/* Tres linhas de ajuste, o botao JOGAR, o painel de ajuda e o rodape
+   (v0.13.7: sem as linhas de suavizacao e scanlines, mais espacadas). */
+enum { LX = 28, LW = W - 56, LINHA_Y = 48, LINHA_H = 16, LINHA_PASSO = 21, VALOR_X = 152,
+       JOGAR_Y = LINHA_Y + AJUSTE_JOGAR * LINHA_PASSO + 6, PAINEL_Y = JOGAR_Y + LINHA_H + 8,
+       PAINEL_H = 40, RODAPE_Y = PAINEL_Y + PAINEL_H + 8 };
 
 static const char *valor(const Textos *t, const Ajustes *a, int linha) {
   static const char *const videos[] = {"240p", "480p", "480i"};
   switch (linha) {
   case AJUSTE_VIDEO: return videos[a->video];
   case AJUSTE_TELA: return a->tela ? "16:9" : "4:3";
-  case AJUSTE_SUAVE: return t->suave[a->suave];
-  case AJUSTE_SCAN: return t->scan[a->scanlines == 1];
   default: return t->idioma[a->idioma];
   }
 }
@@ -280,16 +268,6 @@ static void painel(const Textos *t, const Ajustes *a) {
     texto(x + 98, l3, t->redondo[1], TEXTO, 1);
     break;
   }
-  case AJUSTE_SUAVE:
-    texto(tx, l1, t->suave_txt[a->suave], BRANCO, 1);
-    texto(tx, l2, t->suave_bom, TEXTO, 1);
-    texto(tx, l3, t->suave_ve, CINZA, 1);
-    break;
-  case AJUSTE_SCAN:
-    texto(tx, l1, t->scan_txt[a->scanlines == 1], BRANCO, 1);
-    texto(tx, l2, t->scan_480, TEXTO, 1);
-    texto(tx, l3, t->scan_jogo, CINZA, 1);
-    break;
   case AJUSTE_IDIOMA:
     texto(tx, l1, t->idioma_txt[a->idioma], BRANCO, 1);
     texto(tx, l2, t->idioma_tela, TEXTO, 1);

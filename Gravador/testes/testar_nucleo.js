@@ -51,9 +51,9 @@ const espera = async (promessa, codigo) => {
 
   /* SMW.CFG */
   const cfg = N.gerarCfg({ tela: '16:9', video: '480p', suavizacao: 'media', idioma: 'en' });
-  confere(/\r\ntela=16:9\r\nvideo=480p\r\nsuavizacao=media\r\nidioma=en\r\n$/.test(cfg), 'SMW.CFG com os ajustes');
+  confere(/\r\ntela=16:9\r\nvideo=480p\r\nidioma=en\r\n$/.test(cfg) && !/suaviz/.test(cfg), 'SMW.CFG com os ajustes (sem suavização desde a v0.13.7)');
   confere(/video=480i\r\n/.test(N.gerarCfg({ video: '480i' })), 'SMW.CFG com 480i');
-  confere(/tela=perguntar\r\nvideo=perguntar\r\nsuavizacao=perguntar\r\nidioma=pt/.test(N.gerarCfg({ tela: 'x', suavizacao: 'y' })), 'SMW.CFG com valores inválidos volta ao padrão');
+  confere(/tela=perguntar\r\nvideo=perguntar\r\nidioma=pt/.test(N.gerarCfg({ tela: 'x', idioma: 'y' })), 'SMW.CFG com valores inválidos volta ao padrão');
 
   /* ISO igual à do pycdlib */
   const arquivosIso = [

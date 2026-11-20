@@ -2,6 +2,7 @@
 #include "formato.h"
 #include "intro.h"
 #include "registro.h"
+#include "ritmo.h"
 #include "src/ptbr.h"
 #include <audsrv.h>
 #include <debug.h>
@@ -20,7 +21,7 @@
 #include <timer.h>
 #include <unistd.h>
 
-#define SMW_VERSAO "0.13.6"
+#define SMW_VERSAO "0.13.7"
 
 #define DECLARE_DRIVER(n) extern unsigned char n##_irx[]; extern unsigned int size_##n##_irx
 DECLARE_DRIVER(bdm);
@@ -50,25 +51,26 @@ static const char *card_drivers = "nenhum";
    (tested on a CRT and on a flat TV). 480i: the same 224 lines shown in both
    fields of an interlaced picture, for TVs that do not show 240p; flat TVs
    deinterlace it and it comes out softer. 480p: component or HDMI adapter; there each
-   SNES line becomes two TV lines, and optional scanlines (off by default,
-   AJUSTES or L2+R2+Square) darken every second line like a CRT fed with
-   RGB. suave: 0 sharp (default: over the AV
-   cable the TV already softens the picture), 1 medium, 2 strong (GS bilinear
-   filter). */
-static struct { int modo; bool p480, scanlines, wide, compat; int suave; } video = {
-    SMW_VIDEO_240P, false, false, false, false, 0};
+   SNES line becomes two TV lines. Always sharp pixels: the smoothing (GS
+   bilinear filter) and the 480p scanlines were removed in v0.13.7 (on the
+   console both looked worse than the sharp picture). */
+static struct { int modo; bool p480, wide, compat; } video = {SMW_VIDEO_240P, false, false, false};
+
+/* EE Count (cpu_ticks) runs at 294.912 MHz; it wraps every 14.5 s. */
+enum { EE_HZ = 294912000, EE_TICKS_PER_TENTH_MS = EE_HZ / 10000 };
 static SmwOptions opcoes;  /* what is saved in SMW.OPT */
 /* Image columns and row length in pixels: 256/256 (4:3) or 342/384 (16:9). */
 static unsigned screen_w = SMW_WIDTH, screen_pitch = SMW_WIDTH;
 
 /* L2+R2 + Triangle: performance meter. Every 60 game frames it shows how
-   many were drawn and the average EE time of a frame with and without
-   drawing (game logic + PPU), not counting the wait for the TV. */
+   many were drawn (TELA), the average EE time of a drawn frame (DESENHO:
+   game logic + PPU), of sending it to the GS (ENVIO, v0.13.7) and of a frame
+   that was not drawn (LOGICA), not counting the wait for the TV. */
 static struct {
   bool on;
   unsigned steps, drawn;
-  uint32_t draw_ticks, logic_ticks;
-  char text[64];
+  uint32_t draw_ticks, send_ticks, logic_ticks;
+  char text[80];
 } perf;
 
 /* Fatal errors use the PS2SDK text screen, which needs no other video. */
@@ -339,12 +341,18 @@ static void som_menu(void) {
 /* One frame of a settings screen (already drawn in quadro). */
 static void mostra_quadro(int bright) {
   som_menu();
-  smw_mostra_quadro(gs, &quadro_tex, quadro, video.p480, bright, video.suave);
+  smw_mostra_quadro(gs, &quadro_tex, quadro, video.p480, bright);
+}
+
+/* Width in pixels of a draw_text_scaled message: 4 per letter + 2. */
+static unsigned text_width(const char *msg, unsigned scale) {
+  return ((unsigned)strlen(msg) * 4 + 2) * scale;
 }
 
 /* Small on-screen messages: save errors (codes in the LEIA-ME), where the
-   progress was loaded from and save confirmations. 3x5 capitals. */
-static void draw_text(unsigned x, unsigned y, const char *msg, uint32_t bg) {
+   progress was loaded from and save confirmations. 3x5 capitals, each dot
+   scale x scale pixels. */
+static void draw_text_scaled(unsigned x, unsigned y, const char *msg, uint32_t bg, unsigned scale) {
   static const char letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:.";
   static const unsigned char glyph[][5] = {
     {2,5,7,5,5},{6,5,6,5,6},{3,4,4,4,3},{6,5,5,5,6},{7,4,6,4,7},{7,4,6,4,4},{3,4,5,5,3},
@@ -355,19 +363,49 @@ static void draw_text(unsigned x, unsigned y, const char *msg, uint32_t bg) {
     {7,4,7,1,7},{7,4,7,5,7},{7,1,1,1,1},{7,5,7,5,7},{7,5,7,1,7},
     {0,0,7,0,0},{0,2,0,2,0},{0,0,0,0,2}
   };
-  unsigned width = (unsigned)strlen(msg) * 4 + 2;
+  const unsigned s = scale;
+  if (!s || x >= screen_w || y + 7 * s > SMW_HEIGHT) return;
+  unsigned width = text_width(msg, s);
   if (x + width > screen_w) width = screen_w - x;
-  for (unsigned row = 0; row < 7; ++row)
+  for (unsigned row = 0; row < 7 * s; ++row)
     for (unsigned col = 0; col < width; ++col)
       pixels[(y + row) * screen_pitch + x + col] = bg;
-  for (unsigned i = 0; msg[i] && x + 1 + i*4 + 3 <= screen_w; ++i) {
+  for (unsigned i = 0; msg[i] && x + (1 + i*4 + 3) * s <= screen_w; ++i) {
     const char *at = msg[i] == ' ' ? NULL : strchr(letters, msg[i]);
     if (!at) continue;  /* unknown characters are left blank */
     const unsigned char *g = glyph[at - letters];
     for (unsigned row = 0; row < 5; ++row)
-      for (unsigned col = 0; col < 3; ++col)
-        if (g[row] & (4 >> col)) pixels[(y + 1 + row) * screen_pitch + x + 1 + i*4 + col] = 0x00ffffff;
+      for (unsigned col = 0; col < 3; ++col) {
+        if (!(g[row] & (4 >> col))) continue;
+        uint32_t *dot = &pixels[(y + (1 + row) * s) * screen_pitch + x + (1 + i*4 + col) * s];
+        for (unsigned dy = 0; dy < s; ++dy)
+          for (unsigned dx = 0; dx < s; ++dx) dot[dy * screen_pitch + dx] = 0x00ffffff;
+      }
   }
+}
+
+static void draw_text(unsigned x, unsigned y, const char *msg, uint32_t bg) {
+  draw_text_scaled(x, y, msg, bg, 1);
+}
+
+/* v0.13.7: "TELA 4:3" or "TELA 16:9" for 5 s when the game starts and after
+   L2+R2+X, at double size under the status bar, so a photo of the TV shows
+   which mode it is (EE ticks; 5 s fits before the counter wraps). */
+static const uint32_t ASPECT_NOTICE_TICKS = 5u * EE_HZ;
+static bool aspect_notice;
+static uint32_t aspect_notice_start;
+static void show_aspect_notice(void) {
+  aspect_notice = true;
+  aspect_notice_start = cpu_ticks();
+}
+static void draw_aspect_notice(void) {
+  if (!aspect_notice) return;
+  if (cpu_ticks() - aspect_notice_start > ASPECT_NOTICE_TICKS) {
+    aspect_notice = false;
+    return;
+  }
+  const char *text = video.wide ? "TELA 16:9" : "TELA 4:3";
+  draw_text_scaled((screen_w - text_width(text, 2)) / 2, 44, text, 0x00402000, 2);
 }
 
 /* "CARREGADO: ...", "SALVO: ..." and similar, for 4 seconds. */
@@ -382,13 +420,17 @@ static void draw_notice(void) {
   draw_text(8, SMW_HEIGHT - 16, text, bad ? 0x00000070 : 0x00104010);
 }
 
-static void present(void) {
+/* Sends the frame to the GS and waits for the TV. Returns the EE ticks
+   spent before the wait (text, cache, GS work). */
+static uint32_t present(void) {
+  const uint32_t start = cpu_ticks();
   if (smw_save_error) {
     char msg[64];
     snprintf(msg, sizeof(msg), "ERRO AO SALVAR %s", smw_save_error_text());
     draw_text(8, 8, msg, 0x00000070);
   }
   draw_notice();
+  draw_aspect_notice();
   if (perf.on && perf.text[0]) draw_text(8, SMW_HEIGHT - 26, perf.text, 0x00402000);
   SyncDCache(pixels, pixels + screen_pitch * SMW_HEIGHT);
   gs->PrimAlphaEnable = GS_SETTING_OFF;
@@ -400,19 +442,12 @@ static void present(void) {
   float height = video.p480 ? 2.0f * SMW_HEIGHT : (float)gs->Height;
   /* 16:9: 342 columns in the same 4:3 picture; a TV in wide mode stretches
      it back to the right proportions. */
-  smw_sprite_suave(gs, &texture, 0, top, gs->Width, top + height, screen_w, SMW_HEIGHT, video.suave);
-  if (video.p480 && video.scanlines) {
-    /* Scanlines: dest + (black - dest) * alpha / 128 */
-    gsKit_set_primalpha(gs, GS_SETREG_ALPHA(0, 1, 0, 1, 0), 0);
-    gs->PrimAlphaEnable = GS_SETTING_ON;
-    for (int line = 0; line < SMW_HEIGHT; ++line)
-      gsKit_prim_sprite(gs, 0, top + 2 * line + 1, gs->Width, top + 2 * line + 2, 2,
-                        GS_SETREG_RGBAQ(0, 0, 0, 0x50, 0));
-    gs->PrimAlphaEnable = GS_SETTING_OFF;
-  }
+  smw_desenha_textura(gs, &texture, 0, top, gs->Width, top + height, screen_w, SMW_HEIGHT);
   gsKit_queue_exec(gs);
   gsKit_finish();
+  const uint32_t ticks = cpu_ticks() - start;
   gsKit_sync_flip(gs);
+  return ticks;
 }
 
 /* The TV refresh drives the game. Audio follows it: each frame asks the
@@ -441,34 +476,23 @@ static void set_aspect(bool wide) {
   texture.TBW = screen_pitch / 64;
 }
 
-/* L2+R2 + Square: scanlines on/off (only in 480p). L2+R2 + Circle: smoothing
-   (off, medium, strong).
-   L2+R2 + Triangle: performance meter. L2+R2 + Cross: 4:3 / 16:9. While
-   L2+R2 are held the pad sends nothing to the game. */
+/* L2+R2 + Triangle: performance meter. L2+R2 + Cross: 4:3 / 16:9 (shows
+   "TELA 4:3" / "TELA 16:9" for 5 s). While L2+R2 are held the pad sends
+   nothing to the game. Square and Circle (scanlines and smoothing until
+   v0.13.6) do nothing now. */
 static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
   uint16_t pressed = raw & ~*previous;
   *previous = raw;
   if ((raw & (PAD_L2 | PAD_R2)) != (PAD_L2 | PAD_R2)) return game;
-  /* Only in 480p, where the change shows; elsewhere it would change a saved
-     setting without any visible effect. */
-  if ((pressed & PAD_SQUARE) && video.p480) {
-    video.scanlines = !video.scanlines;
-    opcoes.scanlines = video.scanlines;
-    smw_options_changed(&opcoes);  /* saved with the next game save */
-    smw_log("L2+R2+QUADRADO: scanlines %s", video.scanlines ? "ligadas" : "desligadas");
-  }
-  if (pressed & PAD_CIRCLE) {
-    video.suave = (video.suave + 1) % 3;
-    opcoes.suave = video.suave;
-    smw_options_changed(&opcoes);  /* saved with the next game save */
-    smw_log("L2+R2+CIRCULO: suavizacao %s", video.suave == 0 ? "desligada" : video.suave == 1 ? "media" : "forte");
-  }
   if (pressed & PAD_TRIANGLE) {
     perf.on = !perf.on, perf.text[0] = 0;
+    perf.steps = perf.drawn = 0;  /* starts a new window */
+    perf.draw_ticks = perf.send_ticks = perf.logic_ticks = 0;
     smw_log("L2+R2+TRIANGULO: medidor %s", perf.on ? "ligado" : "desligado");
   }
   if (pressed & PAD_CROSS) {
     set_aspect(!video.wide);
+    show_aspect_notice();
     opcoes.tela = video.wide;
     smw_options_changed(&opcoes);  /* fica gravado junto com o proximo save */
     smw_log("L2+R2+X: tela %s", video.wide ? "16:9" : "4:3");
@@ -476,26 +500,32 @@ static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
   return 0;
 }
 
-/* EE Count runs at 294.912 MHz: 29491 ticks = 0.1 ms. */
-static void perf_step(bool draw, uint32_t ticks) {
-  ++perf.steps;
-  if (draw) ++perf.drawn, perf.draw_ticks += ticks;
-  else perf.logic_ticks += ticks;
+/* One loop of the main loop: skipped game frames (logic), the drawn one and
+   its sending to the GS. TELA is the frames drawn per 60 game frames (a
+   window can end at 61 or 62, when a loop ran 2 or 3 of them). */
+static void perf_loop(unsigned skipped, uint32_t logic, uint32_t draw, uint32_t send) {
+  if (!perf.on) return;
+  perf.steps += skipped + 1;
+  ++perf.drawn;
+  perf.logic_ticks += logic, perf.draw_ticks += draw, perf.send_ticks += send;
   if (perf.steps < 60) return;
-  unsigned skipped = perf.steps - perf.drawn;
-  unsigned d = perf.drawn ? perf.draw_ticks / perf.drawn / 29491 : 0;
-  if (skipped) {
-    unsigned l = perf.logic_ticks / skipped / 29491;
-    snprintf(perf.text, sizeof(perf.text), "TELA %u - DESENHO %u.%u MS - LOGICA %u.%u MS",
-             perf.drawn, d / 10, d % 10, l / 10, l % 10);
-  } else {
-    snprintf(perf.text, sizeof(perf.text), "TELA %u - DESENHO %u.%u MS", perf.drawn, d / 10, d % 10);
+  unsigned not_drawn = perf.steps - perf.drawn;
+  unsigned shown = (perf.drawn * 60 + perf.steps / 2) / perf.steps;
+  unsigned d = perf.draw_ticks / perf.drawn / EE_TICKS_PER_TENTH_MS;
+  unsigned e = perf.send_ticks / perf.drawn / EE_TICKS_PER_TENTH_MS;
+  int n = snprintf(perf.text, sizeof(perf.text), "TELA %u - DESENHO %u.%u MS - ENVIO %u.%u MS",
+                   shown, d / 10, d % 10, e / 10, e % 10);
+  if (not_drawn && n > 0 && (size_t)n < sizeof(perf.text)) {
+    unsigned l = perf.logic_ticks / not_drawn / EE_TICKS_PER_TENTH_MS;
+    snprintf(perf.text + n, sizeof(perf.text) - (size_t)n, " - LOGICA %u.%u MS", l / 10, l % 10);
   }
   perf.steps = perf.drawn = 0;
-  perf.draw_ticks = perf.logic_ticks = 0;
+  perf.draw_ticks = perf.send_ticks = perf.logic_ticks = 0;
 }
 
-static void step_game(bool draw) {
+/* One game frame (pads, game logic and sound; PPU too when draw). Returns
+   the EE ticks of the game frame itself. */
+static uint32_t step_game(bool draw) {
   static uint16_t previous[2];
   unsigned connected = 0;
   uint16_t raw1 = 0, raw2 = 0;
@@ -505,11 +535,12 @@ static void step_game(bool draw) {
   int samples = samples_for_next_frame();
   uint32_t start = cpu_ticks();
   smw_frame(p1, p2, stable_pads(connected), stereo, samples, draw);
-  perf_step(draw, cpu_ticks() - start);
+  uint32_t ticks = cpu_ticks() - start;
   if (sound) {
     int bytes = samples * 4;
     if (audsrv_available() >= bytes) audsrv_play_audio((const char *)stereo, bytes);
   }
+  return ticks;
 }
 
 /* EE Count ticks between two vertical blanks, measured on this console. */
@@ -518,7 +549,7 @@ static uint32_t measure_field(void) {
   uint32_t start = cpu_ticks();
   for (int i = 0; i < 16; ++i) gsKit_vsync_wait();
   uint32_t field = (cpu_ticks() - start) / 16;
-  unsigned hz100 = field ? (unsigned)(29491200000ull / field) : 0;
+  unsigned hz100 = field ? (unsigned)(EE_HZ * 100ull / field) : 0;
   smw_log("TV: um quadro = %lu ciclos do EE (%u.%02u por segundo)", (unsigned long)field,
           hz100 / 100, hz100 % 100);
   /* 294.912 MHz / 59.83 Hz (NTSC 240p); used if the measure looks wrong. */
@@ -555,8 +586,7 @@ static int outro_video(int v, int dir) {
    jogador apertar um botao. Volta com X ou START (ou no fim da contagem). */
 static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const char *situacao) {
   Ajustes a = {.linha = contagem ? AJUSTE_JOGAR : AJUSTE_VIDEO, .video = o->video, .tela = o->tela,
-               .suave = o->suave, .scanlines = o->scanlines == 1, .idioma = o->idioma,
-               .segundos = -1, .aviso = aviso, .situacao = situacao};
+               .idioma = o->idioma, .segundos = -1, .aviso = aviso, .situacao = situacao};
   unsigned held = botoes();
   int saindo = -1;
   bool sozinho = false;
@@ -574,8 +604,6 @@ static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const 
       } else if (dir && a.linha != AJUSTE_JOGAR) {
         if (a.linha == AJUSTE_VIDEO) a.video = outro_video(a.video, dir);
         if (a.linha == AJUSTE_TELA) a.tela = !a.tela;
-        if (a.linha == AJUSTE_SUAVE) a.suave = (a.suave + 3 + dir) % 3;
-        if (a.linha == AJUSTE_SCAN) a.scanlines = !a.scanlines;
         if (a.linha == AJUSTE_IDIOMA) a.idioma = !a.idioma;
         a.aviso = NULL;
         smw_blip(sound);
@@ -584,7 +612,6 @@ static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const 
     if (saindo < 0 && contagem && frame >= 5 * 60) saindo = frame, sozinho = true;
     a.segundos = contagem ? 5 - frame / 60 : -1;
     formato_ajustes(quadro, msx, &a, frame);
-    video.suave = a.suave;  /* the screen itself shows the smoothing */
     int bright = frame < 15 ? frame * 128 / 15 : 128;
     if (saindo >= 0) {
       bright = 128 - (frame - saindo) * 128 / 15;
@@ -592,8 +619,7 @@ static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const 
     }
     mostra_quadro(bright < 0 ? 0 : bright);
   }
-  o->video = a.video, o->tela = a.tela, o->suave = a.suave, o->idioma = a.idioma;
-  o->scanlines = a.scanlines;
+  o->video = a.video, o->tela = a.tela, o->idioma = a.idioma;
   return sozinho;
 }
 
@@ -614,23 +640,18 @@ static bool confirma_video(int idioma) {
   return false;
 }
 
-/* "tela=4:3 video=240p suavizacao=nao scanlines=nao idioma=pt saida=1280";
-   "-" = sem valor. */
+/* "tela=4:3 video=240p idioma=pt saida=1280"; "-" = sem valor. */
 static void texto_opcoes(const SmwOptions *o, char *out, size_t size) {
-  static const char *const suaves[] = {"nao", "media", "forte"};
-  snprintf(out, size, "tela=%s video=%s suavizacao=%s scanlines=%s idioma=%s saida=%s",
+  snprintf(out, size, "tela=%s video=%s idioma=%s saida=%s",
            o->tela < 0 ? "-" : o->tela ? "16:9" : "4:3",
            o->video < 0 ? "-" : nome_video(o->video),
-           o->suave < 0 || o->suave > 2 ? "-" : suaves[o->suave],
-           o->scanlines < 0 ? "-" : o->scanlines ? "sim" : "nao",
            o->idioma < 0 ? "-" : o->idioma ? "en" : "pt",
            o->compat < 0 ? "-" : o->compat ? "512" : "1280");
 }
 
 static bool mesmas_opcoes(const SmwOptions *a, const SmwOptions *b) {
   return a->tela == b->tela && a->video == b->video && a->idioma == b->idioma &&
-         a->suave == b->suave && (a->compat == 1) == (b->compat == 1) &&
-         (a->scanlines == 1) == (b->scanlines == 1);
+         (a->compat == 1) == (b->compat == 1);
 }
 
 int main(int argc, char **argv) {
@@ -694,18 +715,15 @@ int main(int argc, char **argv) {
   smw_log("SMW.CFG (Gravador): %s", msg);
   texto_opcoes(&salvo, msg, sizeof(msg));
   smw_log("SMW.OPT (escolha no PS2): %s", tem_opt ? msg : "nao existe");
-  opcoes = (SmwOptions){.tela = 0, .video = SMW_VIDEO_240P, .idioma = 0, .suave = 0, .compat = 0,
-                        .scanlines = 0};
+  opcoes = (SmwOptions){.tela = 0, .video = SMW_VIDEO_240P, .idioma = 0, .compat = 0};
   const SmwOptions *fontes[2] = {&cfg, &salvo};
   for (int i = 0; i < 2; ++i) {
     if (fontes[i]->tela >= 0) opcoes.tela = fontes[i]->tela;
     if (fontes[i]->video >= 0) opcoes.video = fontes[i]->video;
     if (fontes[i]->idioma >= 0) opcoes.idioma = fontes[i]->idioma;
-    if (fontes[i]->suave >= 0) opcoes.suave = fontes[i]->suave;
     if (fontes[i]->compat >= 0) opcoes.compat = fontes[i]->compat;
-    if (fontes[i]->scanlines >= 0) opcoes.scanlines = fontes[i]->scanlines;
   }
-  const bool conhecido = salvo.video >= 0 && salvo.tela >= 0 && salvo.suave >= 0;
+  const bool conhecido = salvo.video >= 0 && salvo.tela >= 0;
   const SmwOptions inicio = opcoes;
   const char *lugar = smw_save_location();
   char situacao[64], aviso_texto[64];
@@ -714,7 +732,6 @@ int main(int argc, char **argv) {
   const char *aviso = NULL;
   bool contagem = conhecido;
   for (;;) {
-    video.suave = opcoes.suave;
     bool sozinho = tela_ajustes(&opcoes, contagem, aviso, situacao);
     texto_opcoes(&opcoes, msg, sizeof(msg));
     smw_log("AJUSTES: %s (%s)", msg, sozinho ? "contagem de 5 s" : "o jogador escolheu");
@@ -759,28 +776,37 @@ int main(int argc, char **argv) {
     smw_log("SMW.OPT: sem mudanca");
   smw_log_grava();
   g_ptbr = opcoes.idioma != 1;
-  video.suave = opcoes.suave;
-  video.scanlines = opcoes.scanlines == 1;
 
-  smw_intro(gs, video.p480, sound, SMW_VERSAO, video.suave);
+  smw_intro(gs, video.p480, sound, SMW_VERSAO);
   set_aspect(opcoes.tela == 1);
   const uint32_t field = measure_field();
   smw_log("Jogo comecou.");
   smw_log_fixa();
+  /* The TV drives the game: each loop runs the frames not drawn, the drawn
+     one, sends it to the GS and ends at the TV's frame change. ritmo.c
+     decides how many frames go without drawing (all are drawn when one fits
+     in a TV frame; one in two when it does not), keeping the game, and so
+     the sound, at the TV's pace. */
+  Ritmo ritmo;
+  ritmo_inicia(&ritmo);
+  show_aspect_notice();
   uint32_t last = cpu_ticks();
-  int pending = 0, debt = 0;
+  int pending = 0;
   for (;;) {
-    /* If the previous image took more than one TV refresh, catch the game
-       up without drawing (at most 2 frames), so speed and music stay right. */
-    for (int i = 0; i < pending; ++i) step_game(false);
-    step_game(true);
-    present();
+    uint32_t logic = 0;
+    for (int i = 0; i < pending; ++i) logic += step_game(false);
+    const uint32_t t0 = cpu_ticks();
+    const uint32_t draw = step_game(true);
+    const uint32_t t1 = cpu_ticks();
+    const uint32_t send = present();
+    perf_loop((unsigned)pending, logic, draw, send);
     uint32_t now = cpu_ticks();
     int fields = (int)((now - last + field / 2) / field);
     last = now;
-    debt += fields - (1 + pending);
-    if (debt < 0) debt = 0;
-    if (debt > 6) debt = 0;  /* long pause (saving): resume, don't fast-forward */
-    pending = debt > 2 ? 2 : debt;
+    /* The cost given to ritmo is the whole drawn step (pads, sound to audsrv,
+       game and PPU: t1 - t0) plus the sending, i.e. everything a loop that
+       only draws must fit in a TV frame; the meter's DESENHO is the game and
+       PPU part alone. */
+    pending = ritmo_proxima(&ritmo, fields, pending + 1, (t1 - t0) + send, field);
   }
 }
