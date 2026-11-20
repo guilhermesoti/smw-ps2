@@ -459,6 +459,30 @@ int main(void) {
     rmdir(hdd_dir);
   }
 
+  /* 11. Textos (v0.14): TRAPACAS.TXT de ate 16 KB e TRAPACAS.LIG no Memory
+         Card. O card_read recusava qualquer leitura maior que o card_buf
+         (4 KB), e o jogo nunca lia a lista nem as ligadas do cartao
+         (revisao do Codex): agora le em pedacos. */
+  fresh();
+  reboot();
+  {
+    static char grande[20000], lido[16385];
+    for (size_t i = 0; i < sizeof(grande); ++i) grande[i] = (char)('a' + i % 26);
+    mc_put(0, "/SMWPS2/TRAPACAS.TXT", grande, 10000);
+    char lugar[40] = "";
+    int n = smw_read_text("TRAPACAS.TXT", lido, (int)sizeof(lido), false, lugar, sizeof(lugar));
+    CHECK(n == 10000 && !memcmp(lido, grande, 10000) && !strcmp(lugar, "Memory Card 1 (SMWPS2)"));
+    mc_put(0, "/SMWPS2/TRAPACAS.TXT", grande, (int)sizeof(grande));
+    n = smw_read_text("TRAPACAS.TXT", lido, (int)sizeof(lido), false, NULL, 0);
+    CHECK(n == (int)sizeof(lido) && !memcmp(lido, grande, sizeof(lido)));
+    /* Pendrive recusando gravar: o LIG vai para o cartao e volta inteiro. */
+    usb_denied = 1;
+    CHECK(smw_write_text("TRAPACAS.LIG", grande, 9000));
+    usb_denied = 0;
+    n = smw_read_text("TRAPACAS.LIG", lido, 16384, false, NULL, 0);
+    CHECK(n == 9000 && !memcmp(lido, grande, 9000));
+  }
+
   printf("Saves entre midias: %d verificacoes OK.\n", checks);
   return 0;
 }

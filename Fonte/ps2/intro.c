@@ -3,12 +3,14 @@
  * sintetizado aqui mesmo), o titulo do port e a tela "Apoie o projeto" com o
  * QR code do Pix.
  *
- * Roda depois da tela AJUSTES (main.c), antes do jogo. Cada quadro e
- * desenhado pela CPU num quadro 320 x 224 e esticado na tela pelo GS, com a
- * mesma suavizacao do jogo.
+ * Roda depois da tela AJUSTES (main.c), antes do jogo. A vinheta e
+ * desenhada pela CPU num quadro 320 x 224 e esticada na tela pelo GS; o
+ * titulo e a tela de apoio, desde a v0.14, num quadro 256 x 224 (formato.c),
+ * por cima de cenas do jogo tiradas da ROM do jogador.
  * START pula a vinheta; na tela de apoio, X ou START (ou 20 s) seguem para
  * o jogo. Sem controle conectado, a abertura segue sozinha. */
 #include "intro.h"
+#include "formato.h"
 #include "intro_qr.h"
 #include <audsrv.h>
 #include <kernel.h>
@@ -27,6 +29,10 @@
 extern unsigned char msx[];  /* fonte 8x8 da libdebug do PS2SDK (scr_printf) */
 
 static uint32_t canvas_px[W * H] __attribute__((aligned(64)));
+/* v0.14: o titulo e a tela de apoio sao desenhados no formato.c, num quadro
+   256 x 224 (a resolucao do SNES), por cima de uma cena do jogo. */
+static uint32_t cena_px[FORMATO_W * FORMATO_H] __attribute__((aligned(64)));
+_Static_assert(INTRO_QR_N + 1 == 46, "formato_apoio recebe linhas de 46 caracteres");
 
 /* ---- som: um "swell" grave que sobe e um acorde em arpejo ---- */
 #define SOUND_FRAMES (RATE * 9 / 2)
@@ -142,12 +148,6 @@ static void text(int x, int y, const char *s, uint32_t rgb, int scale) {
 static void text_c(int y, const char *s, uint32_t rgb, int scale) {
   text((W - text_w(s, scale)) / 2, y, s, rgb, scale);
 }
-/* Texto com sombra, para ler bem na TV. */
-static void text_cs(int y, const char *s, uint32_t rgb, int scale) {
-  int x = (W - text_w(s, scale)) / 2;
-  text(x + 1, y + 1, s, 0x000001, scale);
-  text(x, y, s, rgb, scale);
-}
 
 /* Um brilho que corre pela faixa [y0, y1): clareia o que nao e fundo preto. */
 static void sweep(int y0, int y1, int at) {
@@ -185,52 +185,6 @@ static void cube(float cx, float cy, float size, float ay, float ax, int level) 
               190 * level >> 8, 60 * level >> 8);
 }
 
-/* ---- cena 3: apoie o projeto ---- */
-static void support_screen(int frame, int can_go) {
-  for (int y = 0; y < H; y++) {
-    uint32_t c = (uint32_t)(10 + y * 14 / H) << 16 | (uint32_t)(12 + y * 6 / H) << 8 | (uint32_t)(40 + y * 30 / H);
-    for (int x = 0; x < W; x++) canvas_px[y * W + x] = c;
-  }
-  /* estrelas lentas */
-  seed = 777;
-  for (int i = 0; i < 60; i++) {
-    int sx = (int)(rnd() * W), sy = (int)(rnd() * H), tw = (int)(rnd() * 60);
-    int k = 40 + (int)(40 * (1 + sinf((frame + tw * 7) * 0.05f)));
-    add_px((sx + frame / 8) % W, sy, k, k, k + 20);
-  }
-  /* moldura dourada dupla */
-  fill(10, 8, W - 20, 2, 0xC8962E), fill(10, H - 10, W - 20, 2, 0xC8962E);
-  fill(10, 8, 2, H - 16, 0xC8962E), fill(W - 12, 8, 2, H - 16, 0xC8962E);
-  fill(15, 13, W - 30, 1, 0x7A5A1C), fill(15, H - 14, W - 30, 1, 0x7A5A1C);
-  fill(15, 13, 1, H - 27, 0x7A5A1C), fill(W - 16, 13, 1, H - 27, 0x7A5A1C);
-
-  text_cs(22, "APOIE O PROJETO", 0xF2C14E, 2);
-  fill(W / 2 - 95, 41, 190, 1, 0xC8962E);
-  {
-    static const struct { const char *t; uint32_t c; } lines[] = {
-        {"Este port e gratuito", 0xFFFFFF}, {"e sempre vai ser.", 0xFFFFFF}, {"", 0},
-        {"Se ele te divertiu,", 0xC8D0F0}, {"ajude a fazer os", 0xC8D0F0}, {"proximos ports, como", 0xC8D0F0},
-        {"o Tekken 3 para PS2.", 0xC8D0F0}, {"", 0},
-        {"Pix: aponte a camera", 0xF2C14E}, {"do celular para o QR.", 0xF2C14E}};
-    for (int i = 0; i < (int)(sizeof(lines) / sizeof(lines[0])); i++)
-      if (lines[i].t[0]) text(26, 54 + i * 11, lines[i].t, lines[i].c, 1);
-  }
-  /* QR: 2 px por modulo, borda branca de 4 modulos */
-  {
-    const int m = 2, n = INTRO_QR_N, q = 4, size = (n + 2 * q) * m;
-    int ox = W - 26 - size, oy = 52;
-    fill(ox - 2, oy - 2, size + 4, size + 4, 0xC8962E);
-    fill(ox, oy, size, size, 0xFFFFFF);
-    for (int y = 0; y < n; y++)
-      for (int x = 0; x < n; x++)
-        if (intro_qr[y][x] == '1') fill(ox + (q + x) * m, oy + (q + y) * m, m, m, 0x000000);
-  }
-  text_c(170, "Do exterior: ko-fi.com/guilhermesoti", 0x9FE0FF, 1);
-  text_c(182, "github.com/guilhermesoti/smw-ps2", 0x9FE0FF, 1);
-  if (can_go && (frame / 30) % 2 == 0) text_cs(199, "Pressione X ou START para jogar", 0xFFFFFF, 1);
-  else if (!can_go) text_cs(199, "Retrogames Patos de Minas", 0x8890B0, 1);
-}
-
 static unsigned read_buttons(void) {
   unsigned now = 0;
   for (int port = 0; port < 2; port++) {
@@ -255,8 +209,11 @@ void smw_desenha_textura(GSGLOBAL *gs, GSTEXTURE *t, float x0, float y0, float x
 }
 
 /* Converte o quadro para o GS (0xAABBGGRR) com o brilho 0..128 e mostra
-   ocupando a tela (480p: 448 linhas centradas nas 480). */
-void smw_mostra_quadro(GSGLOBAL *gs, GSTEXTURE *tex, uint32_t *quadro, bool p480, int bright) {
+   (480p: 448 linhas centradas nas 480). colunas: quantas colunas do SNES a
+   largura da tela mostra. Com tex->Width o quadro ocupa a tela toda; no
+   jogo em 16:9 (342) o quadro de 256 fica no meio, com faixas pretas dos
+   lados e os pixels da mesma largura que os do jogo. */
+void smw_mostra_quadro(GSGLOBAL *gs, GSTEXTURE *tex, uint32_t *quadro, bool p480, int bright, unsigned colunas) {
   unsigned k = (unsigned)bright * 2;
   const int n = (int)(tex->Width * tex->Height);
   for (int i = 0; i < n; i++) {
@@ -269,14 +226,17 @@ void smw_mostra_quadro(GSGLOBAL *gs, GSTEXTURE *tex, uint32_t *quadro, bool p480
   gsKit_clear(gs, GS_SETREG_RGBAQ(0, 0, 0, 0, 0));
   gsKit_texture_send_inline(gs, tex->Mem, tex->Width, tex->Height, tex->Vram, tex->PSM, tex->TBW, GS_CLUT_NONE);
   float top = p480 ? 16.0f : 0.0f, height = p480 ? 2.0f * tex->Height : (float)gs->Height;
-  smw_desenha_textura(gs, tex, 0, top, gs->Width, top + height, tex->Width, tex->Height);
+  const unsigned tela = (unsigned)gs->Width;
+  unsigned largura = colunas > tex->Width ? (tela * tex->Width + colunas / 2) / colunas : tela;
+  float x0 = (float)((tela - largura) / 2);
+  smw_desenha_textura(gs, tex, x0, top, x0 + largura, top + height, tex->Width, tex->Height);
   gsKit_queue_exec(gs);
   gsKit_finish();
   gsKit_sync_flip(gs);
 }
 
 static void present(GSGLOBAL *gs, GSTEXTURE *tex, bool p480, int bright) {
-  smw_mostra_quadro(gs, tex, canvas_px, p480, bright);
+  smw_mostra_quadro(gs, tex, canvas_px, p480, bright, tex->Width);
 }
 
 /* Um "blip" curto ao trocar de opcao. Ele nao vai direto para o audsrv: o
@@ -306,12 +266,12 @@ void smw_som_menu(int16_t *stereo, int frames) {
   }
 }
 
-void smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version) {
+void smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version, const uint32_t *fundo_titulo,
+               const uint32_t *fundo_apoio) {
   enum { A_START = 20, LOCK = 110, A_FADE = 300, B_START = 330, B_FADE = 450, C_START = 480 };
-  static GSTEXTURE tex;
+  static GSTEXTURE tex, tex_cena;
   unsigned held = 0xFFFF;
   int leaving = -1, leave_at = 0, skip = 0;
-  char line[64];
 
   tex.Width = W;
   tex.Height = H;
@@ -321,12 +281,17 @@ void smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version) {
   tex.Mem = (u32 *)canvas_px;
   tex.Vram = gsKit_vram_alloc(gs, gsKit_texture_size(W, H, GS_PSM_CT32), GSKIT_ALLOC_USERBUFFER);
   if (tex.Vram == GSKIT_ALLOC_ERROR) return;  /* sem VRAM: vai direto ao jogo */
+  /* A cena (256 colunas) usa a mesma VRAM: cada quadro manda a textura antes
+     de desenhar, e as duas nunca aparecem no mesmo quadro. */
+  tex_cena = tex;
+  tex_cena.Width = FORMATO_W;
+  tex_cena.TBW = FORMATO_W / 64;
+  tex_cena.Mem = (u32 *)cena_px;
 
   sound = audio_ok ? malloc(SOUND_FRAMES * 4) : NULL;
   sound_at = 0;
   if (sound) synth();
   for (int i = 0; i < PARTICLES; i++) pa_[i] = rnd() * 6.2831853f, pr_[i] = 130 + rnd() * 130;
-  snprintf(line, sizeof(line), "versao %s  -  projeto de fa, gratuito", version);
 
   /* Um quadro por vsync (gsKit_sync_flip espera a TV). */
   for (int frame = 0;; frame++) {
@@ -379,16 +344,11 @@ void smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version) {
       if (f >= LOCK + 100) text_c(192, "apresenta", scale_rgb(0x9098B8, (f - (LOCK + 100)) * 6), 1);
       if (f >= A_FADE) bright = 128 - (f - A_FADE) * 128 / (B_START - A_FADE);
     } else if (f < C_START) {
-      int a = (f - B_START) * 6;
-      text_cs(56, "Super Mario", scale_rgb(0xF2C14E, a), 4);
-      text_cs(94, "World", scale_rgb(0xFFFFFF, a), 2);
-      fill(W / 2 - 80, 116, 160, 1, scale_rgb(0xC8962E, a));
-      text_c(132, "Port nativo para PlayStation 2", scale_rgb(0xC8D0F0, a - 120), 1);
-      text_c(156, line, scale_rgb(0x8890B0, a - 200), 1);
+      formato_titulo(cena_px, msx, version, fundo_titulo);
       if (f < B_START + 20) bright = (f - B_START) * 128 / 20;
       if (f >= B_FADE) bright = 128 - (f - B_FADE) * 128 / (C_START - B_FADE);
     } else {
-      support_screen(f - C_START, f >= C_START + 60);
+      formato_apoio(cena_px, msx, f - C_START, f >= C_START + 60, intro_qr, INTRO_QR_N, fundo_apoio);
       if (f < C_START + 20) bright = (f - C_START) * 128 / 20;
     }
     if (leaving == 0) leave_at = f, leaving = 1;
@@ -397,7 +357,8 @@ void smw_intro(GSGLOBAL *gs, bool p480, bool audio_ok, const char *version) {
       if (f - leave_at > 20) break;
     }
     if (bright < 0) bright = 0;
-    present(gs, &tex, p480, bright);
+    if (f >= B_START) smw_mostra_quadro(gs, &tex_cena, cena_px, p480, bright, tex_cena.Width);
+    else present(gs, &tex, p480, bright);
   }
   memset(canvas_px, 0, sizeof(canvas_px));
   present(gs, &tex, p480, 0);

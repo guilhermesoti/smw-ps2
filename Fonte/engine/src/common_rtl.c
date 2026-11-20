@@ -127,6 +127,16 @@ enum {
 static struct ApuWriteEnt g_apu_write_ents[kApuMaxQueueSize], g_apu_write;
 static uint8 g_apu_write_ent_pos, g_apu_queue_size, g_apu_time_since_empty;
 
+/* v0.14: o estado do motor fora do Snes volta ao do começo (os menus usam o
+   motor para tirar uma foto de uma fase e depois o jogo recomeça do zero). */
+void RtlReiniciaEstado(void) {
+  memset(g_apu_write_ents, 0, sizeof(g_apu_write_ents));
+  memset(&g_apu_write, 0, sizeof(g_apu_write));
+  g_apu_write_ent_pos = g_apu_queue_size = g_apu_time_since_empty = 0;
+  g_is_uploading_apu = false;
+  g_did_finish_level_hook = false;
+}
+
 void RtlSetUploadingApu(bool uploading) {
   RtlApuLock();
   if (g_is_uploading_apu != uploading && !g_use_my_apu_code) {

@@ -47,7 +47,7 @@ def main():
         subprocess.run([cc, *cflags, *includes, "-I", engine, "-I", integracao,
                         *unidades, "-Wl,--gc-sections", *libs, "-lm", "-o", binario],
                        check=True)
-        for modo in ("completo", "alternado"):
+        for modo in ("completo", "alternado", "cenario"):
             rodada = pasta / modo
             rodada.mkdir()
             shutil.copyfile(args.jogo, rodada / nome)

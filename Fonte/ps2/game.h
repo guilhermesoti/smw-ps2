@@ -10,6 +10,11 @@ enum { SMW_WIDTH = 256, SMW_HEIGHT = 224, SMW_SAMPLES = 534, SMW_MAX_SAMPLES = 5
        SMW_ROM_BYTES = 512 * 1024, SMW_SRAM_BYTES = 2048 };
 
 void smw_start(uint8_t *rom, uint32_t *pixels);
+/* v0.14: logo depois de smw_start, um quadro da sala room (fundo, sem barra
+   de status e sem sprites) em dest (SMW_WIDTH x SMW_HEIGHT); depois o motor
+   recomeca do zero, como se so smw_start tivesse rodado. false se a sala
+   nao carregou. */
+bool smw_capture_scene(unsigned room, uint32_t *dest);
 /* Tela larga 16:9: SMW_WIDE_WIDTH colunas por linha (43 + 256 + 43), em
    linhas de pitch pixels (>= SMW_WIDE_WIDTH). Com on = false volta a 256
    colunas em linhas de SMW_WIDTH. As cenas sem suporte ficam com faixas
@@ -26,5 +31,8 @@ bool smw_save_unchanged(const uint8_t *save);
 /* Chamada antes de cada save que grava de verdade (o jogo para enquanto
    grava; o main deixa o som mudo, senao o audsrv repete o que tem). */
 void smw_before_save(void (*hook)(void));
+/* Chamada no comeco de cada passo do jogo com a RAM do SNES (g_ram), antes
+   da logica: as trapacas escrevem nela (v0.14). NULL desliga. */
+void smw_before_frame(void (*hook)(uint8_t *ram));
 extern bool smw_save_error;
 #endif

@@ -1,5 +1,5 @@
 SUPER MARIO WORLD PARA PLAYSTATION 2
-Retrogames Patos de Minas | v0.13.8 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
+Retrogames Patos de Minas | v0.14 (beta) | NTSC 240p/480i/480p | 4:3 ou 16:9 | Português
 
 O QUE VOCÊ PRECISA
 
@@ -18,7 +18,9 @@ pendrive: o aplicativo (APPS/SMW), a ISO (pasta CD) ou os dois.
    acende quando a cópia é a americana original; a laranja explica o
    que está errado (versão europeia/japonesa, hack, tradução...).
 2. FORMATO: pendrive (aplicativo), lista de jogos (ISO) ou os dois.
-3. AJUSTES: como o jogo abre (tela, vídeo e idioma), ou "perguntar".
+3. AJUSTES: como o jogo abre (tela, vídeo e idioma), ou "perguntar",
+   e a lista de trapaças: gravar ou não, e dá para editar ali mesmo
+   (ele confere cada linha como o jogo lê; veja TRAPAÇAS).
 4. DESTINO: escolha a raiz do pendrive (por exemplo E:\).
 5. GRAVAR: grava e confere cada arquivo.
 
@@ -149,6 +151,7 @@ baixo escolhe a linha, para os lados muda o valor, X ou START começa:
   componente" em "Y Cb/Pb Cr" na Configuração do Sistema.
 - TELA: 4:3 ou 16:9 (veja TELA 16:9 abaixo), com o teste do círculo.
 - IDIOMA: português do Brasil ou inglês (o original).
+- TRAPAÇAS: quantas estão ligadas; X abre a lista (veja TRAPAÇAS).
 A imagem é sempre com os pixels nítidos, como no cartucho.
 
 A tela AJUSTES aparece sempre na mesma imagem (480i), que toda TV mostra.
@@ -167,6 +170,8 @@ Durante o jogo (segurando L2 + R2):
 - L2 + R2 + CRUZ: troca entre 4:3 e 16:9 (a troca fica gravada junto
   com o próximo save). Aparece "TELA 4:3" ou "TELA 16:9" por 5
   segundos, também no começo do jogo, para conferir numa foto.
+- L2 + R2 + SELECT: abre a lista de trapaças. O jogo e a música ficam
+  parados até você voltar (CÍRCULO ou SELECT).
 - L2 + R2 + TRIÂNGULO: liga/desliga o medidor de desempenho, no canto
   de baixo. "TELA 60" = todos os 60 quadros de cada segundo foram
   desenhados; "TELA 30" = metade foi pulada para manter a velocidade.
@@ -236,6 +241,62 @@ Dá para editar no Bloco de Notas. O que foi escolhido no próprio PS2
 a tela AJUSTES começa em 240p, 4:3 e português, e espera você apertar
 X. As linhas suavizacao= e scanlines= de versões antigas são ignoradas.
 
+TRAPAÇAS (TRAPACAS.TXT)
+
+O pacote traz APPS/SMW/TRAPACAS.TXT com 13 trapaças, todas desligadas:
+vidas sempre 99; sempre grande, com capa ou com flor; estrela sem fim;
+sem dano (o Mario fica piscando; cair num buraco ainda perde a vida);
+tempo que não acaba; moedas em 99 (cada moeda dá uma vida); item de
+reserva (cogumelo, flor, estrela ou pena); e a barra de corrida sempre
+cheia (com a capa, é o que deixa voar).
+
+Para ligar e desligar:
+- Na tela AJUSTES, na linha TRAPAÇAS: X (ou direcional para a direita)
+  abre a lista (sem o TRAPACAS.TXT, mostra onde pôr o arquivo).
+- Durante o jogo: L2 + R2 + SELECT. O jogo fica parado enquanto a
+  lista está aberta. No 16:9 a lista aparece no meio, com faixas pretas
+  dos lados, por cima da imagem do jogo.
+Na lista, direcional para cima e para baixo escolhe (para os lados pula
+10), X liga e desliga, CÍRCULO volta (também TRIÂNGULO, START e, no
+jogo, SELECT). Uma trapaça em laranja não tem nenhum código que o jogo
+aceite e não liga. As ligadas ficam gravadas no TRAPACAS.LIG, no lugar
+do save, com o nome e os códigos, e voltam ligadas da próxima vez (se
+você mudar os códigos de uma trapaça no TRAPACAS.TXT, ela volta
+desligada). Ligadas, as trapaças mudam o jogo e podem mudar o que vai
+para o save (vidas, item de reserva...).
+
+Onde o jogo procura o TRAPACAS.TXT, ao abrir: primeiro onde está o
+save, depois no pendrive (APPS/SMW) e nos Memory Cards (pasta SMWPS2)
+e, pela ISO, no próprio CD (o Gravador põe a lista dentro da ISO). Vale
+o primeiro que achar: um TRAPACAS.TXT no Memory Card vale mais que o da
+ISO. A tela da lista mostra de onde ela veio.
+
+Para acrescentar trapaças, edite o arquivo no Bloco de Notas (ou no
+passo AJUSTES do Gravador), uma por linha:
+  Nome da trapaça = 7E0DBE:62
+  Outra = 7E0F31:09+7E0F32:09+7E0F33:09
+- Só códigos de memória no formato Pro Action Replay: o endereço com 6
+  algarismos hexadecimais, ':' e o valor com 2 (7E0DBE:62), ou os 8
+  juntos (7E0DBE62). Mais de um código na mesma trapaça: separe com
+  '+'. O valor é escrito na memória a cada quadro, enquanto a trapaça
+  estiver ligada.
+- Endereços aceitos: 7E0000 a 7FFFFF (a memória do jogo) e 000000 a
+  001FFF (a mesma memória, também nos bancos 01 a 3F e 80 a BF). Os
+  outros (ROM, SRAM, registros) são recusados.
+- Códigos Game Genie não funcionam: eles mudam o programa da ROM, e
+  neste port o programa é o jogo reescrito em C.
+- Nomes com até 28 letras (o resto é cortado); fora as letras sem
+  acento, os números, a pontuação e as letras com acento, o resto (como
+  o €) vira '?'. Linhas que começam com # ou ; são
+  comentários. Até 64 trapaças e 16 códigos em cada uma; o jogo lê só
+  os primeiros 16 KB do arquivo (uma linha cortada nesse limite fica de
+  fora).
+- O jogo não confere os valores: como no SNES, um código com um valor
+  que o jogo não usa pode bagunçar a imagem ou travar o jogo. Na dúvida,
+  desligue a trapaça.
+- O SMW_LOG.TXT anota quantas trapaças foram lidas, de onde, quantas
+  ficaram sem código e quantos códigos foram recusados.
+
 LOG DO CONSOLE (SMW_LOG.TXT)
 
 O jogo anota o que acontece num texto, SMW_LOG.TXT, refeito a cada vez
@@ -252,8 +313,9 @@ os drivers carregados, onde o jogo e o save foram achados, a escolha
 da tela AJUSTES, cada vídeo testado (com a largura usada: 1280 pontos
 ou a antiga, 512 / 640 no 480p) e se você confirmou a imagem, os saves
 (onde gravou e quanto tempo levou cada parte, ou o código do erro), as
-trocas entre TELA 60 e TELA 30, os números do medidor quando ligado e
-os erros que param o jogo.
+trocas entre TELA 60 e TELA 30, os números do medidor quando ligado, o
+tempo de preparar cada cenário de fundo das telas, as trapaças (lidas,
+ligadas e desligadas) e os erros que param o jogo.
 
 Cada gravação do arquivo para o jogo por um instante (o som fica mudo
 nessa hora). Por isso ele é gravado só antes de testar um vídeo novo,
@@ -268,6 +330,22 @@ gráficos, mapas e sons vêm da cópia americana de SNES fornecida por
 você. O carregador confere o CRC32 B19ED489 e aceita cabeçalho de
 copiador de 512 bytes. Se houver um arquivo inválido na pasta, o jogo
 continua procurando os outros nomes antes de mostrar o erro.
+
+Mudanças da v0.14 (beta):
+- Telas novas no estilo do jogo: carregando, AJUSTES, "A IMAGEM
+  APARECEU?", a apresentação e a tela de apoio têm agora como fundo um
+  cenário do próprio jogo, desenhado da sua cópia na hora de abrir (por
+  isso o carregamento demora um pouco mais), com caixas pretas de borda
+  dupla como as mensagens do jogo. Essas telas têm agora 256 colunas,
+  como o jogo.
+- Trapaças: lista no TRAPACAS.TXT, ligadas na tela AJUSTES ou com
+  L2 + R2 + SELECT durante o jogo (veja TRAPAÇAS). O pacote traz 13,
+  conferidas no jogo, todas desligadas.
+- Gravador: no passo AJUSTES, a lista de trapaças para gravar ou não,
+  editar e conferir; vai para APPS/SMW e para dentro da ISO.
+- Correção: com bolas de fogo do Mario na tela, o port lia dois valores
+  fora de uma tabela do jogo (o SNES lê ali os bytes seguintes da ROM).
+  Agora usa os mesmos valores do SNES.
 
 Mudanças da v0.13.8 (beta):
 - Ao escolher o arquivo do save na tela inicial, o jogo não trava mais

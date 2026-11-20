@@ -1,9 +1,11 @@
-/* Telas da abertura: carregando, AJUSTES e o teste do modo de video.
+/* Telas antes do jogo: carregando, AJUSTES, o teste do modo de video e a
+ * lista de trapacas.
  *
- * AJUSTES troca a antiga tela de texto do comeco: video (240p, 480i ou
- * 480p), tela (4:3 ou 16:9) e idioma, com o jogo comecando
- * sozinho quando os ajustes ja estao salvos. Mesmo visual da tela de apoio
- * (intro.c): fundo azul com estrelas e moldura dourada dupla.
+ * v0.14: quadro de 256 x 224, a resolucao do SNES. O fundo e uma cena do
+ * proprio jogo, tirada da ROM do jogador na hora (smw_capture_scene); por
+ * cima, caixas pretas de borda dupla, como as caixas de mensagem do jogo.
+ * A tela "carregando" aparece antes de a ROM ser achada: nela o fundo e uma
+ * paisagem desenhada aqui (ceu, morros e chao), sem nada copiado do jogo.
  *
  * O circulo do teste da tela so fica redondo quando a TV esta no modo certo
  * para a opcao marcada: no 16:9 ele e desenhado espremido, e a TV em modo
@@ -21,8 +23,8 @@ static uint32_t *px;
 static const unsigned char *fonte;
 
 enum {
-  DOURADO = 0xF2C14E, AZUL_CLARO = 0xA9C8FF, CINZA = 0x8890B0, TEXTO = 0xC8D0F0,
-  BRANCO = 0xFFFFFF, CAIXA = 0x080C26, BORDA = 0x34407A, LARANJA = 0xFF9A4A
+  OURO = 0xF8D030, OURO_SOMBRA = 0xA04000, BRANCO = 0xFFFFFF, CINZA = 0xB4B4C0, AZUL = 0x9FD0FF,
+  LARANJA = 0xFF9A4A, MARCA = 0x1E2F78, PAINEL = 0x101A40, PAINEL_BORDA = 0x3A4A8A, PRETO = 0x000001
 };
 
 static void fill(int x, int y, int w, int h, uint32_t rgb) {
@@ -92,63 +94,102 @@ static void texto_em(int x0, int w, int y, const char *s, uint32_t rgb) {
   texto(x0 + (w - largura(s, 1)) / 2, y, s, rgb, 1);
 }
 
-static void texto_sombra(int y, const char *s, uint32_t rgb, int escala) {
+/* Centrado na tela, com sombra embaixo a direita. */
+static void texto_sombra(int y, const char *s, uint32_t rgb, uint32_t sombra, int escala) {
   int x = (W - largura(s, escala)) / 2;
-  texto(x + 1, y + 1, s, 0x000001, escala);
+  texto(x + escala, y + escala, s, sombra, escala);
   texto(x, y, s, rgb, escala);
 }
 
-/* ---- fundo: o mesmo da tela de apoio ---- */
-static unsigned semente;
-static float sorteio(void) {
-  semente = semente * 1103515245u + 12345u;
-  return (float)((semente >> 8) & 0xFFFF) / 65535.0f;
+/* Centrado na tela, com contorno preto: para ler por cima do cenario. */
+static void texto_contorno(int y, const char *s, uint32_t rgb, int escala) {
+  int x = (W - largura(s, escala)) / 2;
+  for (int dy = -1; dy <= 1; dy++)
+    for (int dx = -1; dx <= 1; dx++)
+      if (dx || dy) texto(x + dx, y + dy, s, PRETO, escala);
+  texto(x, y, s, rgb, escala);
 }
 
-static void fundo(int frame) {
-  for (int y = 0; y < H; y++) {
-    uint32_t c = (uint32_t)(10 + y * 14 / H) << 16 | (uint32_t)(12 + y * 6 / H) << 8 | (uint32_t)(40 + y * 30 / H);
-    for (int x = 0; x < W; x++) px[y * W + x] = c;
-  }
-  semente = 777;
-  for (int i = 0; i < 60; i++) {
-    int sx = (int)(sorteio() * W), sy = (int)(sorteio() * H), tw = (int)(sorteio() * 60);
-    int k = 40 + (int)(40 * (1 + sinf((frame + tw * 7) * 0.05f)));
-    mistura((sx + frame / 8) % W, sy, 1, 1, (uint32_t)k << 16 | (uint32_t)k << 8 | (uint32_t)(k + 20), 200);
-  }
-  contorno(10, 8, W - 20, H - 16, 2, 0xC8962E);
-  contorno(15, 13, W - 30, H - 26, 1, 0x7A5A1C);
-}
+/* ---- fundo ---- */
 
-/* ---- desenhos ---- */
-static void morro(int cx, int base, int meia, int alto, int x0, int x1, uint32_t cor) {
-  for (int i = 0; i < alto; i++) {
-    int w = meia * (i + 1) / alto, a = cx - w, b = cx + w + 1;
-    if (a < x0) a = x0;
-    if (b > x1) b = x1;
-    if (b > a) fill(a, base - alto + i, b - a, 1, cor);
+static void elipse_cheia(int cx, int cy, int rx, int ry, uint32_t cor, int y_max) {
+  for (int y = cy - ry; y <= cy + ry && y < y_max; y++) {
+    float t = (float)(y - cy) / (float)ry;
+    int w = (int)(rx * sqrtf(1.0f - t * t) + 0.5f);
+    fill(cx - w, y, 2 * w + 1, 1, cor);
   }
 }
 
-/* TV pequena com uma paisagem simples. larga: tela 16:9, com as faixas a
-   mais (43 colunas de cada lado) marcadas em dourado. */
-static void tv(int x, int y, bool larga) {
-  int sw = larga ? 44 : 33, sh = 24, tw = sw + 6, th = sh + 6;
-  int sx = x + 3, sy = y + 3, base = sy + sh - 6;
-  fill(x, y, tw, th, 0x5A6070);
-  fill(x + 1, y + 1, tw - 2, th - 2, 0x2B2F3A);
-  fill(sx, sy, sw, sh, 0x4A7FE0);
-  fill(sx + sw / 4 - 4, sy + 5, 9, 2, BRANCO), fill(sx + sw / 4 - 2, sy + 4, 5, 1, BRANCO);
-  morro(sx + sw / 4, base, 7, 8, sx, sx + sw, 0x2F8F4E);
-  morro(sx + sw * 2 / 3, base, 9, 10, sx, sx + sw, 0x3AA35A);
-  fill(sx, base, sw, 2, 0x5CC04A);
-  fill(sx, base + 2, sw, sy + sh - base - 2, 0x8A5A2B);
-  if (larga) {
-    int faixa = sw * 43 / 342 + 1;
-    mistura(sx, sy, faixa, sh, DOURADO, 90);
-    mistura(sx + sw - faixa, sy, faixa, sh, DOURADO, 90);
+/* Morro arredondado com contorno de 1 pixel (desenho nosso, sem olhos). */
+static void morro(int cx, int base, int rx, int alto, uint32_t cor) {
+  elipse_cheia(cx, base, rx + 1, alto + 1, 0x1D5C22, base);
+  elipse_cheia(cx, base, rx, alto, cor, base);
+}
+
+static void nuvem(int x, int y, int w) {
+  fill(x + 4, y + 7, w - 8, 3, 0xC9DEFC);
+  fill(x + 2, y + 2, w - 4, 6, BRANCO);
+  fill(x + w / 4, y, w / 2, 3, BRANCO);
+}
+
+/* Paisagem desenhada aqui (antes de a ROM ser achada): ceu em faixas,
+   nuvens, morros e chao com grama. */
+static void paisagem(void) {
+  static const uint32_t faixas[5] = {0x4F86F7, 0x6196F8, 0x78A7FA, 0x93BAFB, 0xB0CFFC};
+  for (int i = 0; i < 5; i++) fill(0, i * 36, W, 36, faixas[i]);
+  fill(0, 180, W, H - 180, faixas[4]);
+  nuvem(22, 22, 44);
+  nuvem(176, 40, 52);
+  morro(40, 190, 70, 66, 0x5CBF5F);
+  morro(212, 190, 64, 54, 0x46A84E);
+  morro(128, 190, 46, 34, 0x6FD06C);
+  fill(0, 188, W, 2, 0x1D5C22);
+  fill(0, 190, W, 4, 0x4CC94A);
+  fill(0, 194, W, 1, 0x1D5C22);
+  fill(0, 195, W, H - 195, 0xC97A3C);
+  for (int y = 199; y < H; y += 7)
+    for (int x = (y / 7) % 2 * 6; x < W; x += 12) fill(x, y, 2, 2, 0x8F4F1F);
+}
+
+/* A cena do jogo (ou a paisagem), escurecida em escuro/256. */
+static void fundo(const uint32_t *cena, int escuro) {
+  if (cena) memcpy(px, cena, sizeof(uint32_t) * W * H);
+  else paisagem();
+  if (escuro > 0) mistura(0, 0, W, H, 0x000000, escuro);
+}
+
+/* Caixa preta de borda dupla, como as caixas de mensagem do jogo; um pouco
+   transparente, para o cenario aparecer atras (os textos ficam em paineis
+   ou com cores fortes, para ler bem no cabo AV). */
+static void caixa_a(int x, int y, int w, int h, int opaca) {
+  mistura(x, y, w, h, 0x000000, opaca);
+  contorno(x, y, w, h, 2, 0xF0F0F0);
+  contorno(x + 3, y + 3, w - 6, h - 6, 1, 0x808080);
+}
+
+static void caixa(int x, int y, int w, int h) { caixa_a(x, y, w, h, 215); }
+
+/* Faixa escura embaixo, para os comandos e avisos (duas linhas). */
+static void rodape(const char *l1, uint32_t c1, const char *l2, uint32_t c2) {
+  mistura(0, 196, W, H - 196, 0x000000, 210);
+  if (l1) texto_em(0, W, 199, l1, c1);
+  if (l2) texto_em(0, W, 211, l2, c2);
+}
+
+/* Triangulo apontando para a esquerda (dir < 0) ou para a direita. */
+static void seta(int x, int cy, int dir, uint32_t cor) {
+  for (int i = 0; i < 4; i++) {
+    int h = 2 * i + 1, cx = dir < 0 ? x + i : x + 3 - i;
+    fill(cx, cy - i, 1, h, cor);
   }
-  fill(x + tw / 2 - 5, y + th, 10, 2, 0x2B2F3A);
+}
+
+/* Triangulo apontando para cima (dir < 0) ou para baixo. */
+static void seta_v(int cx, int y, int dir, uint32_t cor) {
+  for (int i = 0; i < 4; i++) {
+    int w = 2 * i + 1, cy = dir < 0 ? y + i : y + 3 - i;
+    fill(cx - i, cy, w, 1, cor);
+  }
 }
 
 /* Contorno de elipse com 2 pixels de espessura. */
@@ -160,193 +201,321 @@ static void elipse(int cx, int cy, float rx, float ry, uint32_t cor) {
     }
 }
 
-/* Triangulo apontando para a esquerda (dir < 0) ou para a direita. */
-static void seta(int x, int cy, int dir, uint32_t cor) {
-  for (int i = 0; i < 4; i++) {
-    int h = 2 * i + 1, cx = dir < 0 ? x + i : x + 3 - i;
-    fill(cx, cy - i, 1, h, cor);
-  }
-}
-
 /* ---- AJUSTES ---- */
 
 typedef struct {
   const char *titulo, *jogar, *rotulo[AJUSTE_JOGAR], *idioma[2], *rodape, *contagem, *video_txt[3][2],
-      *tela_txt[2], *redondo[2], *idioma_txt[2], *idioma_tela, *jogar_txt[3], *aplica;
+      *aplica, *tela_txt[2], *redondo[2], *idioma_txt[2], *idioma_tela, *trapaca_txt[4], *nenhuma,
+      *ligadas, *sem_arquivo, *jogar_txt[3];
 } Textos;
 
+/* Cada linha do painel cabe em 34 letras (6 pixels cada). */
 static const Textos kTextos[2] = {
   {
-    "AJUSTES", "JOGAR", {"Vídeo", "Tela", "Idioma"}, {"Português", "English"},
-    "Direcional: escolhe e muda  -  X: joga", "Começa em %d s. Aperte um botão para mudar.",
+    "AJUSTES", "JOGAR", {"Vídeo", "Tela", "Idioma", "Trapaças"}, {"Português", "English"},
+    "Direcional: escolhe e muda  X: joga", "Começa em %d s. Um botão muda.",
     {{"240p: cabo AV, em qualquer TV.", "O mais nítido, igual ao SNES."},
-     {"480p: cabo componente ou adaptador HDMI.", "No cabo AV não aparece; volta sozinho."},
-     {"480i: se a TV não mostrar o 240p.", "Em geral fica menos nítido que o 240p."}},
+     {"480p: cabo componente ou HDMI.", "No cabo AV não aparece; volta."},
+     {"480i: se a TV não mostrar 240p.", "Em geral, menos nítido que 240p."}},
+    "Muda quando você apertar X.",
     {"4:3: TV de tubo ou em 4:3.", "16:9: mostra mais da fase."},
     {"O círculo fica redondo", "com a TV no modo certo."},
-    {"Textos do jogo em português.", "Textos do jogo em inglês (original)."}, "Esta tela também muda.",
-    {"X ou START começa. Fica tudo salvo.", "No jogo, L2+R2+X troca a tela",
+    {"Textos do jogo em português.", "Textos em inglês (o original)."}, "Esta tela também muda.",
+    {"Códigos do arquivo TRAPACAS.TXT", "(ao lado do save). X abre a lista.",
+     "No jogo: L2+R2+SELECT.", "Ligadas, mudam o jogo e o save."},
+    "nenhuma", "%d ligada%s", "sem arquivo",
+    {"X ou START começa. Fica salvo.", "No jogo, L2+R2+X troca a tela",
      "(4:3 ou 16:9) e mostra qual ficou."},
-    "Muda quando você apertar X.",
   },
   {
-    "SETTINGS", "PLAY", {"Video", "Screen", "Language"}, {"Português", "English"},
-    "D-pad: choose and change  -  X: play", "Starts in %d s. Press a button to change.",
+    "SETTINGS", "PLAY", {"Video", "Screen", "Language", "Cheats"}, {"Português", "English"},
+    "D-pad: choose and change  X: play", "Starts in %d s. Any button stops.",
     {{"240p: AV cable, any TV.", "The sharpest, like the SNES."},
-     {"480p: component cable or HDMI adapter.", "Not on the AV cable; it comes back."},
-     {"480i: if the TV does not show 240p.", "Usually softer than 240p."}},
+     {"480p: component or HDMI.", "Not on the AV cable; it returns."},
+     {"480i: if the TV lacks 240p.", "Usually softer than 240p."}},
+    "Changes when you press X.",
     {"4:3: CRT or TV set to 4:3.", "16:9: more of the level."},
     {"The circle is round", "in the right TV mode."},
     {"Game texts in Portuguese.", "Game texts in English (original)."}, "This screen changes too.",
-    {"X or START begins. Everything is saved.", "In game, L2+R2+X changes the screen",
-     "(4:3 or 16:9) and shows which one."},
-    "Changes when you press X.",
+    {"Codes from the TRAPACAS.TXT file", "(next to the save). X opens it.",
+     "In game: L2+R2+SELECT.", "When on, they change the save."},
+    "none", "%d on%s", "no file",
+    {"X or START begins. It is saved.", "In game, L2+R2+X changes the",
+     "screen (4:3 or 16:9)."},
   },
 };
 
-/* Tres linhas de ajuste, o botao JOGAR, o painel de ajuda e o rodape
-   (v0.13.7: sem as linhas de suavizacao e scanlines, mais espacadas). */
-enum { LX = 28, LW = W - 56, LINHA_Y = 48, LINHA_H = 16, LINHA_PASSO = 21, VALOR_X = 152,
-       JOGAR_Y = LINHA_Y + AJUSTE_JOGAR * LINHA_PASSO + 6, PAINEL_Y = JOGAR_Y + LINHA_H + 8,
-       PAINEL_H = 40, RODAPE_Y = PAINEL_Y + PAINEL_H + 8 };
+/* Caixa, quatro linhas de ajuste, o botao JOGAR e o painel de ajuda. */
+enum { BX = 10, BY = 10, BW = W - 20, BH = 180, LX = BX + 10, LW = BW - 20, LINHA_Y = 42,
+       LINHA_H = 14, LINHA_PASSO = 16, VALOR_X = LX + 100,
+       JOGAR_Y = LINHA_Y + AJUSTE_JOGAR * LINHA_PASSO + 4, PAINEL_Y = JOGAR_Y + LINHA_H + 6,
+       PAINEL_H = 46 };
 
-static const char *valor(const Textos *t, const Ajustes *a, int linha) {
+static const char *valor(const Textos *t, const Ajustes *a, int linha, char *buf, size_t n) {
   static const char *const videos[] = {"240p", "480p", "480i"};
   switch (linha) {
   case AJUSTE_VIDEO: return videos[a->video];
   case AJUSTE_TELA: return a->tela ? "16:9" : "4:3";
-  default: return t->idioma[a->idioma];
+  case AJUSTE_IDIOMA: return t->idioma[a->idioma];
+  default:
+    if (a->trapacas_total <= 0) return t->sem_arquivo;
+    if (a->trapacas <= 0) return t->nenhuma;
+    snprintf(buf, n, t->ligadas, a->trapacas, a->idioma == 1 || a->trapacas == 1 ? "" : "s");
+    return buf;
   }
 }
 
 static void linha_ajuste(const Textos *t, const Ajustes *a, int linha, int frame) {
+  char buf[24];
   int y = LINHA_Y + linha * LINHA_PASSO;
   bool marcada = a->linha == linha;
-  fill(LX, y, LW, LINHA_H, CAIXA);
-  contorno(LX, y, LW, LINHA_H, marcada ? 2 : 1, marcada ? DOURADO : BORDA);
-  texto(LX + 9, y + 4, t->rotulo[linha], marcada ? DOURADO : AZUL_CLARO, 1);
+  if (marcada) {
+    fill(LX, y, LW, LINHA_H, MARCA);
+    contorno(LX, y, LW, LINHA_H, 1, OURO);
+  }
+  texto(LX + 6, y + 3, t->rotulo[linha], marcada ? OURO : BRANCO, 1);
   int fim = LX + LW - 8;
-  texto_em(VALOR_X, fim - VALOR_X, y + 4, valor(t, a, linha), marcada ? BRANCO : TEXTO);
-  uint32_t cor = marcada ? DOURADO : BORDA;
+  const char *v = valor(t, a, linha, buf, sizeof(buf));
+  bool sem = linha == AJUSTE_TRAPACAS && a->trapacas_total <= 0;
+  texto_em(VALOR_X, fim - VALOR_X, y + 3, v, sem ? CINZA : marcada ? BRANCO : AZUL);
+  uint32_t cor = marcada ? OURO : 0x5A6AAA;
   int pulo = marcada && (frame / 15) % 2 ? 1 : 0;
-  seta(VALOR_X + 2 - pulo, y + LINHA_H / 2, -1, cor);
-  seta(fim - 6 + pulo, y + LINHA_H / 2, 1, cor);
+  if (linha != AJUSTE_TRAPACAS) seta(VALOR_X + 2 - pulo, y + LINHA_H / 2, -1, cor);
+  seta(fim - 6 + pulo, y + LINHA_H / 2, 1, cor);  /* trapacas: sem arquivo, X abre a explicacao */
 }
 
 static void botao_jogar(const Textos *t, const Ajustes *a, int frame) {
-  int w = 96, x = (W - w) / 2, y = JOGAR_Y;
+  int w = 72, x = (W - w) / 2, y = JOGAR_Y;
   bool marcado = a->linha == AJUSTE_JOGAR;
-  fill(x, y, w, LINHA_H, marcado ? 0x3A2A08 : CAIXA);
-  contorno(x, y, w, LINHA_H, marcado ? 2 : 1, marcado ? DOURADO : BORDA);
-  texto_em(x, w, y + 4, t->jogar, marcado ? DOURADO : AZUL_CLARO);
-  if (marcado && (frame / 20) % 2 == 0) seta(x - 9, y + LINHA_H / 2, 1, DOURADO), seta(x + w + 5, y + LINHA_H / 2, -1, DOURADO);
+  fill(x, y, w, LINHA_H, marcado ? OURO : 0x000000);
+  contorno(x, y, w, LINHA_H, 1, marcado ? BRANCO : 0x808080);
+  texto_em(x, w, y + 3, t->jogar, marcado ? PRETO : BRANCO);
+  if (marcado && (frame / 20) % 2 == 0)
+    seta(x - 9, y + LINHA_H / 2, 1, OURO), seta(x + w + 5, y + LINHA_H / 2, -1, OURO);
 }
 
-/* Painel de ajuda da linha marcada. */
+/* Painel de ajuda da linha marcada (ate 4 linhas). */
 static void painel(const Textos *t, const Ajustes *a) {
   const int x = LX, y = PAINEL_Y, w = LW, h = PAINEL_H;
-  fill(x, y, w, h, CAIXA);
-  contorno(x, y, w, h, 1, BORDA);
-  int tx = x + 8, l1 = y + 5, l2 = y + 16, l3 = y + 27;
+  fill(x, y, w, h, PAINEL);
+  contorno(x, y, w, h, 1, PAINEL_BORDA);
+  int tx = x + 6, l1 = y + 4, l2 = y + 14, l3 = y + 24, l4 = y + 34;
   switch (a->linha) {
   case AJUSTE_VIDEO:
     texto(tx, l1, t->video_txt[a->video][0], BRANCO, 1);
-    texto(tx, l2, t->video_txt[a->video][1], TEXTO, 1);
-    texto(tx, l3, t->aplica, CINZA, 1);
+    texto(tx, l2, t->video_txt[a->video][1], AZUL, 1);
+    texto(tx, l4, t->aplica, CINZA, 1);
     break;
   case AJUSTE_TELA: {
-    tv(x + 6, y + 6, a->tela);
-    /* Pixels do quadro: 320 colunas na largura de uma TV 4:3 e 224 linhas
-       na altura, entao cada pixel e 0,93 vez mais estreito do que alto. Na
-       TV em modo 16:9 a imagem e esticada 4/3 e ele passa a 1,24. */
-    const float ry = 13.0f, rx = ry / (a->tela ? 0.9333f * 4.0f / 3.0f : 0.9333f);
-    int cx = x + 76, cy = y + h / 2;
-    elipse(cx, cy, rx, ry, DOURADO);
-    fill(cx - 1, cy - 1, 3, 3, DOURADO);
-    texto(x + 98, l1, t->tela_txt[a->tela], BRANCO, 1);
-    texto(x + 98, l2, t->redondo[0], TEXTO, 1);
-    texto(x + 98, l3, t->redondo[1], TEXTO, 1);
+    /* Pixels do quadro: 256 colunas na largura de uma TV 4:3 e 224 linhas
+       na altura, entao cada pixel e 1,17 vez mais largo do que alto. Na TV
+       em modo 16:9 a imagem e esticada 4/3 e ele passa a 1,56. */
+    const float ry = 17.0f, rx = ry / (a->tela ? 1.1667f * 4.0f / 3.0f : 1.1667f);
+    int cx = x + 22, cy = y + h / 2;
+    elipse(cx, cy, rx, ry, OURO);
+    fill(cx - 1, cy - 1, 3, 3, OURO);
+    texto(x + 44, l1 + 4, t->tela_txt[a->tela], BRANCO, 1);
+    texto(x + 44, l2 + 6, t->redondo[0], AZUL, 1);
+    texto(x + 44, l3 + 6, t->redondo[1], AZUL, 1);
     break;
   }
   case AJUSTE_IDIOMA:
     texto(tx, l1, t->idioma_txt[a->idioma], BRANCO, 1);
-    texto(tx, l2, t->idioma_tela, TEXTO, 1);
+    texto(tx, l2, t->idioma_tela, AZUL, 1);
+    break;
+  case AJUSTE_TRAPACAS:
+    texto(tx, l1, t->trapaca_txt[0], BRANCO, 1);
+    texto(tx, l2, t->trapaca_txt[1], BRANCO, 1);
+    texto(tx, l3, t->trapaca_txt[2], AZUL, 1);
+    texto(tx, l4, t->trapaca_txt[3], LARANJA, 1);
     break;
   default:
     texto(tx, l1, t->jogar_txt[0], BRANCO, 1);
-    texto(tx, l2, t->jogar_txt[1], TEXTO, 1);
-    texto(tx, l3, t->jogar_txt[2], TEXTO, 1);
+    texto(tx, l2, t->jogar_txt[1], AZUL, 1);
+    texto(tx, l3, t->jogar_txt[2], AZUL, 1);
     break;
   }
 }
 
-void formato_ajustes(uint32_t *destino, const unsigned char *letras, const Ajustes *a, int frame) {
+void formato_ajustes(uint32_t *destino, const unsigned char *letras, const Ajustes *a, int frame,
+                     const uint32_t *cena) {
   px = destino;
   fonte = letras;
   const Textos *t = &kTextos[a->idioma == 1];
-  fundo(frame);
-  texto_sombra(17, t->titulo, DOURADO, 2);
-  fill(W / 2 - 80, 35, 160, 1, 0xC8962E);
+  fundo(cena, 0);
+  caixa(BX, BY, BW, BH);
+  texto_sombra(BY + 9, t->titulo, OURO, OURO_SOMBRA, 2);
+  fill(W / 2 - 60, BY + 27, 120, 1, 0x806020);
   for (int l = 0; l < AJUSTE_JOGAR; l++) linha_ajuste(t, a, l, frame);
   botao_jogar(t, a, frame);
   painel(t, a);
-  texto_em(0, W, RODAPE_Y, t->rodape, BRANCO);
   char linha[64];
+  const char *l2 = a->situacao;
+  uint32_t c2 = CINZA;
   if (a->aviso) {
-    texto_em(0, W, RODAPE_Y + 11, a->aviso, LARANJA);
+    l2 = a->aviso, c2 = LARANJA;
   } else if (a->segundos >= 0) {
     snprintf(linha, sizeof(linha), t->contagem, a->segundos);
-    texto_em(0, W, RODAPE_Y + 11, linha, DOURADO);
-  } else if (a->situacao) {
-    texto_em(0, W, RODAPE_Y + 11, a->situacao, CINZA);
+    l2 = linha, c2 = OURO;
   }
-  if (a->segundos >= 0) {
-    snprintf(linha, sizeof(linha), "%d", a->segundos % 100);
-    texto(W - 24 - largura(linha, 1), 20, linha, CINZA, 1);
-  }
+  rodape(t->rodape, BRANCO, l2, c2);
 }
 
 /* ---- carregando ---- */
 
 void formato_carregando(uint32_t *destino, const unsigned char *letras, const char *etapa, int passo,
                         int passos, int frame) {
+  (void)frame;
   px = destino;
   fonte = letras;
-  fundo(frame);
-  texto_sombra(64, "SUPER MARIO WORLD", DOURADO, 2);
-  fill(W / 2 - 100, 83, 200, 1, 0xC8962E);
-  texto_em(0, W, 90, "Port nativo para PlayStation 2", TEXTO);
-  const int bx = 70, by = 124, bw = W - 140, bh = 6;
-  fill(bx - 1, by - 1, bw + 2, bh + 2, BORDA);
-  fill(bx, by, bw, bh, CAIXA);
-  if (passos > 0) fill(bx, by, bw * passo / passos, bh, DOURADO);
-  if (etapa) texto_em(0, W, by + 14, etapa, BRANCO);
-  texto_em(0, W, 196, "Retrogames Patos de Minas", CINZA);
+  paisagem();
+  texto_contorno(40, "SUPER MARIO WORLD", BRANCO, 2);
+  const char *sub = "Port nativo para PlayStation 2";
+  int sw = largura(sub, 1);
+  fill((W - sw) / 2 - 6, 62, sw + 12, 12, 0x101010);
+  texto_em(0, W, 64, sub, BRANCO);
+  /* Uma pedra por etapa: acesa quando termina; a atual um pouco mais alta. */
+  if (passos > 0) {
+    const int lado = 18, passo_x = 32, x0 = (W - (passos - 1) * passo_x - lado) / 2;
+    for (int i = 0; i < passos; i++) {
+      bool acesa = i < passo, atual = i == passo - 1;
+      int x = x0 + i * passo_x, y = atual ? 101 : 104;
+      fill(x, y, lado, lado, acesa ? 0x5A3000 : 0x2A3350);
+      fill(x + 1, y + 1, lado - 2, lado - 2, acesa ? 0xF8C030 : 0x6B7A99);
+      fill(x + 2, y + 2, lado - 4, 2, acesa ? 0xFFE9A0 : 0x8E9BB8);
+      fill(x + 2, y + lado - 4, lado - 4, 2, acesa ? 0xB06A10 : 0x4A5675);
+      char n[2] = {(char)('1' + i), 0};
+      texto(x + 6, y + 5, n, acesa ? 0x5A3000 : 0x2A3350, 1);
+    }
+  }
+  if (etapa) texto_contorno(132, etapa, BRANCO, 1);
+  texto_contorno(208, "Retrogames Patos de Minas", BRANCO, 1);
 }
 
 /* ---- teste do modo novo ---- */
 
 void formato_confirma(uint32_t *destino, const unsigned char *letras, int video, int idioma, int segundos,
-                      int frame) {
+                      int frame, const uint32_t *cena) {
+  (void)frame;
   static const char *const videos[] = {"240p", "480p", "480i"};
   px = destino;
   fonte = letras;
-  fundo(frame);
+  fundo(cena, 140);
+  caixa(20, 26, W - 40, 158);
   char linha[64];
   if (idioma == 1) {
-    texto_sombra(46, "CAN YOU SEE THIS?", DOURADO, 2);
+    texto_sombra(36, "CAN YOU", BRANCO, 0x404040, 2);
+    texto_sombra(54, "SEE THIS?", BRANCO, 0x404040, 2);
     snprintf(linha, sizeof(linha), "Press X to keep %s.", videos[video]);
-    texto_em(0, W, 80, linha, BRANCO);
-    texto_em(0, W, 92, "No answer: back to the settings.", TEXTO);
+    texto_em(0, W, 78, linha, AZUL);
+    texto_em(0, W, 166, "No answer: back to the settings.", CINZA);
   } else {
-    texto_sombra(46, "A IMAGEM APARECEU?", DOURADO, 2);
+    texto_sombra(36, "A IMAGEM", BRANCO, 0x404040, 2);
+    texto_sombra(54, "APARECEU?", BRANCO, 0x404040, 2);
     snprintf(linha, sizeof(linha), "Aperte X para ficar com o %s.", videos[video]);
-    texto_em(0, W, 80, linha, BRANCO);
-    texto_em(0, W, 92, "Sem resposta, volta para os ajustes.", TEXTO);
+    texto_em(0, W, 78, linha, AZUL);
+    texto_em(0, W, 166, "Sem resposta, volta aos ajustes.", CINZA);
   }
-  fill(W / 2 - 80, 65, 160, 1, 0xC8962E);
   snprintf(linha, sizeof(linha), "%d", segundos < 0 ? 0 : segundos % 100);
-  int lw = largura(linha, 5);
-  texto((W - lw) / 2 + 1, 116, linha, 0x000001, 5);
-  texto((W - lw) / 2, 115, linha, DOURADO, 5);
+  int lw = largura(linha, 6);
+  texto((W - lw) / 2 + 3, 98, linha, OURO_SOMBRA, 6);
+  texto((W - lw) / 2, 95, linha, OURO, 6);
+}
+
+/* ---- trapacas ---- */
+
+enum { T_LINHAS = 10, T_Y = 40, T_PASSO = 14 };
+
+void formato_trapacas(uint32_t *destino, const unsigned char *letras, const ListaTrapacas *l, int frame,
+                      const uint32_t *cena) {
+  px = destino;
+  fonte = letras;
+  const bool en = l->idioma == 1;
+  fundo(cena, l->no_jogo ? 110 : 0);
+  caixa(8, 8, W - 16, 184);
+  texto_sombra(16, en ? "CHEATS" : "TRAPAÇAS", OURO, OURO_SOMBRA, 2);
+  fill(W / 2 - 60, 34, 120, 1, 0x806020);
+  const char *l1 = en ? (l->no_jogo ? "X: on/off  O: back to game" : "X: on/off  O: back")
+                      : (l->no_jogo ? "X: liga/desliga  O: volta ao jogo" : "X: liga/desliga  O: volta");
+  if (l->n <= 0) {
+    static const char *const pt[] = {"Nenhum TRAPACAS.TXT achado.", "Ponha o arquivo ao lado do",
+                                     "save (APPS/SMW ou SMWPS2) ou", "use o Gravador no PC.",
+                                     "Formato e lista: LEIA-ME."};
+    static const char *const in[] = {"No TRAPACAS.TXT found.", "Put the file next to the",
+                                     "save (APPS/SMW or SMWPS2) or", "use the PC Recorder.",
+                                     "Format and list: LEIA-ME."};
+    for (int i = 0; i < 5; i++) texto_em(0, W, 56 + i * 14, en ? in[i] : pt[i], i ? BRANCO : LARANJA);
+    rodape(en ? "O: back" : "O: volta", BRANCO, NULL, 0);
+    return;
+  }
+  int primeira = l->marcada - T_LINHAS / 2;
+  if (primeira > l->n - T_LINHAS) primeira = l->n - T_LINHAS;
+  if (primeira < 0) primeira = 0;
+  for (int i = 0; i < T_LINHAS && primeira + i < l->n; i++) {
+    const FormatoTrapaca *it = &l->itens[primeira + i];
+    int y = T_Y + i * T_PASSO;
+    bool marcada = primeira + i == l->marcada;
+    if (marcada) {
+      fill(16, y - 2, W - 32, 12, MARCA);
+      contorno(16, y - 2, W - 32, 12, 1, OURO);
+    }
+    contorno(21, y, 8, 8, 1, it->valida ? BRANCO : 0x808080);
+    if (it->ligada && it->valida) fill(23, y + 2, 4, 4, 0x60E060);
+    /* O nome ja vem cortado em 28 letras (trapacas.c): 168 pontos, cabe. */
+    texto(34, y, it->nome, !it->valida ? LARANJA : it->ligada ? OURO : BRANCO, 1);
+  }
+  if (primeira > 0) seta_v(W - 22, 38, -1, (frame / 20) % 2 ? OURO : BRANCO);
+  if (primeira + T_LINHAS < l->n) seta_v(W - 22, T_Y + T_LINHAS * T_PASSO - 4, 1, (frame / 20) % 2 ? OURO : BRANCO);
+  const FormatoTrapaca *m = &l->itens[l->marcada];
+  const char *l2 = l->lugar;
+  uint32_t c2 = CINZA;
+  if (!m->valida) l2 = en ? "No valid code on this line." : "Nenhum código válido nesta linha.", c2 = LARANJA;
+  rodape(l1, BRANCO, l2, c2);
+}
+
+/* ---- abertura: titulo e "apoie o projeto" (intro.c) ---- */
+
+void formato_titulo(uint32_t *destino, const unsigned char *letras, const char *versao,
+                    const uint32_t *cena) {
+  px = destino;
+  fonte = letras;
+  fundo(cena, 60);
+  texto_contorno(44, "Super Mario", OURO, 3);
+  texto_contorno(74, "World", BRANCO, 2);
+  const char *sub = "Port nativo para PlayStation 2";
+  char linha[48];
+  snprintf(linha, sizeof(linha), "versão %s - projeto de fã, gratuito", versao);
+  int w1 = largura(sub, 1), w2 = largura(linha, 1), w = w1 > w2 ? w1 : w2;
+  mistura((W - w) / 2 - 8, 102, w + 16, 30, 0x000000, 200);
+  texto_em(0, W, 106, sub, BRANCO);
+  texto_em(0, W, 120, linha, CINZA);
+}
+
+void formato_apoio(uint32_t *destino, const unsigned char *letras, int frame, bool pode_seguir,
+                   const char (*qr)[46], int n, const uint32_t *cena) {
+  px = destino;
+  fonte = letras;
+  fundo(cena, 0);
+  texto_contorno(8, "APOIE O PROJETO", OURO, 2);
+  /* QR: 2 pixels por modulo, borda branca de 4 modulos, preto no branco. */
+  const int m = 2, q = 4, lado = (n + 2 * q) * m, ox = 8, oy = 32;
+  fill(ox - 2, oy - 2, lado + 4, lado + 4, 0x000000);
+  fill(ox, oy, lado, lado, 0xFFFFFF);
+  for (int y = 0; y < n; y++)
+    for (int x = 0; x < n; x++)
+      if (qr[y][x] == '1') fill(ox + (q + x) * m, oy + (q + y) * m, m, m, 0x000000);
+  const int bx = ox + lado + 6, bw = W - 6 - bx;
+  caixa_a(bx, oy - 2, bw, 142, 245);  /* quase opaca: o cenario aqui e cheio */
+  static const struct { const char *t; uint32_t c; } linhas[] = {
+      {"Este port é", BRANCO}, {"gratuito e sempre", BRANCO}, {"vai ser.", BRANCO}, {"", 0},
+      {"Se ele te divertiu,", AZUL}, {"ajude a fazer os", AZUL}, {"próximos ports,", AZUL},
+      {"como o Tekken 3", AZUL}, {"para PS2.", AZUL}, {"", 0},
+      {"Pix: aponte a", OURO}, {"câmera do celular", OURO}, {"para o QR.", OURO}};
+  for (int i = 0; i < (int)(sizeof(linhas) / sizeof(linhas[0])); i++)
+    if (linhas[i].t[0]) texto(bx + 7, oy + 5 + i * 10, linhas[i].t, linhas[i].c, 1);
+  mistura(0, 174, W, H - 174, 0x000000, 210);
+  texto_em(0, W, 177, "Do exterior: ko-fi.com/guilhermesoti", AZUL);
+  texto_em(0, W, 188, "github.com/guilhermesoti/smw-ps2", AZUL);
+  if (pode_seguir && (frame / 30) % 2 == 0) texto_em(0, W, 205, "Pressione X ou START para jogar", BRANCO);
+  else if (!pode_seguir) texto_em(0, W, 205, "Retrogames Patos de Minas", CINZA);
 }

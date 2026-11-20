@@ -3,6 +3,7 @@
 #include "intro.h"
 #include "registro.h"
 #include "ritmo.h"
+#include "trapacas.h"
 #include "src/ptbr.h"
 #include <audsrv.h>
 #include <debug.h>
@@ -21,7 +22,7 @@
 #include <timer.h>
 #include <unistd.h>
 
-#define SMW_VERSAO "0.13.8"
+#define SMW_VERSAO "0.14"
 
 #define DECLARE_DRIVER(n) extern unsigned char n##_irx[]; extern unsigned int size_##n##_irx
 DECLARE_DRIVER(bdm);
@@ -230,13 +231,33 @@ static unsigned stable_pads(unsigned connected) {
   return stable;
 }
 
-/* Settings screens (320 x 224 frame, formato.c). */
+/* Settings screens (256 x 224 frame, formato.c). */
 static uint32_t quadro[FORMATO_W * FORMATO_H] __attribute__((aligned(64)));
+/* v0.14: scenes of the game, taken from the player's ROM right after
+   smw_start, as the background of the screens before the game (0x00RRGGBB,
+   or NULL: formato.c draws its own landscape). */
+static uint32_t cena_ajustes[SMW_WIDTH * SMW_HEIGHT], cena_titulo[SMW_WIDTH * SMW_HEIGHT],
+    cena_apoio[SMW_WIDTH * SMW_HEIGHT];
+static const uint32_t *fundo_ajustes, *fundo_titulo, *fundo_apoio;
+
+/* v0.14: cheats (trapacas.c) from TRAPACAS.TXT; the ones that are on (name
+   and codes) go to TRAPACAS.LIG, where the save is. trapacas_on: how many
+   are on, so the hook does not walk the list every frame for nothing. */
+static Trapacas trapacas;
+static char trapacas_lugar[40];
+static bool trapacas_mudou;
+static int trapacas_on;
+static void aplica_trapacas(uint8_t *ram) {
+  if (trapacas_on) trapacas_aplica(&trapacas, ram);
+}
 static GSTEXTURE quadro_tex;
 extern unsigned char msx[];  /* PS2SDK libdebug 8x8 font */
 
 /* Video modes. VIDEO_AJUSTES is the one of the settings screen: 480i with
-   640 columns, the mode of the PS2SDK text screen, which every TV shows.
+   512 columns (the old width of the game, which every TV shows); since
+   v0.14 the menus are 256 x 224 like the SNES, 2 columns per pixel, so the
+   scenes of the game behind them keep their pixels even (with 640 columns,
+   until v0.13.8, they would be 2.5 each).
    The game uses 1280 columns (5 per SNES pixel in 4:3, about 3.74 in 16:9):
    with 512 in 240p/480i the 16:9 pixels alternated 1 and 2 columns, and
    with 640 in 480p every SNES pixel was 2 or 3 columns (2.5 each). 480p at
@@ -284,7 +305,7 @@ static void video_abre(int modo, bool compat) {
     bool entrelacado = modo == SMW_VIDEO_480I || modo == VIDEO_AJUSTES;
     gs->Interlace = entrelacado ? GS_INTERLACED : GS_NONINTERLACED;
     gs->Field = entrelacado ? GS_FIELD : GS_FRAME;
-    gs->Width = modo == VIDEO_AJUSTES ? 640 : compat ? 512 : 1280;
+    gs->Width = modo == VIDEO_AJUSTES || compat ? 512 : 1280;
     gs->Height = SMW_HEIGHT;
   }
   gs->ZBuffering = GS_SETTING_OFF;
@@ -338,10 +359,12 @@ static void som_menu(void) {
   }
 }
 
-/* One frame of a settings screen (already drawn in quadro). */
+/* One frame of a settings screen (already drawn in quadro). In the game in
+   16:9 (the cheats, L2+R2+SELECT) screen_w is 342: the 256-column screen
+   sits in the middle, its pixels as wide as the game's (v0.14). */
 static void mostra_quadro(int bright) {
   som_menu();
-  smw_mostra_quadro(gs, &quadro_tex, quadro, video.p480, bright);
+  smw_mostra_quadro(gs, &quadro_tex, quadro, video.p480, bright, screen_w);
 }
 
 /* Width in pixels of a draw_text_scaled message: 4 per letter + 2. */
@@ -479,11 +502,12 @@ static void set_aspect(bool wide) {
 /* L2+R2 + Triangle: performance meter; each second its line also goes to
    the log, and turning it off writes SMW_LOG.TXT (the game stops for a
    moment), so the numbers reach the PC (v0.13.8). L2+R2 + Cross: 4:3 / 16:9
-   (shows "TELA 4:3" / "TELA 16:9" for 5 s). While L2+R2 are held the pad
+   (shows "TELA 4:3" / "TELA 16:9" for 5 s). L2+R2 + Select: the cheats
+   (v0.14; the game pauses). While L2+R2 are held the pad
    sends nothing to the game. Square and Circle (scanlines and smoothing
    until v0.13.6) do nothing now. The log is written and the pacing told
    about the new screen by the main loop, after its timed part. */
-static bool log_after_loop, aspect_changed;
+static bool log_after_loop, aspect_changed, abre_trapacas;
 static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
   uint16_t pressed = raw & ~*previous;
   *previous = raw;
@@ -495,6 +519,7 @@ static uint16_t video_hotkeys(uint16_t game, uint16_t raw, uint16_t *previous) {
     smw_log("L2+R2+TRIANGULO: medidor %s", perf.on ? "ligado" : "desligado");
     if (!perf.on) log_after_loop = true;
   }
+  if (pressed & PAD_SELECT) abre_trapacas = true;  /* cheats, by the main loop */
   if (pressed & PAD_CROSS) {
     aspect_changed = true;
     set_aspect(!video.wide);
@@ -577,6 +602,22 @@ static unsigned botoes(void) {
   return (unsigned)(r0 | r1);
 }
 
+/* One frame of room sala as a background (smw_capture_scene; the engine
+   starts over afterwards), converted from the GS format to 0x00RRGGBB. */
+static void tira_cena(unsigned sala, uint32_t *cena, const uint32_t **fundo) {
+  unsigned inicio = smw_log_ms();
+  if (!smw_capture_scene(sala, cena)) {
+    smw_log("Cena %03X para o fundo: nao carregou", sala);
+    return;
+  }
+  for (int i = 0; i < SMW_WIDTH * SMW_HEIGHT; ++i) {
+    uint32_t p = cena[i];
+    cena[i] = (p & 0xFF) << 16 | (p & 0xFF00) | ((p >> 16) & 0xFF);
+  }
+  *fundo = cena;
+  smw_log("Cena %03X para o fundo: %u ms", sala, smw_log_ms() - inicio);
+}
+
 static void carregando(const char *etapa, int passo) {
   formato_carregando(quadro, msx, etapa, passo, 4, 0);
   mostra_quadro(128);
@@ -590,11 +631,106 @@ static int outro_video(int v, int dir) {
   return ordem[(i + 3 + dir) % 3];
 }
 
+/* Le o TRAPACAS.TXT (o do lugar do save, os outros, o CD da ISO) e liga as
+   que estao no TRAPACAS.LIG. Depois de smw_start. */
+static void trapacas_carrega(void) {
+  static char texto[TRAPACAS_BYTES + 1];  /* o TRAPACAS.TXT, depois o TRAPACAS.LIG */
+  trapacas.n = 0;
+  int n = smw_read_text("TRAPACAS.TXT", texto, sizeof(texto), true, trapacas_lugar, sizeof(trapacas_lugar));
+  if (n < 0) {
+    trapacas_lugar[0] = '\0';
+    smw_log("Trapacas: sem TRAPACAS.TXT");
+    return;
+  }
+  trapacas_le(&trapacas, texto, trapacas_corte(texto, (size_t)n));
+  int sem_codigo = 0, recusados = 0;
+  for (int i = 0; i < trapacas.n; ++i) {
+    sem_codigo += trapacas.t[i].codigos == 0;
+    recusados += trapacas.t[i].recusados;
+  }
+  smw_log("Trapacas: %d no TRAPACAS.TXT (%s); %d sem codigo valido, %d codigos recusados%s", trapacas.n,
+          trapacas_lugar, sem_codigo, recusados, trapacas.ignoradas ? ", linhas demais" : "");
+  int m = smw_read_text("TRAPACAS.LIG", texto, sizeof(texto), false, NULL, 0);
+  if (m > 0) trapacas_liga_salvas(&trapacas, texto, trapacas_corte(texto, (size_t)m));
+  trapacas_on = trapacas_ligadas(&trapacas);
+  smw_log("Trapacas ligadas: %d", trapacas_on);
+  smw_before_frame(aplica_trapacas);
+}
+
+/* As ligadas vao para o TRAPACAS.LIG (so se mudou). */
+static void trapacas_grava(void) {
+  if (!trapacas_mudou) return;
+  static char texto[TRAPACAS_BYTES];
+  int n = trapacas_texto_ligadas(&trapacas, texto, sizeof(texto));
+  som_mudo();  /* gravar para o jogo: o audsrv repetiria o ultimo bip (N2) */
+  bool ok = smw_write_text("TRAPACAS.LIG", texto, n);
+  smw_log("Trapacas ligadas: %d (TRAPACAS.LIG %s)", trapacas_ligadas(&trapacas), ok ? "gravado" : "nao gravado");
+  if (ok) trapacas_mudou = false;
+}
+
+/* Lista de trapacas: X liga e desliga, CIRCULO (ou TRIANGULO, START, e no
+   jogo SELECT) volta. No jogo, o fundo e o quadro do jogo, escurecido. */
+static void tela_trapacas(bool no_jogo, const uint32_t *fundo, int idioma) {
+  static FormatoTrapaca itens[TRAPACA_MAX];
+  ListaTrapacas l = {.itens = itens, .n = trapacas.n, .marcada = 0, .idioma = idioma,
+                     .lugar = NULL, .no_jogo = no_jogo};
+  static char lugar[64];
+  if (trapacas_lugar[0]) {
+    snprintf(lugar, sizeof(lugar), idioma == 1 ? "File: %s" : "Arquivo: %s", trapacas_lugar);
+    l.lugar = lugar;
+  }
+  unsigned held = botoes();
+  const unsigned voltar = PAD_CIRCLE | PAD_TRIANGLE | PAD_START | (no_jogo ? PAD_SELECT : 0);
+  for (int frame = 0;; ++frame) {
+    unsigned agora = botoes(), apertou = agora & ~held;
+    held = agora;
+    if (apertou & voltar) break;
+    if (l.n > 0) {
+      if (apertou & PAD_UP) l.marcada = (l.marcada + l.n - 1) % l.n, smw_blip(sound);
+      if (apertou & PAD_DOWN) l.marcada = (l.marcada + 1) % l.n, smw_blip(sound);
+      if (apertou & PAD_LEFT) l.marcada = l.marcada >= 10 ? l.marcada - 10 : 0, smw_blip(sound);
+      if (apertou & PAD_RIGHT) l.marcada = l.marcada + 10 < l.n ? l.marcada + 10 : l.n - 1, smw_blip(sound);
+      Trapaca *t = &trapacas.t[l.marcada];
+      if ((apertou & PAD_CROSS) && t->codigos > 0) {
+        t->ligada = !t->ligada;
+        trapacas_on = trapacas_ligadas(&trapacas);
+        trapacas_mudou = true;
+        smw_log("Trapaca %s: %s", t->ligada ? "ligada" : "desligada", t->nome);
+        smw_blip(sound);
+      }
+    }
+    for (int i = 0; i < l.n; ++i)
+      itens[i] = (FormatoTrapaca){trapacas.t[i].nome, trapacas.t[i].ligada, trapacas.t[i].codigos > 0};
+    formato_trapacas(quadro, msx, &l, frame, fundo);
+    mostra_quadro(128);
+  }
+  /* Espera soltar os botoes: o que voltou nao pode chegar no jogo. */
+  for (int i = 0; i < 60 && botoes(); ++i) {
+    formato_trapacas(quadro, msx, &l, 0, fundo);
+    mostra_quadro(128);
+  }
+}
+
+/* L2+R2+SELECT no jogo: pausa e abre a lista por cima do quadro atual. */
+static void trapacas_no_jogo(int idioma) {
+  static uint32_t cena[FORMATO_W * FORMATO_H];
+  const unsigned x0 = (screen_w - FORMATO_W) / 2;
+  for (int y = 0; y < FORMATO_H; ++y)
+    for (int x = 0; x < FORMATO_W; ++x) {
+      uint32_t p = pixels[y * screen_pitch + x0 + x];
+      cena[y * FORMATO_W + x] = (p & 0xFF) << 16 | (p & 0xFF00) | ((p >> 16) & 0xFF);
+    }
+  smw_log("Trapacas: menu no jogo (L2+R2+SELECT)");
+  tela_trapacas(true, cena, idioma);
+  trapacas_grava();
+}
+
 /* Tela AJUSTES. contagem: comeca sozinha em 5 s (ajustes ja salvos) ate o
    jogador apertar um botao. Volta com X ou START (ou no fim da contagem). */
 static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const char *situacao) {
   Ajustes a = {.linha = contagem ? AJUSTE_JOGAR : AJUSTE_VIDEO, .video = o->video, .tela = o->tela,
-               .idioma = o->idioma, .segundos = -1, .aviso = aviso, .situacao = situacao};
+               .idioma = o->idioma, .segundos = -1, .aviso = aviso, .situacao = situacao,
+               .trapacas_total = trapacas.n};
   unsigned held = botoes();
   int saindo = -1;
   bool sozinho = false;
@@ -604,7 +740,11 @@ static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const 
     if (saindo < 0 && apertou) {
       contagem = false;
       int dir = (apertou & PAD_LEFT) ? -1 : (apertou & PAD_RIGHT) ? 1 : 0;
-      if (apertou & (PAD_CROSS | PAD_START)) {
+      if (a.linha == AJUSTE_TRAPACAS && (apertou & (PAD_CROSS | PAD_RIGHT))) {
+        smw_blip(sound);
+        tela_trapacas(false, fundo_ajustes, a.idioma);
+        held = botoes();
+      } else if (apertou & (PAD_CROSS | PAD_START)) {
         saindo = frame;
       } else if (apertou & (PAD_UP | PAD_DOWN)) {
         a.linha = (a.linha + ((apertou & PAD_UP) ? AJUSTE_LINHAS - 1 : 1)) % AJUSTE_LINHAS;
@@ -619,7 +759,8 @@ static bool tela_ajustes(SmwOptions *o, bool contagem, const char *aviso, const 
     }
     if (saindo < 0 && contagem && frame >= 5 * 60) saindo = frame, sozinho = true;
     a.segundos = contagem ? 5 - frame / 60 : -1;
-    formato_ajustes(quadro, msx, &a, frame);
+    a.trapacas = trapacas_ligadas(&trapacas);
+    formato_ajustes(quadro, msx, &a, frame, fundo_ajustes);
     int bright = frame < 15 ? frame * 128 / 15 : 128;
     if (saindo >= 0) {
       bright = 128 - (frame - saindo) * 128 / 15;
@@ -641,7 +782,7 @@ static bool confirma_video(int idioma) {
       smw_log("Video: confirmado pelo jogador em %d.%d s", frame / 60, frame % 60 / 6);
       return true;
     }
-    formato_confirma(quadro, msx, video.modo, idioma, 10 - frame / 60, frame);
+    formato_confirma(quadro, msx, video.modo, idioma, 10 - frame / 60, frame, fundo_ajustes);
     mostra_quadro(frame < 15 ? frame * 128 / 15 : 128);
   }
   smw_log("Video: sem resposta em 10 s");
@@ -711,6 +852,10 @@ int main(int argc, char **argv) {
   smw_log("%s", report);
   smw_load_report(report, sizeof(report));
   smw_log("%sNovos saves vao para: %s", report, smw_save_location());
+  tira_cena(0x105, cena_ajustes, &fundo_ajustes);  /* Yoshi's Island 1 */
+  tira_cena(0x0C7, cena_titulo, &fundo_titulo);    /* a fase do titulo */
+  tira_cena(0x104, cena_apoio, &fundo_apoio);      /* casa do Yoshi */
+  trapacas_carrega();
   carregando("Pronto!", 4);
 
   /* Ajustes: o padrao, depois o SMW.CFG (Gravador no PC) e por cima o
@@ -783,10 +928,11 @@ int main(int argc, char **argv) {
     smw_log("SMW.OPT: %s", smw_save_options(&opcoes) ? "gravado" : "nao gravado (sem lugar para salvar)");
   else
     smw_log("SMW.OPT: sem mudanca");
+  trapacas_grava();
   smw_log_grava();
   g_ptbr = opcoes.idioma != 1;
 
-  smw_intro(gs, video.p480, sound, SMW_VERSAO);
+  smw_intro(gs, video.p480, sound, SMW_VERSAO, fundo_titulo, fundo_apoio);
   set_aspect(opcoes.tela == 1);
   const uint32_t field = measure_field();
   smw_log("Jogo comecou.");
@@ -833,6 +979,11 @@ int main(int argc, char **argv) {
          save, it is not counted as late frames to catch up. */
       log_after_loop = false;
       smw_log_grava();
+      last = cpu_ticks();
+    }
+    if (abre_trapacas) {  /* the game waits while the cheats are open */
+      abre_trapacas = false;
+      trapacas_no_jogo(opcoes.idioma);
       last = cpu_ticks();
     }
   }

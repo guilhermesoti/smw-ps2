@@ -9,7 +9,8 @@
 
   const estado = {
     passo: 1, rom: null, modo: 'app', pasta: null, gravando: false, resultado: null,
-    ajustes: { tela: 'perguntar', video: 'perguntar', idioma: 'pt' },
+    ajustes: { tela: 'perguntar', video: 'perguntar', idioma: 'pt', trapacas: 'gravar' },
+    trapacas: '',
   };
   const temApp = () => estado.modo === 'app' || estado.modo === 'dois';
   const temIso = () => estado.modo === 'iso' || estado.modo === 'dois';
@@ -188,8 +189,67 @@
   document.querySelectorAll('.grupo').forEach((g) => g.querySelectorAll('.seg').forEach((b) => b.addEventListener('click', () => {
     estado.ajustes[g.dataset.ajuste] = b.dataset.valor;
     g.querySelectorAll('.seg').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    atualizarTrapacas();
     atualizarResumo();
   })));
+
+  /* ------------------------------------------------------------ trapaças
+   * O TRAPACAS.TXT do pacote vem embutido (gerar_gravador.py). O texto é
+   * conferido com o mesmo leitor do jogo (Nucleo.conferirTrapacas). */
+  let TRAPACAS_PADRAO = '';
+  try { TRAPACAS_PADRAO = JSON.parse($('trapacas-padrao').textContent); } catch (e) { /* página sem gerar */ }
+  estado.trapacas = TRAPACAS_PADRAO;
+  $('tr-texto').value = TRAPACAS_PADRAO;
+
+  /* O texto a gravar, ou null (não grava). */
+  function trapacasParaGravar() {
+    return estado.ajustes.trapacas !== 'nao' && estado.trapacas.trim() !== '' ? estado.trapacas : null;
+  }
+
+  const plural = (n, um, varios) => n + ' ' + (n === 1 ? um : varios);
+  const linhasDe = (lista) => {
+    const n = lista.map((t) => t.linha);
+    return (n.length === 1 ? 'linha ' : 'linhas ') + n.slice(0, 4).join(', ') + (n.length > 4 ? '…' : '');
+  };
+
+  /* [texto, classe] da linha de estado. */
+  function estadoTrapacas() {
+    if (estado.ajustes.trapacas === 'nao') return ['O Gravador não grava o TRAPACAS.TXT.', 'dim'];
+    if (estado.trapacas.trim() === '') return ['Lista vazia: o TRAPACAS.TXT não vai ser gravado.', 'atencao'];
+    const r = N.conferirTrapacas(estado.trapacas);
+    const lista = r.trapacas;
+    if (!lista.length && !r.cortado) return ['Nenhuma trapaça na lista (no PS2 aparece "sem arquivo").', 'atencao'];
+    const semCodigo = lista.filter((t) => !t.codigos.length);
+    const recusado = lista.filter((t) => t.codigos.length && t.recusados);
+    const problemas = [];
+    if (semCodigo.length) problemas.push(semCodigo.length + ' sem código que funcione (' + linhasDe(semCodigo) + ')');
+    if (recusado.length) problemas.push('código recusado (' + linhasDe(recusado) + ')');
+    if (r.ignoradas) problemas.push(plural(r.ignoradas, 'linha depois da 64ª fica', 'linhas depois da 64ª ficam') + ' de fora');
+    if (r.cortado) problemas.push('o arquivo passa de 16 KB: o jogo só lê o começo, sem a linha cortada');
+    const total = plural(lista.length, 'trapaça', 'trapaças');
+    if (!problemas.length) return [total + ', todas certas. No PS2 começam desligadas.', 'ok'];
+    return [total + '; ' + problemas.join('; ') + '.', 'atencao'];
+  }
+
+  function atualizarTrapacas() {
+    const [t, classe] = estadoTrapacas();
+    const e = $('tr-estado');
+    e.textContent = t;
+    e.className = classe;
+    $('tr-editor').hidden = estado.ajustes.trapacas === 'nao';
+  }
+
+  $('tr-texto').addEventListener('input', () => {
+    estado.trapacas = $('tr-texto').value;
+    atualizarTrapacas();
+    atualizarResumo();
+  });
+  $('tr-original').addEventListener('click', () => {
+    $('tr-texto').value = estado.trapacas = TRAPACAS_PADRAO;
+    atualizarTrapacas();
+    atualizarResumo();
+    anunciar('Lista de trapaças original de volta.');
+  });
 
   /* Algum ajuste marcado aqui: o SMW.OPT antigo (escolhas feitas no PS2) sai
      para o SMW.CFG valer. */
@@ -206,9 +266,17 @@
         : 'Já marcado: ' + a.video + (a.video === '240p' ? '.' : ' (se a TV não mostrar, volta para os ajustes).'),
       a.tela === 'perguntar' ? 'Você escolhe 4:3 ou 16:9.' : 'Já marcado: tela ' + a.tela + '.',
       a.idioma === 'pt' ? 'Jogo em português.' : 'Jogo em inglês.',
+      textoResumoTrapacas(),
       'Abertura Retrogames.',
     ];
     $('resumo').replaceChildren(...linhas.map((t) => el('li', '', t)));
+  }
+
+  function textoResumoTrapacas() {
+    const txt = trapacasParaGravar();
+    if (txt === null) return 'Sem TRAPACAS.TXT novo.';
+    const n = N.conferirTrapacas(txt).trapacas.filter((t) => t.codigos.length).length;
+    return n ? plural(n, 'trapaça', 'trapaças') + ' no TRAPACAS.TXT, desligadas.' : 'TRAPACAS.TXT sem trapaça que funcione.';
   }
 
   /* -------------------------------------------------------------- destino */
@@ -223,13 +291,16 @@
     const linhas = [];
     if (gravaDireto) {
       linhas.push(nomeRaiz());
-      const app = ['   ├ SMW.ELF', '   ├ title.cfg', '   ├ SMW.CFG  (ajustes)', '   └ SMW.ZIP  (seu cartucho)'];
+      const app = ['   ├ SMW.ELF', '   ├ title.cfg', '   ├ SMW.CFG  (ajustes)'];
+      if (trapacasParaGravar() !== null) app.push('   ├ TRAPACAS.TXT  (trapaças)');
+      app.push('   └ SMW.ZIP  (seu cartucho)');
       if (temApp()) linhas.push((temIso() ? '├' : '└') + ' APPS\\SMW\\', ...(temIso() ? app.map((l) => '│' + l.slice(1)) : app));
       if (temIso()) linhas.push('└ CD\\', '   └ ' + N.NOME_ISO);
     } else if (estado.modo === 'iso') {
       linhas.push('Downloads\\', '└ ' + N.NOME_ISO, '', 'Copie para a pasta CD do pendrive.');
     } else {
-      linhas.push('Downloads\\', '└ SMW_PS2_pendrive.zip', '   ' + (temIso() ? '├' : '└') + ' APPS\\SMW\\ (jogo, ajustes e cartucho)');
+      linhas.push('Downloads\\', '└ SMW_PS2_pendrive.zip', '   ' + (temIso() ? '├' : '└') + ' APPS\\SMW\\ (jogo, ajustes'
+        + (trapacasParaGravar() !== null ? ', trapaças' : '') + ' e cartucho)');
       if (temIso()) linhas.push('   └ CD\\' + N.NOME_ISO);
       linhas.push('', 'Descompacte na raiz do pendrive.');
     }
@@ -258,6 +329,13 @@
     if (temApp() && await existe(['APPS', 'SMW', 'SMW.ELF'])) linhas.push(['sub', 'O jogo já está nesse pendrive: vai ser atualizado.']);
     if (temApp() && escolheuAjustes() && await existe(['APPS', 'SMW', 'SMW.OPT']))
       linhas.push(['sub', 'Os ajustes escolhidos antes no PS2 vão ser trocados pelos daqui.']);
+    const txt = temApp() ? trapacasParaGravar() : null;
+    if (txt !== null) {
+      const antigo = await ler(estado.pasta, 'APPS/SMW/TRAPACAS.TXT').catch(() => null);
+      const novo = new TextEncoder().encode(txt);
+      if (antigo && (antigo.length !== novo.length || antigo.some((b, i) => b !== novo[i])))
+        linhas.push(['sub', 'O TRAPACAS.TXT desse pendrive é diferente da lista daqui e vai ser trocado. Para manter o seu, volte ao passo 3 e marque "Não gravar".']);
+    }
     if (temIso() && await existe(['CD', N.NOME_ISO])) linhas.push(['sub', 'A ISO que já está no pendrive vai ser substituída.']);
     for (const [c, t] of linhas) info.append(el('span', c, t));
     info.hidden = !linhas.length;
@@ -381,7 +459,8 @@
     try {
       linha('Cartucho conferido (CRC32 B19ED489)', 'ok');
       await new Promise((r) => setTimeout(r, 30));
-      const arquivos = N.arquivosParaGravar({ modo: estado.modo, rom: estado.rom.rom, elf: elf(), ajustes: estado.ajustes });
+      const arquivos = N.arquivosParaGravar({ modo: estado.modo, rom: estado.rom.rom, elf: elf(), ajustes: estado.ajustes,
+                                              trapacas: trapacasParaGravar() });
       if (gravaDireto) {
         const total = arquivos.reduce((s, a) => s + a.dados.length, 0);
         let feito = 0;
@@ -444,6 +523,8 @@
     else if (estado.modo === 'iso') passos.push('Abra o OPL, atualize a lista de jogos USB e abra Super Mario World. O progresso vai para o Memory Card.');
     else passos.push('No OPL, abra Super Mario World em Aplicativos ou na lista de jogos USB.');
     passos.push('Na tela AJUSTES, confira vídeo e tela e aperte X. Bom jogo!');
+    if (trapacasParaGravar() !== null)
+      passos.push('Trapaças: ligue na linha Trapaças da tela AJUSTES ou com L2+R2+SELECT durante o jogo.');
     $('r-onde').textContent = 'NO PS2';
     $('r-aviso').textContent = (estado.modo === 'app' ? 'O SMW.ZIP tem' : estado.modo === 'iso' ? 'A ISO tem' : 'O SMW.ZIP e a ISO têm') +
       ' o seu jogo dentro. É só para você: não compartilhe.';
@@ -456,6 +537,7 @@
 
   /* ---------------------------------------------------------------- início */
   mostrarCartucho('vazio');
+  atualizarTrapacas();
   atualizarResumo();
   irPara(1);
 })();

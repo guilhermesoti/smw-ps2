@@ -118,6 +118,7 @@ void RtlApuLock();
 void RtlApuUnlock();
 void RtlApuReset();
 void RtlSetUploadingApu(bool uploading);
+void RtlReiniciaEstado(void);
 void RtlApuUpload(const uint8 *p);
 void RtlRenderAudio(ram_s16 *audio_buffer, int samples, int channels);
 void RtlPushApuState();

@@ -16,7 +16,8 @@ em <pasta dos registros>/<nome>.log) ou PULADO (falta uma ferramenta, dita na
 linha). Sai com código 1 se algum teste falhar.
 
 Os testes do Gravador usam APPS/SMW/SMW.ELF (compile antes) e precisam do
-Node; o núcleo também do python3 com o pycdlib; as telas também do
+Node; o núcleo também do python3 com o pycdlib e do compilador C (o leitor do
+TRAPACAS.TXT do jogo, para comparar com o do Gravador); as telas também do
 puppeteer-core (NODE_PATH) e de um Chrome (CHROME ou google-chrome/chromium no
 PATH)."""
 import argparse
@@ -190,6 +191,15 @@ def t_camera(ctx, base):
     return rc == 0, out
 
 
+def t_trapacas(ctx, base):
+    b = compilar(ctx, base, "trapacas", [*motor_c(), FONTE / "ps2/files.c", FONTE / "ps2/game.c",
+                                          FONTE / "ps2/registro.c", FONTE / "ps2/trapacas.c",
+                                          TESTES / "trapacas.c"],
+                 motor=True, sanitizar=True)
+    rc, out = rodar([b, str(ctx.pasta_com_jogo(base)) + "/", str(RAIZ / "APPS/SMW/TRAPACAS.TXT")], base, ASAN)
+    return rc == 0 and "TRAPACAS: OK" in out, out
+
+
 def t_aparecer(ctx, base):
     b = _com_motor("aparecer", "aparecer.c")(ctx, base)
     rc, out = rodar([b, str(ctx.pasta_com_jogo(base)) + "/", "1", "600", *todas_as_salas()], base)
@@ -235,8 +245,17 @@ def t_gravador_nucleo(ctx, base):
     # testar_nucleo.js compara a ISO com a do pycdlib chamando "python3".
     if shutil.which("python3") is None or rodar(["python3", "-c", "import pycdlib"], RAIZ)[0]:
         raise Pulado("falta o python3 com o pycdlib (pip install pycdlib)")
-    rc, out = rodar(["node", RAIZ / "Gravador/testes/testar_nucleo.js", ctx.copia_do_jogo(base), ctx.elf], RAIZ)
-    return rc == 0 and "NÚCLEO: OK" in out, out
+    # O leitor do TRAPACAS.TXT do jogo, para comparar com o do Gravador.
+    if shutil.which(ctx.cc) is None:
+        raise Pulado(f"falta o compilador C ({ctx.cc})")
+    ref = base / "trapacas_ref"
+    rc, texto = rodar([ctx.cc, "-std=gnu11", *SANITIZAR, "-I", FONTE / "ps2", FONTE / "ps2/trapacas.c",
+                       RAIZ / "Gravador/testes/trapacas_ref.c", "-o", ref], RAIZ)
+    if rc:
+        return False, "não compilou o trapacas_ref:\n" + texto
+    rc, out = rodar(["node", RAIZ / "Gravador/testes/testar_nucleo.js", ctx.copia_do_jogo(base), ctx.elf], RAIZ,
+                    {"TRAPACAS_REF": str(ref), **ASAN})
+    return rc == 0 and "NÚCLEO: OK" in out and "lê igual ao jogo" in out, out
 
 
 def _chrome():
@@ -281,6 +300,7 @@ LISTA = [
     ("memory_card", "sequência de chamadas do MCSERV", _mock("memory_card", "memory_card.c", wrap=False, gc=True), False),
     ("palacio", "Palácio Amarelo com o motor", t_palacio, False),
     ("camera", "câmera do mapa", t_camera, False),
+    ("trapacas", "trapaças (TRAPACAS.TXT e cada uma no motor)", t_trapacas, False),
     ("percurso", "percurso de regressão (CRC d1ac4ce4)", t_percurso, False),
     ("aparecer", "objetos surgindo/sumindo em 16:9", t_aparecer, False),
     ("largo_169", "Mario na borda e PPU em 16:9", _largo(True), False),

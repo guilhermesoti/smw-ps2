@@ -273,7 +273,6 @@ static int card_delete(int port, const char *name) {
 /* Reads at most cap bytes, never past the end of the file: some BIOS
    memory card drivers refuse a read that asks for more than the file has. */
 static int card_read(int port, const char *name, uint8_t *buf, int cap) {
-  if (cap > (int)sizeof(card_buf)) return FILE_ERROR;
   for (int attempt = 0; attempt < 2; ++attempt) {
     int submitted = mcOpen(port, 0, name, CARD_O_RDONLY);
     if (submitted != 0) { card_fail_on(name, 5, submitted); return FILE_ERROR; }
@@ -285,16 +284,27 @@ static int card_read(int port, const char *name, uint8_t *buf, int cap) {
     if (mcSeek(fd, 0, 2) == 0) size = card_wait();         /* SEEK_END */
     if (size >= 0 && mcSeek(fd, 0, 0) == 0 && card_wait() == 0) {
       int want = size < cap ? size : cap;
+      /* Em pedacos do card_buf (v0.14: o TRAPACAS.TXT tem ate 16 KB; antes
+         uma leitura maior que 4 KB era recusada). Nunca alem do fim (C11). */
       got = 0;
-      if (want > 0 && mcRead(fd, card_buf, want) == 0) got = card_wait();
-      else if (want > 0) got = -1;
+      while (got < want) {
+        int piece = want - got < (int)sizeof(card_buf) ? want - got : (int)sizeof(card_buf);
+        int r = -1;
+        if (mcRead(fd, card_buf, piece) == 0) r = card_wait();
+        if (r < 0) {
+          got = r;
+          break;
+        }
+        memcpy(buf + got, card_buf, (size_t)r);
+        got += r;
+        if (r < piece) break;
+      }
     } else if (size < 0) {
       got = size;
     }
     if (mcClose(fd) == 0) card_wait();
     if (got == -5 && attempt == 0 && card_set_access(port, name)) continue;
     if (got < 0) { card_fail_on(name, 6, got); return FILE_ERROR; }
-    if (got > 0) memcpy(buf, card_buf, got);
     return got;
   }
   return FILE_ERROR;
@@ -1164,6 +1174,57 @@ bool smw_save_options(const SmwOptions *o) {
 void smw_options_changed(const SmwOptions *o) {
   pending_options = *o;
   options_pending = true;
+}
+
+/* ------------------------------------------------------- trapacas --- */
+
+static const char *const kStorePlaces[STORE_COUNT] = {[STORE_FOLDER] = "pendrive (APPS/SMW)",
+                                                      [STORE_MC0] = "Memory Card 1 (SMWPS2)",
+                                                      [STORE_MC1] = "Memory Card 2 (SMWPS2)"};
+
+/* Um texto pequeno (TRAPACAS.TXT, TRAPACAS.LIG): primeiro onde fica o save,
+   depois os outros lugares; com disco, por ultimo o CD (a ISO que o Gravador
+   fez). Volta os bytes lidos (0 a cap) ou -1; lugar diz de onde veio. */
+int smw_read_text(const char *name, char *buf, int cap, bool disc_too, char *lugar, size_t lugar_n) {
+  int order[STORE_COUNT], count = store_order(order);
+  bool recording = card_recording;
+  card_recording = false;
+  int n = -1;
+  for (int i = 0; i < count && n < 0; ++i) {
+    char path[SMW_PATH];
+    if (store_check(order[i]) != 0 || !join_path(path, store_dir(order[i]), name)) continue;
+    n = file_read(path, (uint8_t *)buf, cap);
+    if (n >= 0 && lugar) snprintf(lugar, lugar_n, "%s", kStorePlaces[order[i]]);
+  }
+  if (n < 0 && disc_too && rom_on_disc) {
+    char path[SMW_PATH];
+    snprintf(path, sizeof(path), "cdrom0:/%s", name);
+    n = file_read(path, (uint8_t *)buf, cap);
+    if (n < 0) {
+      snprintf(path, sizeof(path), "cdrom0:/%s;1", name);
+      n = file_read(path, (uint8_t *)buf, cap);
+    }
+    if (n >= 0 && lugar) snprintf(lugar, lugar_n, "CD (ISO)");
+  }
+  card_recording = recording;
+  return n;
+}
+
+/* Grava no primeiro lugar que der (o do save primeiro). */
+bool smw_write_text(const char *name, const char *text, int n) {
+  int order[STORE_COUNT], count = store_order(order);
+  bool recording = card_recording, ok = false;
+  card_recording = false;
+  for (int i = 0; i < count && !ok; ++i) {
+    char path[SMW_PATH];
+    int store = order[i];
+    if (store_check(store) != 0 || !join_path(path, store_dir(store), name)) continue;
+    if (store != STORE_FOLDER) make_folder(store_dir(store));
+    ok = file_write(path, (const uint8_t *)text, n);
+    if (ok && store != STORE_FOLDER) write_card_icon(store_dir(store), store - STORE_MC0);
+  }
+  card_recording = recording;
+  return ok;
 }
 
 /* ------------------------------------------------------------- log --- */

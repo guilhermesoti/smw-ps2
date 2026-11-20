@@ -124,6 +124,103 @@ const Nucleo = (() => {
   }
 
   const texto = (s) => new TextEncoder().encode(s);
+
+  /* -------------------------------------------------------- TRAPACAS.TXT
+   * O mesmo leitor do jogo (Fonte/ps2/trapacas.c), byte a byte, para o
+   * Gravador mostrar o que o PS2 vai ver: só os primeiros 16 KB do arquivo
+   * (o que o main.c lê; a linha cortada nesse limite sai), até 64 trapaças, nomes com até 28 letras (ASCII e
+   * as letras com acento do português; o resto vira '?') e até 16 códigos
+   * Pro Action Replay em cada uma. Devolve {trapacas: [{linha, nome,
+   * codigos: [{ram, valor}], recusados}], ignoradas, bytes, cortado}; uma
+   * trapaça sem nenhum código aceito aparece no PS2, em laranja, mas não
+   * liga. */
+  const TRAPACA_MAX = 64, TRAPACA_NOME = 28, TRAPACA_CODIGOS = 16, TRAPACAS_BYTES = 16384;
+  const decodifica = new TextDecoder();
+
+  function conferirTrapacas(entrada) {
+    const tudo = typeof entrada === 'string' ? texto(entrada) : entrada;
+    /* trapacas_corte: passou de 16 KB, a linha cortada sai inteira. */
+    let usar = tudo.length;
+    if (usar > TRAPACAS_BYTES) {
+      usar = TRAPACAS_BYTES;
+      while (usar && tudo[usar - 1] !== 10) usar--;
+    }
+    const b = tudo.subarray(0, usar);
+    const n = b.length;
+    const hex = (c) => (c >= 48 && c <= 57 ? c - 48 : c >= 97 && c <= 102 ? c - 87 : c >= 65 && c <= 70 ? c - 55 : -1);
+    const espaco = (c) => c === 32 || c === 9 || c === 13;
+    const separa = (c) => espaco(c) || c === 43 || c === 44;  /* espaço, '+' ou ',' */
+    const posicaoRam = (endereco) => {
+      const banco = endereco >>> 16, resto = endereco & 0xFFFF;
+      if (banco === 0x7E) return resto;
+      if (banco === 0x7F) return 0x10000 + resto;
+      if ((banco <= 0x3F || (banco >= 0x80 && banco <= 0xBF)) && resto < 0x2000) return resto;
+      return -1;
+    };
+    /* "AAAAAA:VV", "AAAAAA=VV" ou "AAAAAAVV" em b[ini..fim): um ':' ou '='
+       só, depois do sexto algarismo. */
+    const codigo = (ini, fim) => {
+      const d = [];
+      let separou = false;
+      for (let i = ini; i < fim; i++) {
+        if ((b[i] === 58 || b[i] === 61) && d.length === 6 && !separou) { separou = true; continue; }
+        if (hex(b[i]) < 0 || d.length === 8) return null;
+        d.push(hex(b[i]));
+      }
+      if (d.length !== 8) return null;
+      const ram = posicaoRam(d.slice(0, 6).reduce((a, x) => a * 16 + x, 0));
+      return ram < 0 ? null : { ram, valor: d[6] * 16 + d[7] };
+    };
+    const nome = (ini, fim) => {
+      while (fim > ini && espaco(b[ini])) ini++;
+      while (fim > ini && espaco(b[fim - 1])) fim--;
+      const s = [];
+      let letras = 0;
+      for (let i = ini; i < fim && letras < TRAPACA_NOME; letras++) {
+        const c = b[i];
+        if (c >= 0x20 && c < 0x7F) {
+          s.push(c), i++;
+        } else if (c === 0xC3 && i + 1 < fim && (b[i + 1] & 0xC0) === 0x80) {
+          s.push(c, b[i + 1]), (i += 2);
+        } else {
+          s.push(63), i++;
+          while (i < fim && (b[i] & 0xC0) === 0x80) i++;  /* resto do caractere */
+        }
+      }
+      while (s.length && s[s.length - 1] === 32) s.pop();  /* o corte pode deixar um espaço no fim */
+      return decodifica.decode(new Uint8Array(s));
+    };
+
+    const r = { trapacas: [], ignoradas: 0, bytes: tudo.length, cortado: tudo.length > TRAPACAS_BYTES };
+    let i = n >= 3 && b[0] === 0xEF && b[1] === 0xBB && b[2] === 0xBF ? 3 : 0;
+    let numero = 0;
+    while (i < n) {
+      let l = i;
+      while (i < n && b[i] !== 10) i++;
+      const fim = i;
+      i++;
+      numero++;
+      while (l < fim && espaco(b[l])) l++;
+      if (l === fim || b[l] === 35 || b[l] === 59) continue;  /* vazia, '#' ou ';' */
+      const igual = b.subarray(l, fim).indexOf(61);
+      if (igual < 0) continue;
+      if (r.trapacas.length === TRAPACA_MAX) { r.ignoradas++; continue; }
+      const t = { linha: numero, nome: nome(l, l + igual) || 'Linha ' + numero, codigos: [], recusados: 0 };
+      let s = l + igual + 1;
+      while (s < fim) {
+        while (s < fim && separa(b[s])) s++;
+        const c = s;
+        while (s < fim && !separa(b[s])) s++;
+        if (s === c) continue;
+        const cod = t.codigos.length < TRAPACA_CODIGOS ? codigo(c, s) : null;
+        if (cod) t.codigos.push(cod);
+        else t.recusados++;
+      }
+      r.trapacas.push(t);
+    }
+    return r;
+  }
+
   const TITLE_CFG = 'title=Super Mario World\nboot=SMW.ELF\n';
   const SYSTEM_CNF = 'BOOT2 = cdrom0:\\SMWG_000.01;1\r\nVER = 1.00\r\nVMODE = NTSC\r\n';
   const NOME_ISO = 'SMWG_000.01.Super Mario World.iso';
@@ -288,10 +385,13 @@ const Nucleo = (() => {
   }
 
   /* ------------------------------------------------------ o que gravar
-   * modo: 'app' | 'iso' | 'dois'. Devolve [{caminho, dados}] relativo à
-   * raiz do pendrive (ou pasta escolhida). */
-  function arquivosParaGravar({ modo, rom, elf, ajustes, quando }) {
+   * modo: 'app' | 'iso' | 'dois'. trapacas: o texto do TRAPACAS.TXT (ou
+   * nada, para não gravar). Devolve [{caminho, dados}] relativo à raiz do
+   * pendrive (ou pasta escolhida). */
+  function arquivosParaGravar({ modo, rom, elf, ajustes, trapacas, quando }) {
     const cfg = texto(gerarCfg(ajustes || {}));
+    const txt = trapacas === undefined || trapacas === null ? null
+      : typeof trapacas === 'string' ? texto(trapacas) : trapacas;
     /* A ROM vai num ZIP, o mesmo caminho de leitura já usado pelo jogo no
        pendrive e na ISO. */
     const romZip = gerarZip([{ caminho: 'Super Mario World (USA).sfc', dados: rom }], quando);
@@ -300,22 +400,28 @@ const Nucleo = (() => {
       lista.push({ caminho: 'APPS/SMW/SMW.ELF', dados: elf });
       lista.push({ caminho: 'APPS/SMW/title.cfg', dados: texto(TITLE_CFG) });
       lista.push({ caminho: 'APPS/SMW/SMW.CFG', dados: cfg });
+      if (txt) lista.push({ caminho: 'APPS/SMW/TRAPACAS.TXT', dados: txt });
       lista.push({ caminho: 'APPS/SMW/SMW.ZIP', dados: romZip });
     }
     if (modo === 'iso' || modo === 'dois') {
-      const iso = gerarIso([
+      const naIso = [
         { nome: 'SYSTEM.CNF;1', dados: texto(SYSTEM_CNF) },
         { nome: 'SMWG_000.01;1', dados: elf },
         { nome: 'SMW.ZIP;1', dados: romZip },
         { nome: 'SMW.CFG;1', dados: cfg },
-      ], quando);
+      ];
+      /* Na ISO o jogo lê o TRAPACAS.TXT do CD quando o pendrive e os Memory
+         Cards não têm um (Fonte/ps2/files.c, smw_read_text). */
+      if (txt) naIso.push({ nome: 'TRAPACAS.TXT;1', dados: txt });
+      const iso = gerarIso(naIso, quando);
       lista.push({ caminho: 'CD/' + NOME_ISO, dados: iso });
     }
     return lista;
   }
 
   return { ROM_BYTES, ROM_CRC, crc32, hex8, ErroRom, entradasZip, conferirRom, gerarCfg, gerarIso,
-           gerarZip, arquivosParaGravar, agora, TITLE_CFG, SYSTEM_CNF, NOME_ISO, APP_ISO, OPCOES };
+           gerarZip, arquivosParaGravar, agora, conferirTrapacas, TITLE_CFG, SYSTEM_CNF, NOME_ISO, APP_ISO,
+           OPCOES, TRAPACA_MAX, TRAPACA_NOME, TRAPACA_CODIGOS, TRAPACAS_BYTES };
 })();
 
 if (typeof module !== 'undefined') module.exports = Nucleo;

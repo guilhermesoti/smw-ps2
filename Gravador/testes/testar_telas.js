@@ -54,7 +54,7 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
     try { await raiz.removeEntry('PENDRIVE', { recursive: true }); } catch (e) { /* novo */ }
     const smw = await (await (await raiz.getDirectoryHandle('PENDRIVE', { create: true }))
       .getDirectoryHandle('APPS', { create: true })).getDirectoryHandle('SMW', { create: true });
-    for (const [nome, conteudo] of [['SMW.SRM', 'SAVE-ANTIGO'], ['SMW.OPT', 'tela=4:3\n']]) {
+    for (const [nome, conteudo] of [['SMW.SRM', 'SAVE-ANTIGO'], ['SMW.OPT', 'tela=4:3\n'], ['TRAPACAS.TXT', 'Antiga = 7E0DBE:01\n']]) {
       const w = await (await smw.getFileHandle(nome, { create: true })).createWritable();
       await w.write(conteudo);
       await w.close();
@@ -88,6 +88,20 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   await clica(p, '.grupo[data-ajuste="video"] .seg[data-valor="480p"]');
   await foto(p, '3_ajustes');
   confere((await texto(p, '#resumo')).includes('tela 16:9') && (await texto(p, '#resumo')).includes('480p'), 'resumo segue os ajustes');
+  confere((await texto(p, '#tr-estado')) === '13 trapaças, todas certas. No PS2 começam desligadas.', 'trapaças: lista do pacote conferida (' + (await texto(p, '#tr-estado')) + ')');
+  confere((await texto(p, '#resumo')).includes('13 trapaças no TRAPACAS.TXT, desligadas.'), 'resumo: 13 trapaças');
+  const padrao = await p.$eval('#tr-texto', (t) => t.value);
+  confere(padrao === fs.readFileSync(path.join(__dirname, '..', '..', 'APPS', 'SMW', 'TRAPACAS.TXT'), 'utf8'), 'trapaças: o editor começa com o TRAPACAS.TXT do pacote');
+  await clica(p, '#tr-editor summary');
+  await p.focus('#tr-texto');
+  await p.keyboard.down('Control'); await p.keyboard.press('End'); await p.keyboard.up('Control');
+  await p.keyboard.type('Teste = 7E0DBE:63\nRuim = 008000:EA\nMeio = 7E0DBE:62+xyz\n');
+  await espera(150);
+  const estadoEditado = await texto(p, '#tr-estado');
+  confere(estadoEditado === '16 trapaças; 1 sem código que funcione (linha 29); código recusado (linha 30).', 'trapaças: erros com o número da linha (' + estadoEditado + ')');
+  confere((await texto(p, '#resumo')).includes('15 trapaças no TRAPACAS.TXT'), 'resumo: só conta as que funcionam');
+  await foto(p, '3_trapacas');
+  const editado = await p.$eval('#tr-texto', (t) => t.value);
   await clica(p, '#avancar');
   confere(await p.$eval('#avancar', (b) => b.disabled), 'passo 4: GRAVAR desligado sem pendrive');
   await clica(p, '#escolher-pasta');
@@ -96,7 +110,9 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   const info = await texto(p, '#d-info');
   confere(info.includes('Save encontrado'), 'destino: acha o save que já existe');
   confere(info.includes('vão ser trocados pelos daqui'), 'destino: avisa da escolha antiga do PS2');
+  confere(info.includes('O TRAPACAS.TXT desse pendrive é diferente'), 'destino: avisa do TRAPACAS.TXT diferente');
   confere((await texto(p, '#arvore')).includes('PENDRIVE\\'), 'destino: árvore com o nome do pendrive');
+  confere((await texto(p, '#arvore')).includes('TRAPACAS.TXT  (trapaças)'), 'destino: TRAPACAS.TXT na árvore');
 
   await clica(p, '#avancar');
   await p.waitForFunction(() => document.getElementById('t5').textContent !== 'GRAVANDO...', { timeout: 30000 });
@@ -132,8 +148,13 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
     fs.writeFileSync(path.join(pend, nome), Buffer.from(b64, 'base64'));
   }
   const nomes = Object.keys(gravados).sort().join(',');
-  confere(nomes === 'APPS/SMW/SMW.CFG,APPS/SMW/SMW.ELF,APPS/SMW/SMW.SRM,APPS/SMW/SMW.ZIP,APPS/SMW/title.cfg,CD/SMWG_000.01.Super Mario World.iso',
+  confere(nomes === 'APPS/SMW/SMW.CFG,APPS/SMW/SMW.ELF,APPS/SMW/SMW.SRM,APPS/SMW/SMW.ZIP,APPS/SMW/TRAPACAS.TXT,APPS/SMW/title.cfg,CD/SMWG_000.01.Super Mario World.iso',
     'pendrive: arquivos certos, SMW.OPT antigo removido (' + nomes + ')');
+  const trGravado = fs.readFileSync(path.join(pend, 'APPS/SMW/TRAPACAS.TXT'), 'utf8');
+  confere(trGravado === editado && trGravado.endsWith('Meio = 7E0DBE:62+xyz\n'), 'pendrive: TRAPACAS.TXT com a lista editada');
+  const isoGravada = fs.readFileSync(path.join(pend, 'CD/SMWG_000.01.Super Mario World.iso'));
+  confere(isoGravada.indexOf('TRAPACAS.TXT;1', 0, 'latin1') > 0 && isoGravada.indexOf(Buffer.from(editado, 'utf8')) > 0,
+    'ISO: TRAPACAS.TXT editado dentro');
   confere(fs.readFileSync(path.join(pend, 'APPS/SMW/SMW.SRM'), 'latin1') === 'SAVE-ANTIGO', 'pendrive: save antigo intacto');
   confere(/tela=16:9\r\nvideo=480p\r\nidioma=pt/.test(fs.readFileSync(path.join(pend, 'APPS/SMW/SMW.CFG'), 'latin1')), 'pendrive: SMW.CFG com os ajustes');
   await p.close();
@@ -149,12 +170,20 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
   await q.waitForFunction(() => !document.getElementById('c-ok').hidden, { timeout: 10000 });
   await clica(q, '#avancar');
   await clica(q, '#avancar');
+  await clica(q, '.grupo[data-ajuste="trapacas"] .seg[data-valor="nao"]');
+  confere(!(await visivel(q, '#tr-editor')) && (await texto(q, '#tr-estado')) === 'O Gravador não grava o TRAPACAS.TXT.', 'trapaças: "Não gravar" esconde o editor');
+  confere((await texto(q, '#resumo')).includes('Sem TRAPACAS.TXT novo.'), 'resumo: sem TRAPACAS.TXT');
   await clica(q, '#avancar');
   await foto(q, '4_baixar');
   confere((await texto(q, '#avancar')) === 'BAIXAR ▶', 'sem gravação direta: botão BAIXAR');
   await clica(q, '#avancar');
   for (let i = 0; i < 50 && !fs.existsSync(path.join(baixados, 'SMW_PS2_pendrive.zip')); i++) await espera(200);
   confere(fs.existsSync(path.join(baixados, 'SMW_PS2_pendrive.zip')), 'download do SMW_PS2_pendrive.zip');
+  await espera(500);
+  const noZip = require('child_process').execFileSync('python3', ['-c',
+    'import zipfile, sys; print(",".join(sorted(zipfile.ZipFile(sys.argv[1]).namelist())))',
+    path.join(baixados, 'SMW_PS2_pendrive.zip')]).toString().trim();
+  confere(noZip === 'APPS/SMW/SMW.CFG,APPS/SMW/SMW.ELF,APPS/SMW/SMW.ZIP,APPS/SMW/title.cfg', 'download sem TRAPACAS.TXT (' + noZip + ')');
   await q.setViewport({ width: 390, height: 844 });
   await clica(q, '#avancar');
   await foto(q, '6_celular');

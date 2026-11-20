@@ -132,6 +132,19 @@ p { margin: 0; }
 }
 .seg:hover { border-color: var(--azul); }
 .seg[aria-pressed="true"] { background: var(--ouro); border-color: var(--ouro); color: #1a1300; }
+.trapacas { display: flex; flex-direction: column; gap: 8px; margin-top: -6px; }
+.trapacas details { display: flex; flex-direction: column; gap: 8px; }
+.trapacas summary { cursor: pointer; color: var(--azul); width: fit-content; }
+.trapacas summary:hover { color: var(--tinta); }
+.trapacas details[open] summary { margin-bottom: 8px; }
+.trapacas details p { margin-bottom: 8px; }
+.trapacas textarea {
+  width: 100%; min-height: 180px; resize: vertical; padding: 8px 10px; tab-size: 4;
+  font-family: 'VT323', monospace; font-size: 20px; line-height: 21px;
+  background: #05071a; color: var(--tinta); border: 2px solid var(--borda);
+}
+.trapacas textarea:focus { border-color: var(--azul); outline: none; }
+.tr-acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .resumo { flex: 0 1 300px; }
 .resumo ol { margin: 0; padding-left: 26px; display: flex; flex-direction: column; gap: 6px; }
 .resumo li::marker { color: var(--ouro); }

@@ -156,11 +156,27 @@
             <button type="button" class="seg" data-valor="pt" aria-pressed="true">Português</button>
             <button type="button" class="seg" data-valor="en" aria-pressed="false">English</button>
           </fieldset>
+          <fieldset class="grupo" data-ajuste="trapacas">
+            <legend class="rotulo">TRAPAÇAS</legend>
+            <button type="button" class="seg" data-valor="gravar" aria-pressed="true">Gravar a lista</button>
+            <button type="button" class="seg" data-valor="nao" aria-pressed="false">Não gravar</button>
+          </fieldset>
+          <div class="trapacas" id="tr-caixa">
+            <span id="tr-estado" aria-live="polite"></span>
+            <details id="tr-editor">
+              <summary>Ver e editar a lista (TRAPACAS.TXT)</summary>
+              <p class="dim">Uma por linha: <span class="sub">Nome = código</span>. Códigos Pro Action Replay (7E0DBE:62); Game Genie não funciona. No PS2 todas começam desligadas: ligue em AJUSTES ou com L2+R2+SELECT no jogo.</p>
+              <textarea id="tr-texto" rows="9" spellcheck="false" autocomplete="off" aria-label="Lista de trapaças (TRAPACAS.TXT)"></textarea>
+              <div class="tr-acoes">
+                <button type="button" class="seg" id="tr-original">Voltar à lista original</button>
+              </div>
+            </details>
+          </div>
         </div>
         <div class="caixa resumo">
           <span class="rotulo" style="color: var(--ouro)">AO LIGAR O PS2</span>
           <ol id="resumo"></ol>
-          <span class="dim" style="border-top: 2px dashed var(--linha); padding-top: 10px">Fica salvo no SMW.CFG, junto do jogo.</span>
+          <span class="dim" style="border-top: 2px dashed var(--linha); padding-top: 10px">Fica salvo no SMW.CFG, junto do jogo. As trapaças vão no TRAPACAS.TXT.</span>
         </div>
       </div>
     </section>
@@ -237,6 +253,7 @@
 <div class="sr" id="anuncio" role="status" aria-live="polite"></div>
 
 <script type="application/octet-stream" id="elf" data-sha256="@@ELF_SHA@@">@@ELF_B64@@</script>
+<script type="application/json" id="trapacas-padrao">@@TRAPACAS_JSON@@</script>
 <script>
 /*@@NUCLEO@@*/
 </script>

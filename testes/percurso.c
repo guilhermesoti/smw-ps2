@@ -38,7 +38,8 @@ static uint16_t entrada_no_passo(unsigned passo) {
 }
 
 int main(int argc, char **argv) {
-  if (argc != 3 || (strcmp(argv[2], "completo") && strcmp(argv[2], "alternado")))
+  if (argc != 3 || (strcmp(argv[2], "completo") && strcmp(argv[2], "alternado") &&
+                    strcmp(argv[2], "cenario")))
     return EXIT_FAILURE;
   uint8_t *rom;
   uint32_t crc_rom;
@@ -56,6 +57,15 @@ int main(int argc, char **argv) {
   g_ptbr = false;
   smw_start(rom, pixels);
   free(rom);
+  /* v0.14: os menus tiram fotos de fases (smw_capture_scene) e o motor
+     recomeça; o percurso tem de sair igual, imagem e som. */
+  if (strcmp(argv[2], "cenario") == 0) {
+    static uint32_t cena[SMW_WIDTH * SMW_HEIGHT];
+    if (!smw_capture_scene(0x105, cena) || !smw_capture_scene(0x0C7, cena)) {
+      fprintf(stderr, "A foto da fase falhou.\n");
+      return EXIT_FAILURE;
+    }
+  }
 
   for (unsigned passo = 0; passo < 1930; ++passo) {
     bool desenhar = !alternado || (passo % 2 == 1);

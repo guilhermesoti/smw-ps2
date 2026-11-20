@@ -8,6 +8,8 @@
 #include "src/variables.h"
 #include "src/ptbr.h"
 #include "src/largo.h"
+#include <stdlib.h>
+#include <string.h>
 
 Snes *g_snes;
 SpcPlayer *g_spc_player;
@@ -19,6 +21,9 @@ bool smw_save_error;
 
 void SmwRunOneFrameOfGame(void);
 void SmwDrawPpuFrame(bool draw_pixels);
+void SmwDrawPpuFrameSemHud(void);
+
+static uint32_t *game_pixels;
 
 /* Logic, audio generation and rendering run on the same EE thread. */
 void RtlApuLock(void) {}
@@ -26,6 +31,9 @@ void RtlApuUnlock(void) {}
 
 static void (*before_save)(void);
 void smw_before_save(void (*hook)(void)) { before_save = hook; }
+
+static void (*before_frame)(uint8_t *ram);
+void smw_before_frame(void (*hook)(uint8_t *ram)) { before_frame = hook; }
 
 /* Each save goes to the log; the file itself is written after the first
    save (and after the next ones until a write works) and after a failed
@@ -63,8 +71,62 @@ void smw_start(uint8_t *rom, uint32_t *pixels) {
   game_id = kGameID_SMW;
   g_spc_player = SmwSpcPlayer_Create();
   g_spc_player->initialize(g_spc_player);
+  game_pixels = pixels;
   PpuBeginDrawing(g_snes->ppu, (uint8_t *)pixels, SMW_WIDTH * 4, 0);
   smw_load_progress(g_sram);
+}
+
+/* O motor de novo como logo depois de smw_start: Snes, APU e reprodutor de
+   som novos, a mesma ROM e o mesmo save (a SRAM carregada). */
+static void restart_engine(void) {
+  Snes *old = g_snes;
+  Snes *s = snes_init(g_ram);
+  cart_load(s->cart, 1, old->cart->rom, SMW_ROM_BYTES, SMW_SRAM_BYTES);
+  memcpy(s->cart->ram, old->cart->ram, SMW_SRAM_BYTES);
+  snes_free(old);
+  g_snes = s;
+  snes_reset(g_snes, true);
+  g_rom = s->cart->rom;
+  g_sram = s->cart->ram;
+  g_sram_size = s->cart->ramSize;
+  dsp_free(g_spc_player->dsp);
+  free(g_spc_player);
+  g_spc_player = SmwSpcPlayer_Create();
+  g_spc_player->initialize(g_spc_player);
+  RtlReiniciaEstado();
+  PpuBeginDrawing(g_snes->ppu, (uint8_t *)game_pixels, SMW_WIDTH * 4, 0);
+}
+
+bool smw_capture_scene(unsigned room, uint32_t *dest) {
+  static int16_t scratch[SMW_MAX_SAMPLES * 2];
+  /* Como o carregador de salas dos testes: logo depois do reset, a sala
+     direto no modo 0x11 (carregar fase). */
+  void (*hook)(uint8_t *) = before_frame;
+  before_frame = NULL;  /* sem trapacas na foto */
+  for (int i = 0; i < 2; ++i) smw_frame(0, 0, 1, scratch, SMW_SAMPLES, false);
+  player_xpos = player_ypos = 0;
+  player_current_state = 0;
+  misc_intro_level_flag = 0;
+  flag_use_secondary_entrance = 0;
+  counter_sublevels_entered = 1;
+  ow_players_map[0] = (uint8)(room >> 8);
+  misc_subscreen_exit_entrance_number_lo[0] = (uint8)room;
+  misc_game_mode = 0x11;
+  /* Mais 2 quadros depois de entrar na fase (no PC, o quadro ja sai igual
+     ao de 30 quadros depois em 0x105, 0x0C7 e 0x104). */
+  int in_level = -1;
+  for (int f = 0; f < 300 && (in_level < 0 || f - in_level < 2); ++f) {
+    smw_frame(0, 0, 1, scratch, SMW_SAMPLES, false);
+    if (in_level < 0 && misc_game_mode == 0x14) in_level = f;
+  }
+  const bool ok = in_level >= 0;
+  if (ok) {
+    PpuBeginDrawing(g_snes->ppu, (uint8_t *)dest, SMW_WIDTH * 4, 0);
+    SmwDrawPpuFrameSemHud();
+  }
+  restart_engine();
+  before_frame = hook;
+  return ok;
 }
 
 void smw_set_widescreen(bool on, uint32_t *pixels, unsigned pitch) {
@@ -91,6 +153,9 @@ void smw_frame(uint16_t p1, uint16_t p2, unsigned pads, int16_t *stereo, int sam
   g_snes->input2->currentState = filter_dpad(p2);
   g_ram[kSmwRam_APUI02] = g_spc_player->port_to_snes[2];
   g_snes->runningWhichVersion = 2;
+  /* v0.14: trapacas (codigos de RAM) antes da logica de cada passo, como o
+     Pro Action Replay escreve a cada quadro. */
+  if (before_frame) before_frame(g_ram);
   LargoAtualiza();
   SmwRunOneFrameOfGame();
   g_snes->runningWhichVersion = 0;

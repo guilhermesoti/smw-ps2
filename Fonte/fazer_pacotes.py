@@ -6,7 +6,8 @@
 
 Usa a organização do projeto (a pasta acima de Codigo):
   ROM/Super Mario World (USA).zip     a cópia do jogo (só entra na ISO de teste)
-  ELF OU ISO TESTE/                   ELF + title.cfg, Gravador e ISO da versão atual
+  ELF OU ISO TESTE/                   ELF + title.cfg + TRAPACAS.TXT, Gravador e ISO da
+                                      versão atual
   Github/                             pacote do jogo e do código; os da versão
                                       anterior vão para Github/versoes-anteriores
 
@@ -273,6 +274,7 @@ def anteriores_a_mover(github: Path, versao: str) -> list:
 def destinos(raiz: Path, versao: str) -> dict:
     teste, github = raiz / "ELF OU ISO TESTE", raiz / "Github"
     return {"elf": teste / "APPS/SMW/SMW.ELF", "title": teste / "APPS/SMW/title.cfg",
+            "trapacas": teste / "APPS/SMW/TRAPACAS.TXT",
             "gravador": teste / "Gravador_SMW_PS2.html", "iso": teste / ISO_TESTE,
             "jogo": github / f"{PREFIXO}{versao}.zip",
             "codigo": github / f"{PREFIXO}{versao}_Codigo_Fonte_GitHub.zip"}
@@ -283,6 +285,7 @@ def conferir(raiz: Path, rom: Path, versao: str) -> list:
     erros = []
     elf = CODIGO / "APPS/SMW/SMW.ELF"
     for p, o_que in ((rom, "a ROM"), (elf, "o ELF (compile antes)"), (CODIGO / "APPS/SMW/title.cfg", "o title.cfg"),
+                     (CODIGO / "APPS/SMW/TRAPACAS.TXT", "o TRAPACAS.TXT"),
                      (CODIGO / "LEIA-ME.txt", "o LEIA-ME.txt"), (CODIGO / "README.md", "o README.md"),
                      (CODIGO / "CREDITOS.md", "o CREDITOS.md"), (CODIGO / "Licencas", "a pasta Licencas"),
                      (raiz / "ELF OU ISO TESTE", "a pasta ELF OU ISO TESTE"), (raiz / "Github", "a pasta Github")):
@@ -335,6 +338,7 @@ def montar(tmp: Path, versao: str, caminho_rom: Path, rom: Rom) -> dict:
         z.write(CODIGO / "LEIA-ME.txt", "LEIA-ME.txt")
         z.write(elf, "APPS/SMW/SMW.ELF")
         z.write(CODIGO / "APPS/SMW/title.cfg", "APPS/SMW/title.cfg")
+        z.write(CODIGO / "APPS/SMW/TRAPACAS.TXT", "APPS/SMW/TRAPACAS.TXT")
         for lic in sorted((CODIGO / "Licencas").iterdir()):
             if lic.is_file():
                 z.write(lic, f"Licencas/{lic.name}")
@@ -350,9 +354,10 @@ def montar(tmp: Path, versao: str, caminho_rom: Path, rom: Rom) -> dict:
                          + "\n  ".join(problemas))
 
     iso = tmp / ISO_TESTE  # tem a ROM: fica só neste PC
-    executar([sys.executable, CODIGO / "Fonte/gerar_iso.py", elf, caminho_rom, iso], "gerar a ISO de teste")
-    return {"elf": elf, "title": CODIGO / "APPS/SMW/title.cfg", "gravador": gravador, "iso": iso,
-            "jogo": jogo, "codigo": codigo}
+    executar([sys.executable, CODIGO / "Fonte/gerar_iso.py", elf, caminho_rom, iso,
+              CODIGO / "APPS/SMW/TRAPACAS.TXT"], "gerar a ISO de teste")
+    return {"elf": elf, "title": CODIGO / "APPS/SMW/title.cfg", "trapacas": CODIGO / "APPS/SMW/TRAPACAS.TXT",
+            "gravador": gravador, "iso": iso, "jogo": jogo, "codigo": codigo}
 
 
 def temporario(destino: Path, fim: str) -> Path:
@@ -431,7 +436,7 @@ def main():
 
     elf = CODIGO / "APPS/SMW/SMW.ELF"
     print(f"v{versao}, commit {git('rev-parse', '--short', 'HEAD').strip()}, ELF {sha256_arquivo(elf)[:16]}…")
-    for chave in ("elf", "title", "gravador", "iso"):
+    for chave in ("elf", "title", "trapacas", "gravador", "iso"):
         acao = "substituir" if para[chave].exists() else "criar"
         extra = " (com a ROM, só local)" if chave == "iso" else ""
         print(f"  {acao}: {para[chave].relative_to(raiz)}{extra}")
@@ -445,7 +450,8 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="smw-pacotes-") as tmp:
         pronto = montar(Path(tmp), versao, caminho_rom, rom)
-        saida = [(pronto[chave], para[chave]) for chave in ("elf", "title", "gravador", "iso", "jogo", "codigo")]
+        saida = [(pronto[chave], para[chave]) for chave in ("elf", "title", "trapacas", "gravador", "iso", "jogo",
+                                                            "codigo")]
         publicar(saida)
     anteriores.mkdir(exist_ok=True)
     for p in mover:

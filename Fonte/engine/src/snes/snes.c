@@ -49,7 +49,8 @@ void snes_free(Snes* snes) {
   cpu_free(snes->cpu);
   apu_free(snes->apu);
   dma_free(snes->dma);
-  ppu_free(snes->ppu);
+  ppu_free(snes->snes_ppu);
+  if (snes->my_ppu != snes->snes_ppu) ppu_free(snes->my_ppu);  /* v0.14: as duas */
   cart_free(snes->cart);
   input_free(snes->input1);
   input_free(snes->input2);

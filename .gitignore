@@ -5,10 +5,11 @@
 *.[iI][sS][oO]
 /CD/
 
-# Progresso de jogo
+# Progresso de jogo (e as trapaças ligadas no PS2, v0.14)
 *.[sS][rR][mM]
 *.[bB][aA][kK]
 *.[tT][mM][pP]
+*.[lL][iI][gG]
 
 # Produtos da compilação e ambiente Python local
 /Fonte/build/

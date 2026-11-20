@@ -1,0 +1,27 @@
+# Trapaças do Super Mario World PS2 (v0.14)
+#
+# Uma por linha:  Nome = código
+# Para ligar e desligar: tela AJUSTES (linha Trapaças) ou L2+R2+SELECT
+# durante o jogo. As ligadas ficam gravadas no TRAPACAS.LIG, ao lado do save.
+#
+# Códigos de memória (Pro Action Replay): o endereço com 6 algarismos
+# hexadecimais, ':' e o valor com 2 (7E0DBE:62), ou os 8 juntos (7E0DBE62).
+# Mais de um código na mesma trapaça: separe com '+'.
+# Códigos Game Genie não funcionam neste port (ele não roda o código da ROM).
+# Nomes com até 28 letras. Linhas que começam com # são comentários.
+#
+# Ligadas, as trapaças mudam o jogo e podem mudar o que vai para o save.
+
+Vidas: sempre 99 = 7E0DBE:62
+Sempre grande = 7E0019:01
+Sempre com capa = 7E0019:02
+Sempre com flor = 7E0019:03
+Estrela sem fim = 7E1490:FF
+Sem dano (Mario pisca) = 7E1497:7F
+Tempo não acaba = 7E0F31:09+7E0F32:09+7E0F33:09
+Moedas 99: cada uma dá vida = 7E0DBF:63
+Reserva: cogumelo = 7E0DC2:01
+Reserva: flor = 7E0DC2:02
+Reserva: estrela = 7E0DC2:03
+Reserva: pena = 7E0DC2:04
+Corrida cheia (voa c/ capa) = 7E13E4:70

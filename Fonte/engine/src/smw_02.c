@@ -176,7 +176,12 @@ static const uint8 kExtSpr12_BreathBubble_XDisp[4] = { 0x0, 0x1, 0x0, 0xff,  };
 static const uint8 kExtSpr05_MarioFireball_DATA_029F99[9] = { 0x0, 0xb8, 0xc0, 0xc8, 0xd0, 0xd8, 0xe0, 0xe8, 0xf0,  };
 static const uint8 kExtSpr05_MarioFireball_DATA_029FA2[13] = { 0x0, 0x5, 0x3, 0x2, 0x2, 0x2, 0x2, 0x2, 0x2, 0xF8,0xFC, 0xA0,0xA4 };
 static const uint8 kCheckPlayerFireballToNormalSpriteColl_FireKillXSpeed[2] = { 0xf0, 0x10,  };
-static const uint8 kExtendedSpriteOAMIndexes[8] = { 0x90, 0x94, 0x98, 0x9c, 0xa0, 0xa4, 0xa8, 0xac,  };
+/* v0.14: as bolas de fogo do Mario usam os espacos 8 e 9 de sprites
+   estendidos, e o original le esta tabela com X = 8 e 9 ($02:A153,X), pegando
+   os dois bytes seguintes da ROM ($02:A15B: 2C 2D, o comeco da tabela de
+   desenhos da bola de fogo). Com 8 entradas o C lia fora do vetor (UBSan,
+   achado pelo teste das trapacas com a flor). */
+static const uint8 kExtendedSpriteOAMIndexes[10] = { 0x90, 0x94, 0x98, 0x9c, 0xa0, 0xa4, 0xa8, 0xac, 0x2c, 0x2d,  };
 static const uint8 kGenericExtendedSpriteGFXRt_FireballTiles[4] = { 0x2c, 0x2d, 0x2c, 0x2d,  };
 static const uint8 kGenericExtendedSpriteGFXRt_DATA_02A15F[4] = { 0x4, 0x4, 0xc4, 0xc4,  };
 static const uint8 kExtSpr02_ReznorFireball_Tiles[4] = { 0x26, 0x2a, 0x26, 0x2a,  };

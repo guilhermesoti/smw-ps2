@@ -45,6 +45,12 @@ bool smw_save_options(const SmwOptions *o);
 /* Troca feita no jogo (L2+R2+X): vai junto com o proximo save. */
 void smw_options_changed(const SmwOptions *o);
 
+/* v0.14, trapacas: um texto pequeno do lugar do save (ou dos outros; com
+   disc_too, tambem do CD da ISO). Volta os bytes lidos ou -1; lugar diz de
+   onde veio. E a gravacao no primeiro lugar que der. */
+int smw_read_text(const char *name, char *buf, int cap, bool disc_too, char *lugar, size_t lugar_n);
+bool smw_write_text(const char *name, const char *text, int n);
+
 /* SMW_LOG.TXT (registro.c). Lugares: 0 = a pasta do jogo (pendrive; antes
    de achar o jogo, a pasta do ELF; pela ISO nao ha), 1 = Memory Card 1,
    2 = Memory Card 2. smw_log_order: a ordem de tentativa (pasta, o cartao do

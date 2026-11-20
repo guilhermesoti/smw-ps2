@@ -1,11 +1,13 @@
 """Gera o Gravador_SMW_PS2.html: um arquivo só, que abre em qualquer navegador,
-com as telas, o núcleo, as fontes e o SMW.ELF embutidos. Não usa a ROM.
+com as telas, o núcleo, as fontes, o SMW.ELF e a lista de trapaças
+(APPS/SMW/TRAPACAS.TXT) embutidos. Não usa a ROM.
 
 Uso (na raiz do repositório, depois de compilar o ELF):
     python3 Gravador/gerar_gravador.py [saida.html]
 """
 import base64
 import hashlib
+import json
 import re
 import sys
 from pathlib import Path
@@ -26,6 +28,10 @@ def main():
     main_c = (RAIZ / "Fonte" / "ps2" / "main.c").read_text(encoding="utf-8")
     versao = re.search(r'#define SMW_VERSAO "([^"]+)"', main_c).group(1)
     sha = hashlib.sha256(elf).hexdigest()
+    # A lista que vai no pacote, como texto JSON dentro de um <script>: sem
+    # "</" (fecharia o script) e sem "@" (as marcas deste script).
+    trapacas = (RAIZ / "APPS" / "SMW" / "TRAPACAS.TXT").read_bytes().decode("utf-8")
+    trapacas_json = json.dumps(trapacas).replace("</", "<\\/").replace("@", "\\u0040")
     b64 = base64.b64encode(elf).decode()
     b64 = "\n".join(b64[i:i + 120] for i in range(0, len(b64), 120))
 
@@ -43,6 +49,7 @@ def main():
         "@@ELF_B64@@": b64,
         "@@ELF_SHA@@": sha,
         "@@VERSAO@@": versao,
+        "@@TRAPACAS_JSON@@": trapacas_json,
     }
     for marca, valor in trocas.items():
         if marca not in html:

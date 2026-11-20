@@ -2,15 +2,17 @@
 
 Port da Retrogames Patos de Minas baseado no trabalho de engenharia reversa do projeto snesrev/smw. A lógica de Super Mario World é compilada em C para o processador do PS2. Para jogar, o executável lê gráficos, mapas, sons e tabelas de uma cópia americana do cartucho fornecida pelo jogador.
 
-**Versão 0.13.8 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
+**Versão 0.14 (beta) · NTSC 240p/480i/480p · 4:3 ou 16:9 · português.** Projeto gratuito, feito por fãs.
 
 - Roda direto no processador do PS2 (não é emulador do SNES inteiro): a lógica do jogo é C compilado para o Emotion Engine.
 - Tela AJUSTES no começo: vídeo 240p (cabo AV, qualquer TV; o recomendado), 480i (só para TV que não mostra 240p) ou 480p (componente/HDMI), tela 4:3 ou 16:9 e idioma, sempre com os pixels nítidos. Vídeo novo só fica se você confirmar que a imagem apareceu.
 - 1280 pontos por linha em todos os vídeos (no 480p, quadro de 16 bits): todo pixel do SNES com a mesma largura, também no 16:9.
 - Tela 16:9 opcional (beta): nas fases mostra 43 colunas a mais de cada lado, para TV no modo widescreen (no começo e no fim da fase, o que fica fora dela aparece preto). Escolha na tela AJUSTES; L2 + R2 + CRUZ troca no jogo e mostra "TELA 4:3" ou "TELA 16:9" por 5 segundos.
+- Telas de carregamento, AJUSTES e apresentação com um cenário do próprio jogo de fundo (desenhado da cópia do jogador ao abrir) e caixas pretas como as mensagens do jogo.
+- Trapaças (códigos Pro Action Replay) num texto, `TRAPACAS.TXT`: liga e desliga na tela AJUSTES ou com L2 + R2 + SELECT no jogo. O pacote traz 13, conferidas no jogo, todas desligadas.
 - Desenha todos os 60 quadros por segundo quando o quadro cabe no tempo da TV; quando não cabe, um sim, outro não, sempre no mesmo ritmo, com a velocidade e a música corretas.
 - **Gravador SMW PS2**: um HTML que abre em qualquer navegador, confere a cópia do jogo e grava o aplicativo, a ISO ou os dois no pendrive.
-- Em português do Brasil: mensagens, nomes das fases e textos dos castelos. Segure SELECT na abertura para jogar em inglês.
+- Em português do Brasil: mensagens, nomes das fases e textos dos castelos. O inglês (o original) se escolhe na tela AJUSTES.
 - Grava no pendrive ou no Memory Card (pasta `SMWPS2`, com ícone 3D no navegador do PS2).
 - Log do console (`SMW_LOG.TXT`, ao lado do ELF ou no Memory Card): drivers, vídeo testado e confirmado, saves e erros.
 - Abre pelo OPL como aplicativo (ELF) ou como ISO na lista de jogos.
@@ -33,14 +35,15 @@ make -C Fonte -j4
 sha256sum APPS/SMW/SMW.ELF
 ```
 
-O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.13.8 obtido com o ps2dev v2.0.0 foi `391cd7f1f81c44dab4211d7de69f07940afce4a289e3487f12addedb58947017`.
+O arquivo gerado é `APPS/SMW/SMW.ELF`. O módulo de som `audsrv.irx` é compilado de `Fonte/audsrv/` (PS2SDK com o volume do PCM corrigido; veja o `LEIA-ME.txt` dessa pasta). O SHA-256 do ELF da v0.14 obtido com o ps2dev v2.0.0 foi `7099dfa7644c2df4ad69dff32161a3200dcb15397723669bc1a17f55ffb82751`.
 
 ## Gravador SMW PS2 (programa no PC)
 
-`Gravador_SMW_PS2.html` é um arquivo só, com as telas, as fontes e o `SMW.ELF` dentro. Abre no navegador
-(Windows, Linux ou Mac), sem instalar nada e sem internet. Ele confere a cópia do jogo (ZIP, SFC ou SMC, com
-ou sem cabeçalho de copiador, CRC32 `B19ED489`), pergunta pendrive, ISO ou os dois, os ajustes de abertura e o
-destino. No Chrome e no Edge grava direto no pendrive (File System Access) e confere o que gravou, sem tocar no
+`Gravador_SMW_PS2.html` é um arquivo só, com as telas, as fontes, o `SMW.ELF` e a lista de trapaças
+(`APPS/SMW/TRAPACAS.TXT`) dentro. Abre no navegador (Windows, Linux ou Mac), sem instalar nada e sem internet.
+Ele confere a cópia do jogo (ZIP, SFC ou SMC, com ou sem cabeçalho de copiador, CRC32 `B19ED489`), pergunta
+pendrive, ISO ou os dois, os ajustes de abertura, a lista de trapaças (gravar ou não, editar; cada linha é
+conferida com o mesmo leitor do jogo) e o destino. No Chrome e no Edge grava direto no pendrive (File System Access) e confere o que gravou, sem tocar no
 save; nos outros navegadores baixa um ZIP (ou a ISO). A ISO sai byte a byte igual à do `Fonte/gerar_iso.py`
 (pycdlib). Nada é enviado para a internet.
 
@@ -50,7 +53,7 @@ Para gerar, depois de compilar o ELF:
 python3 Gravador/gerar_gravador.py            # cria Gravador_SMW_PS2.html na raiz
 ```
 
-O código fica em `Gravador/src/` (`nucleo.js`: ROM, ISO, ZIP e SMW.CFG; `tela.js`: os passos;
+O código fica em `Gravador/src/` (`nucleo.js`: ROM, ISO, ZIP, SMW.CFG e o leitor do TRAPACAS.TXT; `tela.js`: os passos;
 `gravador.html` e `gravador.css`). As fontes Press Start 2P e VT323 (SIL OFL 1.1) estão em `Gravador/fontes/`.
 
 ### Ajustes de abertura
@@ -58,6 +61,18 @@ O código fica em `Gravador/src/` (`nucleo.js`: ROM, ISO, ZIP e SMW.CFG; `tela.j
 O Gravador grava `SMW.CFG` ao lado do jogo (ou dentro da ISO), texto com `tela=perguntar|4:3|16:9`,
 `video=perguntar|240p|480i|480p` e `idioma=pt|en`: o que já vem marcado na tela AJUSTES (as linhas `suavizacao=` e
 `scanlines=` de versões antigas são ignoradas). O que foi escolhido no PS2 fica em `SMW.OPT`, no lugar do save, e vale mais que o `SMW.CFG`.
+
+### Trapaças
+
+`TRAPACAS.TXT` (UTF-8), uma por linha: `Nome = 7E0DBE:62`, vários códigos com `+` (`7E0F31:09+7E0F32:09`).
+Só códigos de memória no formato Pro Action Replay (6 algarismos do endereço e 2 do valor, com `:` ou `=` no
+meio, ou os 8 juntos), de `$7E0000-$7FFFFF` ou do espelho `$0000-$1FFF` dos bancos `$00-$3F` e `$80-$BF`; o
+valor é escrito na RAM do jogo (`g_ram`) a cada quadro, antes da lógica. Game Genie não funciona: muda a ROM, e
+aqui o programa é o jogo em C. Até 64 trapaças, 16 códigos em cada, nomes com até 28 letras, 16 KB lidos (a
+linha cortada nesse limite sai) (`Fonte/ps2/trapacas.c`). Os valores não são conferidos: como no SNES, um valor
+que o jogo não usa pode travá-lo. O jogo procura o arquivo onde está o save, depois no pendrive e nos Memory
+Cards e, pela ISO, no CD (vale o primeiro que achar). As ligadas ficam em `TRAPACAS.LIG`, no lugar do save, no
+mesmo formato (nome e códigos: duas trapaças com o mesmo nome não voltam ligadas juntas).
 
 ## Jogar por USB
 
@@ -77,7 +92,7 @@ python3 -m venv .venv
 .venv/bin/python Fonte/gerar_iso.py
 ```
 
-Copie `CD/SMWG_000.01.Super Mario World.iso` para a pasta `CD/` do pendrive e atualize a lista USB/BDM do OPL. Pela ISO, o progresso vai para o Memory Card, na pasta `SMWPS2` (cartão 1, depois cartão 2): o jogo não carrega drivers USB nesse modo, porque o OPL já usa o pendrive para ler a ISO. **A ISO gerada incorpora a sua cópia do jogo.** O pacote de código-fonte para publicação contém os fontes e a documentação e deixa a ROM, a ISO e a BIOS de fora.
+A lista `APPS/SMW/TRAPACAS.TXT` (ao lado do ELF) também entra na ISO; sem ela, a ISO sai sem trapaças. Copie `CD/SMWG_000.01.Super Mario World.iso` para a pasta `CD/` do pendrive e atualize a lista USB/BDM do OPL. Pela ISO, o progresso vai para o Memory Card, na pasta `SMWPS2` (cartão 1, depois cartão 2): o jogo não carrega drivers USB nesse modo, porque o OPL já usa o pendrive para ler a ISO. **A ISO gerada incorpora a sua cópia do jogo.** O pacote de código-fonte para publicação contém os fontes e a documentação e deixa a ROM, a ISO e a BIOS de fora.
 
 ## Controles
 
@@ -91,6 +106,7 @@ Copie `CD/SMWG_000.01.Super Mario World.iso` para a pasta `CD/` do pendrive e at
 | Start / Select | Pausar ou iniciar / soltar o item da reserva |
 | L1 / R1 | Deslocar a câmera nas fases que permitem |
 | L2 + R2 + × | Trocar entre 4:3 e 16:9 (mostra "TELA 4:3" ou "TELA 16:9" por 5 s) |
+| L2 + R2 + SELECT | Lista de trapaças (o jogo fica parado; ○ ou SELECT volta) |
 | L2 + R2 + △ | Medidor de desempenho (quadros desenhados por segundo e tempos de desenho, envio ao GS e lógica) |
 
 ## Repetir o teste de regressão
@@ -104,7 +120,7 @@ python3 testes/rodar_todos.py "/caminho/Super Mario World (USA).zip"
 ```
 
 Os testes do Gravador usam o `APPS/SMW/SMW.ELF` (compile antes) e o Node; o núcleo também o `python3` com o
-`pycdlib`; as telas também o `puppeteer-core` (`NODE_PATH`) e um Chrome (`CHROME=`). O que faltar na máquina
+`pycdlib` e o compilador C (o leitor do `TRAPACAS.TXT` do jogo, para comparar com o do Gravador); as telas também o `puppeteer-core` (`NODE_PATH`) e um Chrome (`CHROME=`). O que faltar na máquina
 aparece como PULADO. Os programas compilados ficam numa pasta temporária apagada no fim; as saídas ficam em
 `/tmp/smw-testes-*`. Os comandos de cada teste, um por um:
 
@@ -132,11 +148,26 @@ cc -std=gnu11 -fsanitize=address,undefined -IFonte/ps2 Fonte/ps2/ritmo.c testes/
 /tmp/smw-ritmo
 ```
 
-Gravador: o núcleo no Node 18+ (precisa de Python 3 com pycdlib: a ISO é comparada byte a byte com a do pycdlib)
-e as telas num Chrome sem janela, com um pendrive simulado que já tem um save (precisa de `npm install puppeteer-core`):
+Trapaças: o leitor do `TRAPACAS.TXT` (formatos, endereços recusados, nomes, limites, `TRAPACAS.LIG`), a lista
+do pacote (13, todas válidas) e cada trapaça jogada 10 s com o motor, conferindo o efeito na RAM e na barra de
+status. Rode numa pasta só com o jogo:
 
 ```sh
-node Gravador/testes/testar_nucleo.js "/caminho/Super Mario World (USA).zip" APPS/SMW/SMW.ELF
+cc -O1 -std=gnu11 -fno-strict-aliasing -fwrapv -ffunction-sections -fdata-sections -Wl,--gc-sections \
+   -fsanitize=address,undefined -fno-sanitize-recover=all -IFonte/engine -IFonte/ps2 $(pkg-config --cflags minizip zlib) \
+   $(find Fonte/engine/src -name '*.c') Fonte/ps2/files.c Fonte/ps2/game.c Fonte/ps2/registro.c Fonte/ps2/trapacas.c \
+   testes/trapacas.c $(pkg-config --libs minizip zlib) -lm -o /tmp/smw-trapacas
+ASAN_OPTIONS=detect_leaks=0 /tmp/smw-trapacas /caminho/da/pasta/com/o/jogo/ APPS/SMW/TRAPACAS.TXT
+```
+
+Gravador: o núcleo no Node 18+ (precisa de Python 3 com pycdlib: a ISO é comparada byte a byte com a do pycdlib;
+com `TRAPACAS_REF`, o leitor de trapaças do Gravador é comparado com o do jogo em 224 textos sorteados) e as
+telas num Chrome sem janela, com um pendrive simulado que já tem um save (precisa de `npm install puppeteer-core`):
+
+```sh
+cc -std=gnu11 -fsanitize=address,undefined -IFonte/ps2 Fonte/ps2/trapacas.c Gravador/testes/trapacas_ref.c \
+   -o /tmp/trapacas_ref
+TRAPACAS_REF=/tmp/trapacas_ref node Gravador/testes/testar_nucleo.js "/caminho/Super Mario World (USA).zip" APPS/SMW/SMW.ELF
 CHROME=/usr/bin/google-chrome node Gravador/testes/testar_telas.js Gravador_SMW_PS2.html \
    "/caminho/Super Mario World (USA).zip" /tmp/telas-gravador
 ```
