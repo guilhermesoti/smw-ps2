@@ -111,12 +111,12 @@
 <body>
 
 <nav><div class="wrap">
-  <a class="brand" href="https://guilhermesoti.github.io/">← PORTS RETROGAMES</a>
+  <a class="brand" href="https://portretrogames.github.io/">← PORTS RETROGAMES</a>
   <a class="l" href="#jogar">Como jogar</a>
   <a class="l" href="#controles">Controles</a>
   <a class="l" href="#creditos">Créditos</a>
   <a class="l" href="#apoie">Apoie</a>
-  <a class="l" href="https://github.com/guilhermesoti/smw-ps2">GitHub</a>
+  <a class="l" href="https://github.com/portretrogames/smw-ps2">GitHub</a>
 </div></nav>
 
 <header><div class="wrap hero">
@@ -125,7 +125,7 @@
     <h1>Super Mario World <span>no PlayStation 2</span></h1>
     <p class="lead">Não é emulador do SNES: a lógica do jogo, reescrita em C, foi compilada para o processador do PS2. Roda pelo OPL, em 240p ou 480p, com tela 4:3 ou 16:9 e tradução nova em português do Brasil.</p>
     <div class="btns">
-      <a class="btn" id="dl" href="https://github.com/guilhermesoti/smw-ps2/releases">⬇ Baixar o pacote</a>
+      <a class="btn" id="dl" href="https://github.com/portretrogames/smw-ps2/releases">⬇ Baixar o pacote</a>
       <a class="btn ghost" href="gravador.html">Gravar no pendrive pelo navegador</a>
     </div>
     <div class="rel" id="rel">Todas as versões em Releases.</div>
@@ -176,7 +176,7 @@
     <div class="way">
       <h3>Sem o Gravador (pendrive)</h3>
       <ol>
-        <li>Baixe e extraia o <a href="https://github.com/guilhermesoti/smw-ps2/releases">pacote da última versão</a>.</li>
+        <li>Baixe e extraia o <a href="https://github.com/portretrogames/smw-ps2/releases">pacote da última versão</a>.</li>
         <li>Coloque a sua cópia do jogo dentro de <code>APPS/SMW/</code> (por exemplo <code>SMW.SFC</code> ou o ZIP).</li>
         <li>Copie a pasta <code>APPS/SMW/</code> para a raiz de um pendrive FAT32.</li>
         <li>No OPL, abra <b>Aplicativos → Super Mario World</b>, ou pelo wLaunchELF <code>mass:/APPS/SMW/SMW.ELF</code>.</li>
@@ -206,13 +206,13 @@
       <li><kbd>L2</kbd> + <kbd>R2</kbd> + <kbd>SELECT</kbd> lista de trapaças</li>
       <li><kbd>L2</kbd> + <kbd>R2</kbd> + <kbd>△</kbd> medidor de desempenho</li>
     </ul>
-    <div class="note">Projeto em beta. Os menus do título, dos arquivos, de continuar e de salvar ainda estão em inglês. Achou um erro? <a href="https://github.com/guilhermesoti/smw-ps2/issues">Abra uma issue</a> com o <code>SMW_LOG.TXT</code>.</div>
+    <div class="note">Projeto em beta. Os menus do título, dos arquivos, de continuar e de salvar ainda estão em inglês. Achou um erro? <a href="https://github.com/portretrogames/smw-ps2/issues">Abra uma issue</a> com o <code>SMW_LOG.TXT</code>.</div>
   </div>
 </div></section>
 
 <section id="creditos"><div class="wrap">
   <h2><small>Créditos</small>Quem fez este port existir</h2>
-  <p class="sub">Projeto gratuito e feito por fãs, em cima do trabalho de muita gente. Detalhes em <a href="https://github.com/guilhermesoti/smw-ps2/blob/main/CREDITOS.md">CREDITOS.md</a>.</p>
+  <p class="sub">Projeto gratuito e feito por fãs, em cima do trabalho de muita gente. Detalhes em <a href="https://github.com/portretrogames/smw-ps2/blob/main/CREDITOS.md">CREDITOS.md</a>.</p>
   <div class="cred">
     <div class="card"><h3>Guilherme Soti · Retrogames Patos de Minas</h3><p>Ideia, direção, as escolhas da tradução e todos os testes num PS2 de verdade.</p></div>
     <div class="card"><h3>Claude</h3><p>Desenvolvimento da camada PS2, tela 16:9, Gravador, tradução dentro do port e documentação.</p></div>
@@ -242,14 +242,14 @@
 
 <footer><div class="wrap">
   <p><i>Super Mario World</i> © Nintendo. Este site e o repositório não contêm o jogo nem seus dados: é preciso ter a sua própria cópia americana do cartucho. Projeto de fãs, sem ligação com a Nintendo.</p>
-  <p><a href="https://guilhermesoti.github.io/">Outros ports da Retrogames</a> · <a href="https://github.com/guilhermesoti/smw-ps2">github.com/guilhermesoti/smw-ps2</a></p>
+  <p><a href="https://portretrogames.github.io/">Outros ports da Retrogames</a> · <a href="https://github.com/portretrogames/smw-ps2">github.com/portretrogames/smw-ps2</a></p>
 </div></footer>
 
 <script>
   (async () => {
     try {
       // a release mais nova, beta (pré-lançamento) ou não
-      const r = await fetch("https://api.github.com/repos/guilhermesoti/smw-ps2/releases?per_page=1");
+      const r = await fetch("https://api.github.com/repos/portretrogames/smw-ps2/releases?per_page=1");
       if (!r.ok) return;
       const rel = (await r.json())[0];
       if (!rel) return;
