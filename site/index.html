@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Super Mario World — port nativo para PS2</title>
+<meta name="description" content="Port nativo e gratuito de Super Mario World para o PlayStation 2, em português do Brasil, com tela 16:9. Roda direto no PS2 pelo OPL.">
+<meta property="og:title" content="Super Mario World — port nativo para PS2">
+<meta property="og:description" content="Não é emulador: o jogo roda direto no processador do PS2, em português do Brasil, com tela 16:9.">
+<meta property="og:image" content="img/titulo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070b22; --panel:#10163d; --panel2:#161d4f; --line:#2a3373;
+    --gold:#e6b93f; --gold2:#ffd970; --text:#e9e7f3; --mut:#a3a6c8; --ok:#69d38a; --warn:#f0b35a;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 Inter,system-ui,sans-serif;
+    background-image:radial-gradient(ellipse at 50% -10%,#1c2470 0,transparent 60%),
+      repeating-linear-gradient(0deg,transparent 0 3px,rgba(255,255,255,.012) 3px 4px)}
+  a{color:var(--gold2)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+  .pix{font-family:VT323,monospace;letter-spacing:.5px}
+  nav{position:sticky;top:0;z-index:5;background:rgba(7,11,34,.88);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;gap:22px;height:56px}
+  nav .brand{font-family:VT323,monospace;font-size:24px;color:var(--gold);text-decoration:none;margin-right:auto}
+  nav a.l{color:var(--mut);text-decoration:none;font-size:14px}
+  nav a.l:hover{color:var(--text)}
+  @media(max-width:760px){nav a.l{display:none}}
+
+  header{padding:72px 0 48px}
+  .hero{display:grid;grid-template-columns:1.05fr 1fr;gap:44px;align-items:center}
+  @media(max-width:860px){.hero{grid-template-columns:1fr}}
+  .tag{display:inline-block;border:1px solid var(--gold);color:var(--gold);padding:2px 10px;font-size:20px;margin-bottom:18px}
+  h1{font-size:clamp(32px,5vw,52px);line-height:1.05;margin:0 0 16px;font-weight:800;letter-spacing:-.02em}
+  h1 span{display:block;color:var(--gold)}
+  .lead{color:var(--mut);font-size:18px;margin:0 0 28px;max-width:34em}
+  .btns{display:flex;flex-wrap:wrap;gap:12px}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:13px 20px;font-weight:600;text-decoration:none;
+    border:2px solid var(--gold);color:var(--bg);background:var(--gold);transition:.15s}
+  .btn:hover{background:var(--gold2);border-color:var(--gold2)}
+  .btn.ghost{background:transparent;color:var(--gold)}
+  .btn.ghost:hover{background:rgba(230,185,63,.12)}
+  .rel{margin-top:16px;color:var(--mut);font-size:14px;min-height:1.6em}
+  .screen{position:relative;border:3px solid var(--gold);padding:6px;background:var(--panel);box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .screen::after{content:"";position:absolute;inset:6px;pointer-events:none;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px)}
+  .screen img{display:block;width:100%;image-rendering:pixelated}
+
+  section{padding:56px 0;border-top:1px solid var(--line)}
+  h2{font-size:30px;margin:0 0 8px;letter-spacing:-.01em}
+  h2 small{display:block;font-family:VT323,monospace;color:var(--gold);font-size:22px;font-weight:400;letter-spacing:1px;text-transform:uppercase}
+  .sub{color:var(--mut);margin:0 0 30px;max-width:46em}
+
+  .feat{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media(max-width:860px){.feat{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);padding:20px 22px}
+  .card h3{margin:0 0 6px;font-size:17px}
+  .card p{margin:0;color:var(--mut);font-size:15px}
+  .card .ic{font-family:VT323,monospace;color:var(--gold);font-size:26px;line-height:1;margin-bottom:10px}
+
+  .gal{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media(max-width:860px){.gal{grid-template-columns:1fr}}
+  .gal.g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:860px){.gal.g2{grid-template-columns:1fr}}
+  figure{margin:0}
+  figure .screen{padding:4px;border-width:2px}
+  figcaption{color:var(--mut);font-size:14px;margin-top:8px}
+
+  .steps{display:grid;gap:16px}
+  .way{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--gold);padding:22px 24px}
+  .way h3{margin:0 0 4px;font-size:19px}
+  .way .badge{font-family:VT323,monospace;color:var(--bg);background:var(--gold);padding:0 8px;font-size:18px;margin-left:8px;vertical-align:2px;white-space:nowrap;display:inline-block}
+  .way ol{margin:10px 0 0;padding-left:22px;color:var(--text)}
+  .way li{margin:4px 0}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.88em;background:var(--panel2);border:1px solid var(--line);padding:1px 6px}
+  .note{margin-top:18px;padding:14px 18px;background:rgba(230,185,63,.08);border:1px solid rgba(230,185,63,.35);color:var(--text);font-size:15px}
+
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line)}
+  th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);font-size:15px;vertical-align:top}
+  th{font-family:VT323,monospace;font-weight:400;font-size:20px;color:var(--gold);letter-spacing:.5px}
+  tr:last-child td{border-bottom:0}
+  .st{white-space:nowrap;font-weight:600}
+  .st.ok{color:var(--ok)} .st.w{color:var(--warn)}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:start}
+  @media(max-width:860px){.two{grid-template-columns:1fr}}
+  ul.k{margin:0;padding:0;list-style:none}
+  ul.k li{padding:10px 0;border-bottom:1px dashed var(--line)}
+  ul.k li b{color:var(--gold2)}
+  kbd{font-family:VT323,monospace;font-size:18px;background:var(--panel2);border:1px solid var(--gold);color:var(--gold2);padding:0 7px}
+
+  .cred{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+  @media(max-width:760px){.cred{grid-template-columns:1fr}}
+
+  .apoio{display:grid;grid-template-columns:auto 1fr;gap:32px;align-items:center;background:var(--panel);border:2px solid var(--gold);padding:28px}
+  @media(max-width:760px){.apoio{grid-template-columns:1fr;text-align:center}}
+  .apoio img{width:200px;height:200px;background:#fff;padding:10px;image-rendering:pixelated}
+  .key{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0}
+  .key code{font-size:14px;padding:6px 10px;word-break:break-all}
+  .copy{cursor:pointer;border:1px solid var(--gold);background:transparent;color:var(--gold);padding:6px 12px;font:600 14px Inter,sans-serif}
+  .copy:hover{background:rgba(230,185,63,.12)}
+
+  footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--mut);font-size:14px}
+  footer p{margin:6px 0}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="https://guilhermesoti.github.io/">← PORTS RETROGAMES</a>
+  <a class="l" href="#jogar">Como jogar</a>
+  <a class="l" href="#controles">Controles</a>
+  <a class="l" href="#creditos">Créditos</a>
+  <a class="l" href="#apoie">Apoie</a>
+  <a class="l" href="https://github.com/guilhermesoti/smw-ps2">GitHub</a>
+</div></nav>
+
+<header><div class="wrap hero">
+  <div>
+    <div class="tag pix">PORT NATIVO · PT-BR · GRÁTIS</div>
+    <h1>Super Mario World <span>no PlayStation 2</span></h1>
+    <p class="lead">Não é emulador do SNES: a lógica do jogo, reescrita em C, foi compilada para o processador do PS2. Roda pelo OPL, em 240p ou 480p, com tela 4:3 ou 16:9 e tradução nova em português do Brasil.</p>
+    <div class="btns">
+      <a class="btn" id="dl" href="https://github.com/guilhermesoti/smw-ps2/releases">⬇ Baixar o pacote</a>
+      <a class="btn ghost" href="gravador.html">Gravar no pendrive pelo navegador</a>
+    </div>
+    <div class="rel" id="rel">Todas as versões em Releases.</div>
+  </div>
+  <figure>
+    <div class="screen"><img src="img/titulo.png" alt="Tela de título de Super Mario World rodando no PS2 em 240p" width="640" height="480"></div>
+    <figcaption>Tela de título em 240p, rodando pelo OPL.</figcaption>
+  </figure>
+</div></header>
+
+<section><div class="wrap">
+  <h2><small>O que tem de novo</small>Feito para o PS2, não emulado</h2>
+  <p class="sub">O jogo roda direto no Emotion Engine, com a velocidade e a música certas. Gráficos, mapas e sons são lidos da sua própria cópia do cartucho.</p>
+  <div class="feat">
+    <div class="card"><div class="ic">PT-BR</div><h3>Tradução nova</h3><p>Mensagens, dicas com os botões do PS2, nomes das fases e as palavras grandes: VAMOS, MARIO!, FIM DE JOGO, FASE COMPLETA!</p></div>
+    <div class="card"><div class="ic">16:9</div><h3>Tela larga de verdade</h3><p>No 480p, as fases mostram 43 colunas a mais de cada lado para TV widescreen. Ou fique no 4:3 original.</p></div>
+    <div class="card"><div class="ic">240p · 480p</div><h3>Para qualquer TV</h3><p>240p pelo cabo AV (o recomendado) ou 480p por componente e HDMI, sempre com os pixels nítidos e posição ajustável.</p></div>
+    <div class="card"><div class="ic">SAVE</div><h3>Pendrive ou Memory Card</h3><p>Salva ao lado do jogo no pendrive ou no Memory Card, na pasta <code>SMWPS2</code>, com ícone 3D no navegador do PS2.</p></div>
+    <div class="card"><div class="ic">TRAPAÇAS</div><h3>Códigos Pro Action Replay</h3><p>13 trapaças conferidas no jogo, que você liga e desliga na tela AJUSTES ou no meio da fase.</p></div>
+    <div class="card"><div class="ic">GRAVADOR</div><h3>Pronto em poucos cliques</h3><p>O Gravador confere a sua cópia do jogo e grava o aplicativo, a ISO ou os dois no pendrive.</p></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2><small>Telas</small>Rodando no console</h2>
+  <p class="sub">Capturas do port no PCSX2.</p>
+  <div class="gal g2">
+    <figure><div class="screen"><img src="img/ajustes.png" alt="Tela AJUSTES do port com vídeo, tela e idioma" loading="lazy" width="640" height="480"></div><figcaption>Tela AJUSTES: vídeo, tela e idioma ao ligar.</figcaption></figure>
+    <figure><div class="screen"><img src="img/titulo.png" alt="Tela de título" loading="lazy" width="640" height="480"></div><figcaption>240p pelo cabo AV, igual ao SNES.</figcaption></figure>
+  </div>
+  <figure style="margin-top:16px"><div class="screen"><img src="img/mensagens.png" alt="Mensagens do jogo traduzidas para o português" loading="lazy" width="978" height="280"></div><figcaption>Mensagens e dicas traduzidas, citando os botões do controle do PS2.</figcaption></figure>
+</div></section>
+
+<section id="jogar"><div class="wrap">
+  <h2><small>Como jogar</small>Do computador para o pendrive</h2>
+  <p class="sub">Você precisa da <b>sua própria cópia americana</b> de <i>Super Mario World (USA)</i>, em ZIP, SFC ou SMC. O jogo não vem no pacote nem neste site.</p>
+  <div class="steps">
+    <div class="way">
+      <h3>Pelo Gravador no navegador <span class="badge">MAIS FÁCIL</span></h3>
+      <ol>
+        <li>Abra o <a href="gravador.html">Gravador SMW PS2</a> no computador (também vem no pacote como <code>Gravador_SMW_PS2.html</code>).</li>
+        <li>Escolha a sua cópia do jogo: ele confere se é a versão certa.</li>
+        <li>Escolha <b>aplicativo</b>, <b>ISO</b> ou os dois, os ajustes de abertura e as trapaças. No Chrome e no Edge ele grava direto no pendrive; nos outros navegadores baixa um ZIP ou a ISO.</li>
+        <li>No OPL, abra <b>Aplicativos → Super Mario World</b>, ou a ISO na lista de jogos.</li>
+      </ol>
+      <div class="note">Tudo acontece no seu computador: nada é enviado para a internet.</div>
+    </div>
+    <div class="way">
+      <h3>Sem o Gravador (pendrive)</h3>
+      <ol>
+        <li>Baixe e extraia o <a href="https://github.com/guilhermesoti/smw-ps2/releases">pacote da última versão</a>.</li>
+        <li>Coloque a sua cópia do jogo dentro de <code>APPS/SMW/</code> (por exemplo <code>SMW.SFC</code> ou o ZIP).</li>
+        <li>Copie a pasta <code>APPS/SMW/</code> para a raiz de um pendrive FAT32.</li>
+        <li>No OPL, abra <b>Aplicativos → Super Mario World</b>, ou pelo wLaunchELF <code>mass:/APPS/SMW/SMW.ELF</code>.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="note">A ISO gerada tem a sua cópia do jogo dentro: não compartilhe esse arquivo.</div>
+</div></section>
+
+<section id="controles"><div class="wrap two">
+  <div>
+    <h2><small>Controles</small>No controle do PS2</h2>
+    <ul class="k">
+      <li><kbd>✕</kbd> pular e confirmar</li>
+      <li><kbd>□</kbd> correr e carregar objetos</li>
+      <li><kbd>○</kbd> salto giratório</li>
+      <li><kbd>△</kbd> segunda tecla de corrida</li>
+      <li><kbd>START</kbd> pausa · <kbd>SELECT</kbd> solta o item da reserva</li>
+      <li><kbd>L1</kbd> / <kbd>R1</kbd> deslocam a câmera</li>
+    </ul>
+  </div>
+  <div>
+    <h2><small>Atalhos</small>Durante o jogo</h2>
+    <ul class="k">
+      <li><kbd>L2</kbd> + <kbd>R2</kbd> + <kbd>✕</kbd> troca entre 4:3 e 16:9 (no 480p)</li>
+      <li><kbd>L2</kbd> + <kbd>R2</kbd> + <kbd>↑↓←→</kbd> move a imagem na TV</li>
+      <li><kbd>L2</kbd> + <kbd>R2</kbd> + <kbd>SELECT</kbd> lista de trapaças</li>
+      <li><kbd>L2</kbd> + <kbd>R2</kbd> + <kbd>△</kbd> medidor de desempenho</li>
+    </ul>
+    <div class="note">Projeto em beta. Os menus do título, dos arquivos, de continuar e de salvar ainda estão em inglês. Achou um erro? <a href="https://github.com/guilhermesoti/smw-ps2/issues">Abra uma issue</a> com o <code>SMW_LOG.TXT</code>.</div>
+  </div>
+</div></section>
+
+<section id="creditos"><div class="wrap">
+  <h2><small>Créditos</small>Quem fez este port existir</h2>
+  <p class="sub">Projeto gratuito e feito por fãs, em cima do trabalho de muita gente. Detalhes em <a href="https://github.com/guilhermesoti/smw-ps2/blob/main/CREDITOS.md">CREDITOS.md</a>.</p>
+  <div class="cred">
+    <div class="card"><h3>Guilherme Soti · Retrogames Patos de Minas</h3><p>Ideia, direção, as escolhas da tradução e todos os testes num PS2 de verdade.</p></div>
+    <div class="card"><h3>Claude</h3><p>Desenvolvimento da camada PS2, tela 16:9, Gravador, tradução dentro do port e documentação.</p></div>
+    <div class="card"><h3>O jogo em C</h3><p><a href="https://github.com/snesrev/smw">snesrev/smw</a> (snesrev e contribuidores) e <a href="https://github.com/elzo-d/LakeSnes">LakeSnes</a> (elzo-d). PPU otimizada do port de <a href="https://github.com/blashy101/-AI-Super-Mario-World-PS2-Native-Port">blashy101</a>.</p></div>
+    <div class="card"><h3>Ferramentas do PS2</h3><p><a href="https://github.com/ps2dev/ps2dev">ps2dev</a>, <a href="https://github.com/ps2dev/ps2sdk">PS2SDK</a>, <a href="https://github.com/ps2dev/gsKit">gsKit</a>, zlib, MiniZip, FatFs e o <a href="https://github.com/ps2homebrew/Open-PS2-Loader">OPL</a>.</p></div>
+  </div>
+</div></section>
+
+<section id="apoie"><div class="wrap">
+  <h2><small>Apoie</small>Ajude os próximos ports</h2>
+  <p class="sub">O port é e vai continuar gratuito. Se ele te ajudou e você quiser apoiar os próximos, como o do Tekken 3, qualquer valor ajuda.</p>
+  <div class="apoio">
+    <img src="img/pix-qrcode.png" alt="QR code Pix para doação" width="200" height="200">
+    <div>
+      <h3 style="margin:0">Pix (chave aleatória)</h3>
+      <div class="key">
+        <code id="pixkey">f19e4d1b-f35c-4541-919b-87a2cb540b9c</code>
+        <button class="copy" data-copy="pixkey">Copiar chave</button>
+        <button class="copy" data-copy="pixcc">Copiar Pix copia e cola</button>
+      </div>
+      <span id="pixcc" hidden>00020126580014br.gov.bcb.pix0136f19e4d1b-f35c-4541-919b-87a2cb540b9c5204000053039865802BR5914GUILHERME SOTI6014PATOS DE MINAS62070503***63048E1F</span>
+      <p style="margin:6px 0 0;color:var(--mut)">De fora do Brasil? / Outside Brazil? <a href="https://ko-fi.com/guilhermesoti">ko-fi.com/guilhermesoti</a></p>
+      <p style="margin:6px 0 0;color:var(--mut);font-size:14px">Doação é voluntária e não libera nada extra: o código e as builds continuam livres para todos.</p>
+    </div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <p><i>Super Mario World</i> © Nintendo. Este site e o repositório não contêm o jogo nem seus dados: é preciso ter a sua própria cópia americana do cartucho. Projeto de fãs, sem ligação com a Nintendo.</p>
+  <p><a href="https://guilhermesoti.github.io/">Outros ports da Retrogames</a> · <a href="https://github.com/guilhermesoti/smw-ps2">github.com/guilhermesoti/smw-ps2</a></p>
+</div></footer>
+
+<script>
+  (async () => {
+    try {
+      // a release mais nova, beta (pré-lançamento) ou não
+      const r = await fetch("https://api.github.com/repos/guilhermesoti/smw-ps2/releases?per_page=1");
+      if (!r.ok) return;
+      const rel = (await r.json())[0];
+      if (!rel) return;
+      const zip = (rel.assets || []).find(a => /\.zip$/i.test(a.name));
+      if (zip) document.getElementById("dl").href = zip.browser_download_url;
+      const d = new Date(rel.published_at).toLocaleDateString("pt-BR");
+      const el = document.getElementById("rel");
+      el.textContent = "";
+      const a = document.createElement("a");
+      a.href = rel.html_url; a.textContent = rel.name || rel.tag_name;
+      el.append("Versão mais recente: ", a, " · " + d);
+    } catch (e) {}
+  })();
+  document.querySelectorAll(".copy").forEach(b => b.addEventListener("click", async () => {
+    const t = document.getElementById(b.dataset.copy).textContent.trim();
+    try { await navigator.clipboard.writeText(t); const o = b.textContent; b.textContent = "Copiado!"; setTimeout(() => b.textContent = o, 1500); } catch (e) {}
+  }));
+</script>
+</body>
+</html>

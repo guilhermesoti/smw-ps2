@@ -33,3 +33,6 @@ node_modules/
 
 # Revisões do Gemini e do Codex (~/PROJETOS/revisar.sh)
 revisoes/
+
+# tirado do ZIP da release pelo workflow do site
+site/gravador.html

@@ -1,0 +1,47 @@
+# Publica o site do projeto (pasta site/) no GitHub Pages.
+# Roda quando o site muda, quando sai uma release nova (para o site levar o
+# Gravador dela) e também à mão (Actions > Site > Run workflow).
+# O Gravador não fica no código: é tirado do ZIP da release mais nova a cada publicação.
+name: Site
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", ".github/workflows/pages.yml"]
+  release:
+    types: [published]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Montar o site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p _site
+          cp -r site/. _site/
+          rm -f _site/gravador.html
+          # O Gravador da release mais nova (mesmo marcada como pré-lançamento)
+          TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq ".[0].tagName")
+          if gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "*.zip" --dir /tmp/rel; then
+            unzip -p /tmp/rel/*.zip Gravador_SMW_PS2.html > _site/gravador.html \
+              || { rm -f _site/gravador.html; echo "Aviso: o ZIP da release não tem o Gravador"; }
+          fi
+          touch _site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
